@@ -41,6 +41,9 @@
       <h1>Brigádníci</h1>
     </div>
     <div class="header-actions">
+      <a class="sheet-link" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
+        <span aria-hidden="true">▦</span> Směnová tabulka <span class="sheet-link-arrow" aria-hidden="true">↗</span>
+      </a>
       <button class="theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
         <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
       </button>
@@ -96,6 +99,7 @@
           <h2 id="overviewHeading">Přehled týmu</h2>
         </div>
         <div class="summary" aria-label="Souhrn týmu">
+          <span><strong id="currentPeriodLabel">—</strong></span>
           <span><strong id="peopleCount">0</strong> brigádníků</span>
           <span><strong id="hoursTotal">0</strong> hodin</span>
         </div>
@@ -164,9 +168,6 @@
         <div><dt>E-mail</dt><dd id="profileEmail">—</dd></div>
       </dl>
       <div class="profile-editor-grid">
-        <label class="photo-field">URL fotografie
-          <input id="photoUrl" type="url" placeholder="https://…">
-        </label>
         <div class="range-group skills-range-group">
           <label for="skillsRange">Schopnosti <output id="skillsOutput">50 %</output></label>
           <input id="skillsRange" type="range" min="0" max="100" step="5" value="50">
@@ -187,7 +188,8 @@
             <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
           </div>
         </fieldset>
-        <label class="notes-field">Poznámky
+        <label class="notes-field">
+          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
           <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
         </label>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">

@@ -8,6 +8,7 @@ let currentImportPeriod = firstDayOfMonth(new Date());
 let supabaseClient = null;
 let remoteUser = null;
 let messageTimer = null;
+let hasAutoSynced = false;
 
 const state = loadState();
 const elements = {
@@ -37,6 +38,7 @@ const elements = {
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
   alertsEmpty: document.querySelector("#alertsEmpty"),
+  currentPeriodLabel: document.querySelector("#currentPeriodLabel"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
@@ -48,12 +50,12 @@ const elements = {
   form: document.querySelector("#personForm"),
   dialogTitle: document.querySelector("#dialogTitle"),
   personId: document.querySelector("#personId"),
-  photoUrl: document.querySelector("#photoUrl"),
   skillsRange: document.querySelector("#skillsRange"),
   skillsOutput: document.querySelector("#skillsOutput"),
   reliabilityRange: document.querySelector("#reliabilityRange"),
   reliabilityOutput: document.querySelector("#reliabilityOutput"),
   notesInput: document.querySelector("#notesInput"),
+  clearNotesButton: document.querySelector("#clearNotesButton"),
   profileUserId: document.querySelector("#profileUserId"),
   profileRole: document.querySelector("#profileRole"),
   profileStatus: document.querySelector("#profileStatus"),
@@ -77,7 +79,7 @@ updateThemeControls();
 elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
-elements.googleSheetsButton.addEventListener("click", syncGoogleSheets);
+elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
 elements.importBackupInput.addEventListener("change", (event) => importBackup(event.target.files[0]));
 elements.exportButton.addEventListener("click", exportBackup);
@@ -90,10 +92,16 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
   render();
 });
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
-elements.skillsRange.addEventListener("input", () => elements.skillsOutput.value = `${elements.skillsRange.value} %`);
-elements.reliabilityRange.addEventListener("input", () => elements.reliabilityOutput.value = `${elements.reliabilityRange.value} %`);
+elements.skillsRange.addEventListener("input", () => updateRangeControl(elements.skillsRange, elements.skillsOutput));
+elements.reliabilityRange.addEventListener("input", () => updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput));
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
+elements.clearNotesButton.addEventListener("click", () => {
+  elements.notesInput.value = "";
+  elements.notesInput.focus();
+});
+elements.dialog.addEventListener("click", closeDialogFromBackdrop);
+elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
 
 ["dragenter", "dragover"].forEach(type => elements.dropZone.addEventListener(type, (event) => {
   event.preventDefault();
@@ -110,14 +118,12 @@ elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const person = state.people[elements.personId.value];
   if (!person) return;
-  person.photo = elements.photoUrl.value.trim();
   person.skills = Number(elements.skillsRange.value);
   person.reliability = Number(elements.reliabilityRange.value);
   person.departments = elements.personDepartments.filter(input => input.checked).map(input => input.value);
   person.notes = elements.notesInput.value.trim();
   if (supabaseClient && remoteUser && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({
-      photo_url: person.photo,
       skills: person.skills,
       reliability: person.reliability,
       departments: person.departments,
@@ -228,9 +234,22 @@ function updateThemeControls() {
   });
 }
 
+function closeDialogFromBackdrop(event) {
+  if (event.target !== event.currentTarget) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  if (!inside) event.currentTarget.close();
+}
+
+function updateRangeControl(input, output) {
+  output.value = `${input.value} %`;
+  input.style.setProperty("--range-value", `${input.value}%`);
+}
+
 async function handleSession(session) {
   if (!session?.user) {
     remoteUser = null;
+    hasAutoSynced = false;
     elements.authGate.hidden = false;
     elements.appContent.forEach(element => { element.hidden = true; });
     return;
@@ -256,6 +275,10 @@ async function handleSession(session) {
   try {
     await loadRemoteState();
     render();
+    if (!hasAutoSynced) {
+      hasAutoSynced = true;
+      await syncGoogleSheets(true);
+    }
   } catch (error) {
     elements.authGate.hidden = false;
     elements.appContent.forEach(element => { element.hidden = true; });
@@ -278,7 +301,7 @@ async function loadRemoteState() {
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
 
-  const latestPeriod = attendanceResult.data.reduce((latest, row) => !latest || row.period > latest ? row.period : latest, null);
+  const latestPeriod = firstDayOfMonth(new Date());
   const hoursByWorker = new Map(attendanceResult.data
     .filter(row => row.period === latestPeriod)
     .map(row => [row.worker_id, Number(row.hours)]));
@@ -339,7 +362,7 @@ function findActiveWorker(name) {
   return Object.values(state.people).find(worker => [worker.name, ...(worker.aliases || [])].some(candidate => slugify(candidate) === key));
 }
 
-async function syncGoogleSheets() {
+async function syncGoogleSheets(automatic = false) {
   const button = elements.googleSheetsButton;
   button.disabled = true;
   button.textContent = "Načítám…";
@@ -352,9 +375,9 @@ async function syncGoogleSheets() {
     const file = new File([await response.blob()], "BRIGÁDNÍCI P7 – Google Sheets.xlsx", {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     });
-    await prepareWorkbook(file);
+    await prepareWorkbook(file, true);
   } catch (error) {
-    setMessage(error.message || "Google tabulku se nepodařilo načíst.", true);
+    setMessage(`${automatic ? "Automatická synchronizace: " : ""}${error.message || "Google tabulku se nepodařilo načíst."}`, true);
   } finally {
     button.disabled = false;
     button.textContent = "Načíst z Google Sheets";
@@ -382,7 +405,7 @@ async function importAttendance(file) {
   }
 }
 
-async function prepareWorkbook(file) {
+async function prepareWorkbook(file, requireCurrentMonth = false) {
   if (typeof XLSX === "undefined") throw new Error("Knihovna pro Excel se nenačetla. Zkontrolujte připojení k internetu a zkuste to znovu.");
   pendingWorkbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
   pendingWorkbookName = file.name;
@@ -390,7 +413,9 @@ async function prepareWorkbook(file) {
   if (!compatible.length) throw new Error("V Excelu nebyl nalezen list se sloupci Jméno a Počet zapsaných hodin.");
   elements.sheetSelect.replaceChildren(...compatible.map(name => new Option(name, name)));
   const currentPeriod = firstDayOfMonth(new Date());
-  elements.sheetSelect.value = compatible.find(name => periodFromSheetName(name) === currentPeriod) || compatible[compatible.length - 1];
+  const currentSheet = compatible.find(name => periodFromSheetName(name) === currentPeriod);
+  if (requireCurrentMonth && !currentSheet) throw new Error("V Google tabulce nebyl nalezen list pro aktuální měsíc.");
+  elements.sheetSelect.value = currentSheet || compatible[compatible.length - 1];
   elements.sheetSelectWrap.hidden = false;
   importWorkbookSheet(elements.sheetSelect.value);
 }
@@ -553,6 +578,7 @@ function render() {
   });
 
   elements.peopleGrid.replaceChildren(...people.map(createCard));
+  elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date());
   elements.peopleCount.textContent = people.length;
   elements.hoursTotal.textContent = formatNumber(people.reduce((total, person) => total + Number(person.hours || 0), 0));
   elements.emptyState.hidden = people.length > 0;
@@ -702,14 +728,14 @@ function openPerson(id) {
   elements.profileRole.textContent = person.role || "—";
   elements.profileStatus.textContent = person.status || "—";
   elements.profileEmail.textContent = person.email || "—";
-  elements.photoUrl.value = person.photo || "";
   elements.skillsRange.value = person.skills ?? 50;
-  elements.skillsOutput.value = `${elements.skillsRange.value} %`;
+  updateRangeControl(elements.skillsRange, elements.skillsOutput);
   elements.reliabilityRange.value = person.reliability ?? 50;
-  elements.reliabilityOutput.value = `${elements.reliabilityRange.value} %`;
+  updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
   const trained = Array.isArray(person.departments) ? person.departments : [];
   elements.personDepartments.forEach(input => { input.checked = trained.includes(input.value); });
   elements.notesInput.value = person.notes || "";
+  elements.clearNotesButton.hidden = !person.notes;
   renderFeedbackHistory(person);
   renderAuditHistory(person);
   elements.dialog.showModal();
