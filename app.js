@@ -58,8 +58,13 @@ const elements = {
   cardViewButton: document.querySelector("#cardViewButton"),
   tableViewButton: document.querySelector("#tableViewButton"),
   emptyState: document.querySelector("#emptyState"),
+  emptyStateText: document.querySelector("#emptyStateText"),
+  resetAllFilters: document.querySelector("#resetAllFilters"),
   peopleCount: document.querySelector("#peopleCount"),
   hoursTotal: document.querySelector("#hoursTotal"),
+  attendancePeople: document.querySelector("#attendancePeople"),
+  attendanceHours: document.querySelector("#attendanceHours"),
+  attendanceUpdated: document.querySelector("#attendanceUpdated"),
   alertsPanel: document.querySelector("#alertsPanel"),
   alertsDrawer: document.querySelector("#alertsDrawer"),
   alertsToggle: document.querySelector("#alertsToggle"),
@@ -182,6 +187,7 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
   elements.departmentFilters.forEach(input => { input.checked = false; });
   render();
 });
+elements.resetAllFilters.addEventListener("click", resetAllFilters);
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
@@ -214,7 +220,10 @@ elements.cancelAppFeedback.addEventListener("click", () => elements.appFeedbackD
 elements.appFeedbackForm.addEventListener("submit", submitAppFeedback);
 elements.quickFilters.forEach(button => button.addEventListener("click", () => toggleQuickFilter(button)));
 elements.clearQuickFilters.addEventListener("click", clearQuickFilters);
-elements.addWorkerButton.addEventListener("click", openAddWorkerDialog);
+elements.addWorkerButton.addEventListener("click", () => {
+  elements.addWorkerButton.closest("details").open = false;
+  openAddWorkerDialog();
+});
 elements.closeAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
 elements.cancelAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
 elements.addWorkerForm.addEventListener("submit", addWorker);
@@ -224,7 +233,10 @@ elements.cancelDeleteWorker.addEventListener("click", () => elements.deleteWorke
 elements.deleteWorkerForm.addEventListener("submit", removeWorker);
 elements.addWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.deleteWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
-elements.inactiveWorkersButton.addEventListener("click", openInactiveWorkers);
+elements.inactiveWorkersButton.addEventListener("click", () => {
+  elements.inactiveWorkersButton.closest("details").open = false;
+  void openInactiveWorkers();
+});
 elements.closeInactiveWorkers.addEventListener("click", () => elements.inactiveWorkersDialog.close());
 elements.cancelRestoreWorker.addEventListener("click", cancelRestoreWorker);
 elements.inactiveWorkersForm.addEventListener("submit", restoreWorker);
@@ -1215,9 +1227,30 @@ function render() {
   elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
   elements.peopleCount.textContent = people.length;
   elements.hoursTotal.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
+  const allPeople = Object.values(state.people);
+  elements.attendancePeople.textContent = allPeople.length;
+  elements.attendanceHours.textContent = formatNumber(allPeople.reduce((sum, person) => sum + Number(person.hours || 0), 0));
+  elements.attendanceUpdated.textContent = state.lastImport
+    ? `Aktualizováno ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport))}`
+    : "Čeká na načtení";
   elements.emptyState.hidden = people.length > 0;
+  if (!people.length) {
+    elements.emptyStateText.textContent = query
+      ? `Pro hledání „${elements.searchInput.value.trim()}“ nebyl nalezen žádný brigádník.`
+      : "Aktivní filtry neodpovídají žádnému brigádníkovi.";
+  }
   renderSyncStatus();
   renderAlerts();
+}
+
+function resetAllFilters() {
+  elements.searchInput.value = "";
+  activeQuickFilters.clear();
+  elements.quickFilters.forEach(button => button.classList.remove("is-active"));
+  elements.clearQuickFilters.hidden = true;
+  elements.departmentFilters.forEach(input => { input.checked = false; });
+  elements.departmentMatchMode.value = "all";
+  render();
 }
 
 function comparePeople(a, b, key) {
@@ -1244,8 +1277,9 @@ function renderSyncStatus() {
 }
 
 function renderPeopleTable(people) {
-  elements.peopleTableBody.replaceChildren(...people.map(person => {
+  elements.peopleTableBody.replaceChildren(...people.map((person, index) => {
     const row = document.createElement("tr");
+    row.style.setProperty("--item-index", index);
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
@@ -1381,8 +1415,9 @@ function previousAuditValue(person, field) {
   return change ? change.before[field] : null;
 }
 
-function createCard(person) {
+function createCard(person, index = 0) {
   const card = elements.cardTemplate.content.firstElementChild.cloneNode(true);
+  card.style.setProperty("--item-index", index);
   card.tabIndex = 0;
   card.setAttribute("aria-label", `Zobrazit detail: ${person.name}`);
   card.querySelector("h3").textContent = person.name;
