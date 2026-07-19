@@ -339,8 +339,10 @@ dialog label { display: grid; gap: 8px; font-weight: 650; }
 .profile-tab.is-active::after { opacity: 1; transform: scaleX(1); }
 .profile-tab-panel { min-height: 190px; }
 textarea { resize: vertical; }
-.range-group label { display: flex; justify-content: space-between; }
-.range-group label small { margin-left: 5px; color: var(--muted); font-size: 0.68rem; font-weight: 550; }
+.range-group label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; margin-bottom: 9px; }
+.range-group label > span { display: grid; min-width: 0; gap: 3px; line-height: 1.2; }
+.range-group label small { margin: 0; color: var(--muted); font-size: 0.68rem; font-weight: 550; line-height: 1.25; }
+.range-group output { min-width: 3.7rem; color: var(--text); font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 750; line-height: 1.2; text-align: right; white-space: nowrap; }
 .range-group input[type="range"] { width: 100%; height: 8px; appearance: none; background: linear-gradient(to right, var(--range-start) 0%, var(--range-end) var(--range-value, 50%), var(--brand-soft) var(--range-value, 50%), var(--brand-soft) 100%); border: 0; border-radius: 999px; cursor: pointer; }
 .range-group input[type="range"]:disabled { cursor: default; opacity: 1; }
 .range-group input[type="range"]::-webkit-slider-thumb { width: 18px; height: 18px; appearance: none; background: var(--range-end); border: 3px solid var(--surface-elevated); border-radius: 50%; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.28); }
