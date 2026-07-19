@@ -15,6 +15,7 @@ let currentImportPeriod = firstDayOfMonth(new Date());
 let supabaseClient = null;
 let remoteUser = null;
 let messageTimer = null;
+let loaderHideTimer = null;
 let hasAutoSynced = false;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
@@ -31,6 +32,8 @@ const elements = {
   loginButton: document.querySelector("#loginButton"),
   themeToggles: [...document.querySelectorAll("[data-theme-toggle]")],
   authMessage: document.querySelector("#authMessage"),
+  appLoader: document.querySelector("#appLoader"),
+  appLoaderStatus: document.querySelector("#appLoaderStatus"),
   appContent: [...document.querySelectorAll(".app-content")],
   signedInUser: document.querySelector("#signedInUser"),
   signOutButton: document.querySelector("#signOutButton"),
@@ -492,6 +495,7 @@ function saveState() {
 async function initializeApp() {
   const config = window.APP_CONFIG;
   if (!config?.supabaseUrl || !config?.supabasePublishableKey || !window.supabase?.createClient) {
+    hideAppLoader();
     showAuthMessage("Chybí konfigurace Supabase nebo se nenačetla jeho knihovna.", true);
     return;
   }
@@ -516,6 +520,7 @@ async function signInWithPassword(event) {
   });
   elements.loginButton.disabled = false;
   elements.loginButton.textContent = "Přihlásit se";
+  if (error) hideAppLoader();
   showAuthMessage(error ? "E-mail nebo heslo není správné." : "Přihlášení proběhlo úspěšně.", Boolean(error));
 }
 
@@ -702,12 +707,14 @@ function updateTableSortIndicators() {
 
 async function handleSession(session) {
   if (!session?.user) {
+    hideAppLoader();
     remoteUser = null;
     hasAutoSynced = false;
     elements.authGate.hidden = false;
     elements.appContent.forEach(element => { element.hidden = true; });
     return;
   }
+  showAppLoader("Ověřuji přístup…");
   remoteUser = session.user;
   const { data: membership, error: membershipError } = await supabaseClient
     .from("app_members")
@@ -715,29 +722,55 @@ async function handleSession(session) {
     .eq("email", remoteUser.email.toLocaleLowerCase())
     .maybeSingle();
   if (membershipError) {
+    hideAppLoader();
     showAuthMessage(`Databáze ještě není připravená: ${membershipError.message}`, true);
     return;
   }
   if (!membership) {
+    hideAppLoader();
     showAuthMessage("Tento e-mail není na seznamu povolených vedoucích.", true);
     await supabaseClient.auth.signOut();
     return;
   }
   elements.authGate.hidden = true;
-  elements.appContent.forEach(element => { element.hidden = false; });
+  elements.appContent.forEach(element => { element.hidden = true; });
   elements.signedInUser.textContent = remoteUser.email;
   try {
+    updateAppLoader("Načítám profily brigádníků…");
     await loadRemoteState();
     render();
     if (!hasAutoSynced) {
       hasAutoSynced = true;
+      updateAppLoader("Synchronizuji docházku…");
       await syncGoogleSheets(true);
     }
+    elements.appContent.forEach(element => { element.hidden = false; });
+    updateAppLoader("Přehled je připravený");
+    hideAppLoader();
   } catch (error) {
+    hideAppLoader();
     elements.authGate.hidden = false;
     elements.appContent.forEach(element => { element.hidden = true; });
     showAuthMessage(error.message, true);
   }
+}
+
+function showAppLoader(text = "Načítám týmový přehled…") {
+  clearTimeout(loaderHideTimer);
+  elements.appLoaderStatus.textContent = text;
+  elements.appLoader.hidden = false;
+  requestAnimationFrame(() => elements.appLoader.classList.add("is-visible"));
+}
+
+function updateAppLoader(text) {
+  elements.appLoaderStatus.textContent = text;
+}
+
+function hideAppLoader() {
+  if (!elements.appLoader || elements.appLoader.hidden) return;
+  elements.appLoader.classList.remove("is-visible");
+  clearTimeout(loaderHideTimer);
+  loaderHideTimer = setTimeout(() => { elements.appLoader.hidden = true; }, 240);
 }
 
 function showAuthMessage(text, error = false) {
