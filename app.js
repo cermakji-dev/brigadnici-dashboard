@@ -469,9 +469,9 @@ function setDialogStatus(element, text, error = false) {
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return parsed && parsed.people ? parsed : { people: {}, lastImport: null };
+    return parsed && parsed.people ? parsed : { people: {}, lastImport: null, plannedHours: null };
   } catch {
-    return { people: {}, lastImport: null };
+    return { people: {}, lastImport: null, plannedHours: null };
   }
 }
 
@@ -949,6 +949,7 @@ async function importWorkbookSheet(sheetName) {
       if (["pocet volnych smen", "pocet obsazenych smen", "% obsazeni", "planovane hodiny", "z toho log (obsazene)"].includes(normalize(name))) break;
       rows.push({ Jméno: name, Hodiny: hours });
     }
+    state.plannedHours = findWorkbookSummaryValue(match.matrix, ["plánované hodiny", "planovane hodiny"]);
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
     await importRows(rows, `${pendingWorkbookName} — ${sheetName}`);
     return true;
@@ -956,6 +957,17 @@ async function importWorkbookSheet(sheetName) {
     setMessage(error.message || "List se nepodařilo načíst.", true);
     return false;
   }
+}
+
+function findWorkbookSummaryValue(matrix, labels) {
+  const normalizedLabels = labels.map(normalize);
+  for (const row of matrix) {
+    const labelIndex = row.findIndex(cell => normalizedLabels.includes(normalize(cell)));
+    if (labelIndex < 0) continue;
+    const value = parseHours(row[labelIndex + 1]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 async function importRows(rows, sourceName) {
@@ -1124,7 +1136,7 @@ function render() {
   elements.tableViewButton.classList.toggle("is-active", currentView === "table");
   elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
   elements.peopleCount.textContent = people.length;
-  elements.hoursTotal.textContent = formatNumber(people.reduce((total, person) => total + Number(person.hours || 0), 0));
+  elements.hoursTotal.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   elements.emptyState.hidden = people.length > 0;
   renderSyncStatus();
   renderAlerts();
