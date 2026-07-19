@@ -175,10 +175,13 @@ main {
 .sync-state small { color: var(--muted); }
 .summary-month { display: grid; width: 100%; grid-template-columns: auto minmax(130px, 1fr); align-items: center; justify-self: center; gap: 10px; margin: 0; color: var(--muted); font-size: .76rem; }
 .summary-month select { min-height: 40px; background-color: var(--brand-soft); font-size: .84rem; font-weight: 680; }
-.attendance-period-block { grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 14px; }
-.attendance-mini-summary { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: .72rem; white-space: nowrap; }
-.attendance-mini-summary span + span { padding-left: 10px; border-left: 1px solid var(--border); }
-.attendance-mini-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.attendance-period-block { grid-column: 2; display: flex; align-items: stretch; justify-content: center; gap: 8px; padding: 5px; background: color-mix(in srgb, var(--brand-soft) 58%, transparent); border: 1px solid var(--border); border-radius: 14px; }
+.attendance-period-block .summary-month { width: 210px; padding-left: 10px; }
+.attendance-period-block .summary-month select { min-height: 38px; border-color: transparent; background-color: var(--surface); }
+.attendance-mini-summary { display: flex; align-items: stretch; gap: 5px; color: var(--muted); white-space: nowrap; }
+.attendance-mini-summary span { display: flex; min-width: 104px; flex-direction: column; justify-content: center; padding: 5px 12px; background: var(--surface); border-radius: 9px; }
+.attendance-mini-summary strong { color: var(--text); font-size: .9rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.attendance-mini-summary small { margin-top: 2px; color: var(--muted); font-size: .66rem; }
 .import-summary-actions { grid-column: 3; display: flex; align-items: center; justify-self: end; justify-content: flex-end; }
 .compact-action { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; background: transparent; color: var(--muted); border: 0; border-radius: 8px; cursor: pointer; font-weight: 650; }
 .compact-action:hover { background: var(--brand-soft); color: var(--text); }
@@ -550,6 +553,7 @@ textarea { resize: vertical; }
   .import-summary { grid-template-columns: 1fr auto; gap: 10px 12px; padding: 12px 14px; }
   .sync-state small { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .attendance-period-block { grid-column: 1 / -1; grid-row: 2; width: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
+  .attendance-period-block .summary-month { width: 100%; padding-left: 0; }
   .attendance-mini-summary { justify-content: center; overflow-x: auto; padding-bottom: 2px; }
   .import-summary-actions { grid-column: 2; grid-row: 1; }
   .import-summary .compact-action span { display: inline; }
