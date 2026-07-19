@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=52">
+  <link rel="stylesheet" href="styles.css?v=53">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -36,6 +36,17 @@
       <p class="login-help">Přístup mají pouze povolené účty vedoucích.</p>
     </form>
   </section>
+
+  <div id="appLoader" class="app-loader" role="status" aria-live="polite" hidden>
+    <div class="loader-glow loader-glow-one"></div>
+    <div class="loader-glow loader-glow-two"></div>
+    <div class="loader-card">
+      <div class="loader-mark" aria-hidden="true">B</div>
+      <div class="loader-progress" aria-hidden="true"><span></span></div>
+      <strong>Brigádníci</strong>
+      <span id="appLoaderStatus">Načítám týmový přehled…</span>
+    </div>
+  </div>
 
   <header class="topbar app-content" hidden>
     <div class="topbar-brand">
@@ -418,6 +429,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=52"></script>
+  <script src="app.js?v=53"></script>
 </body>
 </html>
