@@ -334,6 +334,9 @@ dialog[open] { animation: dialog-enter 170ms ease-out; }
 dialog::backdrop { background: rgba(3, 7, 18, 0.68); backdrop-filter: blur(4px); }
 @keyframes dialog-enter { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 dialog form { display: grid; max-height: min(88vh, 820px); gap: 0; overflow-y: auto; padding: 0; }
+#personDialog { height: min(720px, calc(100vh - 48px)); }
+#personDialog form { height: 100%; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
+#personDialog .profile-tab-panel { min-height: 0; align-content: start; overflow-y: auto; scrollbar-gutter: stable; }
 .dialog-heading { position: sticky; z-index: 2; top: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px 28px 20px; background: var(--surface-elevated); border-bottom: 1px solid var(--border); }
 .dialog-heading + input[type="hidden"] + .profile-facts { margin-top: 0; }
 dialog label { display: grid; gap: 8px; font-weight: 650; }
@@ -457,6 +460,7 @@ textarea { resize: vertical; }
   .profile-facts { grid-template-columns: 1fr; }
   dialog { width: calc(100% - 20px); max-height: 94vh; border-radius: 18px; }
   dialog form { max-height: 94vh; }
+  #personDialog { height: 94vh; }
   .dialog-heading, .profile-editor-grid, .dialog-actions { padding-left: 18px; padding-right: 18px; }
   .profile-editor-grid { grid-template-columns: 1fr; }
   .department-editor, .notes-field, .feedback-history, .audit-history { grid-column: auto; }
