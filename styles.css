@@ -133,11 +133,11 @@ main {
 
 .import-panel {
   display: grid;
-  width: min(1040px, 100%);
+  width: 100%;
   grid-template-columns: minmax(260px, 0.85fr) minmax(390px, 1.15fr);
-  gap: 28px;
+  gap: 26px;
   margin: 0 auto;
-  padding: clamp(24px, 4vw, 42px);
+  padding: 26px 30px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -148,12 +148,12 @@ main {
 
 .drop-zone {
   display: flex;
-  min-height: 220px;
+  min-height: 180px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 10px;
-  padding: 28px;
+  padding: 20px 24px;
   text-align: center;
   background: var(--brand-soft);
   border: 1px dashed #aeb3bd;
@@ -179,7 +179,7 @@ main {
 .button:disabled { cursor: wait; opacity: 0.65; }
 .button:focus-visible, .icon-button:focus-visible, .feedback-button:focus-visible, .theme-toggle:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
-.sheet-select { display: grid; gap: 8px; margin-top: 28px; font-weight: 650; }
+.sheet-select { display: grid; gap: 7px; margin-top: 18px; font-weight: 650; }
 .sheet-select select { width: 100%; background: var(--surface); }
 .message { grid-column: 1 / -1; min-height: 1.4em; margin: 0; color: var(--positive); }
 .message.error { color: var(--negative); }
