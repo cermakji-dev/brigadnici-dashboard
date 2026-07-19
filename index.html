@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -80,9 +80,7 @@
 
     </section>
 
-    <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
-      <span id="alertsHandleIcon" aria-hidden="true">›</span><span class="visually-hidden">Pozornost</span><strong id="alertsEarCount">0</strong>
-    </button>
+    <div id="alertsDrawer" class="alerts-drawer">
     <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
       <div class="alerts-heading">
         <div>
@@ -97,6 +95,10 @@
       <div id="alertsList" class="alerts-list"></div>
       <p id="alertsEmpty" class="alerts-empty">Aktuálně není potřeba nic řešit.</p>
     </aside>
+    <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
+      <span id="alertsHandleIcon" aria-hidden="true">›</span><span class="visually-hidden">Pozornost</span><strong id="alertsEarCount">0</strong>
+    </button>
+    </div>
 
     <section class="overview" aria-labelledby="overviewHeading">
       <div class="section-heading">
@@ -309,6 +311,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

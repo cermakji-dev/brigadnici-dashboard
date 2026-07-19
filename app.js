@@ -33,6 +33,7 @@ const elements = {
   peopleCount: document.querySelector("#peopleCount"),
   hoursTotal: document.querySelector("#hoursTotal"),
   alertsPanel: document.querySelector("#alertsPanel"),
+  alertsDrawer: document.querySelector("#alertsDrawer"),
   alertsToggle: document.querySelector("#alertsToggle"),
   alertsClose: document.querySelector("#alertsClose"),
   alertsHandleIcon: document.querySelector("#alertsHandleIcon"),
@@ -695,6 +696,7 @@ function renderAlerts() {
 }
 
 function setAlertsOpen(open) {
+  elements.alertsDrawer.classList.toggle("is-open", open);
   elements.alertsPanel.classList.toggle("is-open", open);
   elements.alertsToggle.classList.toggle("is-open", open);
   elements.alertsPanel.setAttribute("aria-hidden", String(!open));
