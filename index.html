@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -115,10 +115,13 @@
           <p class="step-label">Krok 2</p>
           <h2 id="overviewHeading">Přehled týmu</h2>
         </div>
+        <div class="overview-actions">
+          <button id="addWorkerButton" class="button button-primary compact-button" type="button">+ Přidat brigádníka</button>
         <div class="summary" aria-label="Souhrn týmu">
           <span><strong id="currentPeriodLabel">—</strong></span>
           <span><strong id="peopleCount">0</strong> brigádníků</span>
           <span><strong id="hoursTotal">0</strong> hodin</span>
+        </div>
         </div>
       </div>
 
@@ -247,9 +250,38 @@
         </section>
       </div>
       <div class="dialog-actions">
+        <button id="deleteWorkerButton" class="button button-danger dialog-danger-action" type="button">Odebrat brigádníka</button>
         <button class="button button-secondary" value="cancel" type="submit">Zrušit</button>
         <button id="savePersonButton" class="button button-primary" value="default" type="submit">Uložit změny</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="addWorkerDialog" class="simple-dialog">
+    <form id="addWorkerForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Nová karta</p><h2>Přidat brigádníka</h2></div>
+        <button id="closeAddWorker" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <label>Celé jméno<input id="newWorkerName" type="text" required autocomplete="off" placeholder="Jméno a příjmení"></label>
+      <label>Interní ID<input id="newWorkerId" type="text" required autocomplete="off" placeholder="např. USER123456"></label>
+      <label>E-mail <small class="optional-label">nepovinné</small><input id="newWorkerEmail" type="email" autocomplete="off" placeholder="jmeno@firma.cz"></label>
+      <label>Vaše heslo pro potvrzení<input id="addWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
+      <p id="addWorkerStatus" class="message" role="status"></p>
+      <div class="dialog-actions"><button id="cancelAddWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmAddWorker" class="button button-primary" type="submit">Přidat brigádníka</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="deleteWorkerDialog" class="simple-dialog danger-dialog">
+    <form id="deleteWorkerForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Potvrzení změny</p><h2>Odebrat brigádníka</h2></div>
+        <button id="closeDeleteWorker" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <p>Brigádník <strong id="deleteWorkerName"></strong> zmizí z aktivního přehledu. Jeho historie zůstane bezpečně zachovaná.</p>
+      <label>Vaše heslo pro potvrzení<input id="deleteWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
+      <p id="deleteWorkerStatus" class="message" role="status"></p>
+      <div class="dialog-actions"><button id="cancelDeleteWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmDeleteWorker" class="button button-danger" type="submit">Odebrat z přehledu</button></div>
     </form>
   </dialog>
 
@@ -349,6 +381,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

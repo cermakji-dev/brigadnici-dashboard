@@ -56,6 +56,7 @@ const elements = {
   currentPeriodLabel: document.querySelector("#currentPeriodLabel"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
+  addWorkerButton: document.querySelector("#addWorkerButton"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
   clearDepartmentFilters: document.querySelector("#clearDepartmentFilters"),
@@ -98,7 +99,26 @@ const elements = {
   appFeedbackStatus: document.querySelector("#appFeedbackStatus"),
   closeAppFeedback: document.querySelector("#closeAppFeedback"),
   cancelAppFeedback: document.querySelector("#cancelAppFeedback"),
-  sendAppFeedback: document.querySelector("#sendAppFeedback")
+  sendAppFeedback: document.querySelector("#sendAppFeedback"),
+  addWorkerDialog: document.querySelector("#addWorkerDialog"),
+  addWorkerForm: document.querySelector("#addWorkerForm"),
+  newWorkerName: document.querySelector("#newWorkerName"),
+  newWorkerId: document.querySelector("#newWorkerId"),
+  newWorkerEmail: document.querySelector("#newWorkerEmail"),
+  addWorkerPassword: document.querySelector("#addWorkerPassword"),
+  addWorkerStatus: document.querySelector("#addWorkerStatus"),
+  confirmAddWorker: document.querySelector("#confirmAddWorker"),
+  closeAddWorker: document.querySelector("#closeAddWorker"),
+  cancelAddWorker: document.querySelector("#cancelAddWorker"),
+  deleteWorkerButton: document.querySelector("#deleteWorkerButton"),
+  deleteWorkerDialog: document.querySelector("#deleteWorkerDialog"),
+  deleteWorkerForm: document.querySelector("#deleteWorkerForm"),
+  deleteWorkerName: document.querySelector("#deleteWorkerName"),
+  deleteWorkerPassword: document.querySelector("#deleteWorkerPassword"),
+  deleteWorkerStatus: document.querySelector("#deleteWorkerStatus"),
+  confirmDeleteWorker: document.querySelector("#confirmDeleteWorker"),
+  closeDeleteWorker: document.querySelector("#closeDeleteWorker"),
+  cancelDeleteWorker: document.querySelector("#cancelDeleteWorker")
 };
 
 elements.loginForm.addEventListener("submit", signInWithPassword);
@@ -150,6 +170,16 @@ elements.appFeedbackButton.addEventListener("click", () => {
 elements.closeAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
 elements.cancelAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
 elements.appFeedbackForm.addEventListener("submit", submitAppFeedback);
+elements.addWorkerButton.addEventListener("click", openAddWorkerDialog);
+elements.closeAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
+elements.cancelAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
+elements.addWorkerForm.addEventListener("submit", addWorker);
+elements.deleteWorkerButton.addEventListener("click", openDeleteWorkerDialog);
+elements.closeDeleteWorker.addEventListener("click", () => elements.deleteWorkerDialog.close());
+elements.cancelDeleteWorker.addEventListener("click", () => elements.deleteWorkerDialog.close());
+elements.deleteWorkerForm.addEventListener("submit", removeWorker);
+elements.addWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.deleteWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
 
 ["dragenter", "dragover"].forEach(type => elements.dropZone.addEventListener(type, (event) => {
   event.preventDefault();
@@ -240,6 +270,99 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     renderFeedbackHistory(person);
   }
 });
+
+function openAddWorkerDialog() {
+  elements.addWorkerForm.reset();
+  setDialogStatus(elements.addWorkerStatus, "");
+  elements.addWorkerDialog.showModal();
+  elements.newWorkerName.focus();
+}
+
+function openDeleteWorkerDialog() {
+  const person = state.people[elements.personId.value];
+  if (!person) return;
+  elements.deleteWorkerForm.reset();
+  elements.deleteWorkerName.textContent = person.name;
+  elements.deleteWorkerDialog.dataset.personId = person.id;
+  setDialogStatus(elements.deleteWorkerStatus, "");
+  elements.deleteWorkerDialog.showModal();
+  elements.deleteWorkerPassword.focus();
+}
+
+async function verifyCurrentPassword(password) {
+  if (!supabaseClient || !remoteUser?.email) throw new Error("Přihlášení není aktivní.");
+  const { error } = await supabaseClient.auth.signInWithPassword({ email: remoteUser.email, password });
+  if (error) throw new Error("Zadané heslo není správné.");
+}
+
+async function addWorker(event) {
+  event.preventDefault();
+  const name = elements.newWorkerName.value.trim();
+  const externalId = elements.newWorkerId.value.trim();
+  const email = elements.newWorkerEmail.value.trim() || null;
+  elements.confirmAddWorker.disabled = true;
+  setDialogStatus(elements.addWorkerStatus, "Ověřuji heslo…");
+  try {
+    await verifyCurrentPassword(elements.addWorkerPassword.value);
+    setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
+    const { error } = await supabaseClient.from("workers").insert({
+      external_user_id: externalId,
+      full_name: name,
+      email,
+      role: "Sales Support",
+      status: "Aktivní",
+      active: true,
+      skills: 0,
+      reliability: 100,
+      departments: [],
+      aliases: [],
+      notes: ""
+    });
+    if (error) {
+      if (error.code === "23505") throw new Error("Brigádník s tímto interním ID už existuje.");
+      throw new Error(error.message);
+    }
+    await loadRemoteState();
+    render();
+    elements.addWorkerDialog.close();
+    setMessage(`Karta pro ${name} byla vytvořena.`);
+  } catch (error) {
+    setDialogStatus(elements.addWorkerStatus, error.message || "Kartu se nepodařilo vytvořit.", true);
+  } finally {
+    elements.confirmAddWorker.disabled = false;
+    elements.addWorkerPassword.value = "";
+  }
+}
+
+async function removeWorker(event) {
+  event.preventDefault();
+  const person = state.people[elements.deleteWorkerDialog.dataset.personId];
+  if (!person?.remoteId) return;
+  elements.confirmDeleteWorker.disabled = true;
+  setDialogStatus(elements.deleteWorkerStatus, "Ověřuji heslo…");
+  try {
+    await verifyCurrentPassword(elements.deleteWorkerPassword.value);
+    setDialogStatus(elements.deleteWorkerStatus, "Odebírám z přehledu…");
+    const { error } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).eq("id", person.remoteId);
+    if (error) throw new Error(error.message);
+    delete state.people[person.id];
+    saveState();
+    elements.deleteWorkerDialog.close();
+    elements.dialog.close();
+    render();
+    setMessage(`${person.name} byl odebrán z aktivního přehledu.`);
+  } catch (error) {
+    setDialogStatus(elements.deleteWorkerStatus, error.message || "Brigádníka se nepodařilo odebrat.", true);
+  } finally {
+    elements.confirmDeleteWorker.disabled = false;
+    elements.deleteWorkerPassword.value = "";
+  }
+}
+
+function setDialogStatus(element, text, error = false) {
+  element.textContent = text;
+  element.classList.toggle("error", error);
+}
 
 function loadState() {
   try {
