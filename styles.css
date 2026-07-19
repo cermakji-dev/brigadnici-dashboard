@@ -279,8 +279,11 @@ select { width: auto; }
 .email { margin: 0; color: var(--muted); font-size: 0.83rem; }
 .icon-button { width: 36px; height: 36px; background: transparent; color: var(--muted); font-size: 1.2rem; }
 .hours-block { display: flex; align-items: baseline; gap: 8px; margin: 17px 0; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.hours-block > div { display: grid; gap: 1px; }
 .hours-value { font-size: 2rem; letter-spacing: -0.04em; }
 .hours-block span { color: var(--muted); font-size: 0.83rem; }
+.hours-block .rolling-hours { margin-left: auto; padding: 5px 8px; background: var(--brand-soft); border-radius: 8px; white-space: nowrap; }
+.hours-block .rolling-hours strong { color: var(--text); }
 .department-badges { display: flex; min-height: 24px; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .department-badge { padding: 4px 8px; background: var(--brand-soft); border-radius: 999px; font-size: 0.76rem; font-weight: 650; }
 .department-badge.empty { color: var(--muted); font-weight: 500; }
@@ -321,6 +324,9 @@ select { width: auto; }
 .people-table td:first-child { min-width: 190px; }
 .people-table td:first-child strong, .people-table td:first-child small { display: block; }
 .people-table td:first-child small { max-width: 220px; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+.table-hours { white-space: nowrap; }
+.table-hours strong, .table-hours small { display: block; }
+.table-hours small { margin-top: 4px; color: var(--muted); font-size: .72rem; }
 .table-departments { max-width: 240px; color: var(--muted); font-size: .82rem; }
 .table-note { width: 32%; min-width: 320px; }
 .table-note .inline-note { min-height: 42px; resize: vertical; }
@@ -352,7 +358,7 @@ dialog label { display: grid; gap: 8px; font-weight: 650; }
 .department-editor, .notes-field, .feedback-history, .audit-history { grid-column: 1 / -1; }
 .department-editor { margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; }
 .department-editor legend { padding: 0 6px; font-weight: 650; }
-.profile-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 20px 28px; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border-bottom: 1px solid var(--border); }
+.profile-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 20px 28px; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border-bottom: 1px solid var(--border); }
 .profile-facts div { min-width: 0; }
 .profile-facts dt { margin-bottom: 4px; color: var(--muted); font-size: 0.78rem; }
 .profile-facts dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }

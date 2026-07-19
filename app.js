@@ -80,6 +80,7 @@ const elements = {
   profileUserId: document.querySelector("#profileUserId"),
   profileRole: document.querySelector("#profileRole"),
   profileEmail: document.querySelector("#profileEmail"),
+  profileHours60: document.querySelector("#profileHours60"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
   feedbackBreakdown: document.querySelector("#feedbackBreakdown"),
   auditHistory: document.querySelector("#auditHistory"),
@@ -759,6 +760,7 @@ async function loadRemoteState() {
       status: worker.status,
       photo: worker.photo_url || "",
       hours: hoursByWorker.get(worker.id) || 0,
+      hours60: state.people[id]?.hours60 || 0,
       skills: metrics.skills,
       reliability: metrics.reliability,
       departments: worker.departments || [],
@@ -845,6 +847,58 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   elements.sheetSelectWrap.hidden = false;
   const imported = await importWorkbookSheet(elements.sheetSelect.value);
   if (requireCurrentMonth && !imported) throw new Error("Aktuální list se nepodařilo načíst.");
+  if (imported) applyRolling60Hours(pendingWorkbook);
+}
+
+function applyRolling60Hours(workbook) {
+  const today = startOfDay(new Date());
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - 59);
+  const totals = new Map();
+
+  workbook.SheetNames.forEach(sheetName => {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
+      const nextRowLabel = normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "");
+      if (nextRowLabel !== "urceni") continue;
+      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
+      if (!date || date < cutoff || date > today) continue;
+      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
+        const row = matrix[shiftRow];
+        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
+        if (!/^\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*h?$/.test(normalize(row[0]))) continue;
+        row.slice(1, 7).forEach(cell => {
+          const worker = findActiveWorker(String(cell || "").trim());
+          if (!worker) return;
+          totals.set(worker.id, (totals.get(worker.id) || 0) + 1);
+        });
+      }
+    }
+  });
+
+  Object.values(state.people).forEach(person => { person.hours60 = totals.get(person.id) || 0; });
+  saveState();
+  render();
+}
+
+function excelCellDate(cells) {
+  for (const value of cells) {
+    if (value instanceof Date && !Number.isNaN(value.valueOf())) return startOfDay(value);
+    if (typeof value === "number" && value > 30000 && value < 70000) {
+      const parsed = XLSX.SSF.parse_date_code(value);
+      if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
+    }
+    if (typeof value === "string" && /^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/.test(value.trim())) {
+      const [day, month, rawYear] = value.trim().split(/[./]/).map(Number);
+      const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+      return new Date(year, month - 1, day);
+    }
+  }
+  return null;
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function findWorkbookHeader(sheet) {
@@ -1046,7 +1100,7 @@ function renderPeopleTable(people) {
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
-    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
+    row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
     row.querySelector("strong").textContent = person.name;
     row.querySelector("small").textContent = person.email || "Bez e-mailu";
     row.querySelector(".table-departments").textContent = departments;
@@ -1152,6 +1206,7 @@ function createCard(person) {
   if (person.photo) avatar.style.backgroundImage = `url("${safeCssUrl(person.photo)}")`;
   else avatar.textContent = initials(person.name);
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
+  card.querySelector(".hours-60-value").textContent = `${formatNumber(person.hours60 || 0)} h`;
   renderDepartmentBadges(card.querySelector(".department-badges"), person.departments);
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
@@ -1293,6 +1348,7 @@ function openPerson(id) {
   elements.profileUserId.textContent = person.userId || "—";
   elements.profileRole.textContent = person.role || "—";
   elements.profileEmail.textContent = person.email || "—";
+  elements.profileHours60.textContent = `${formatNumber(person.hours60 || 0)} hodin`;
   elements.skillsRange.value = person.skills ?? 50;
   updateRangeControl(elements.skillsRange, elements.skillsOutput);
   elements.reliabilityRange.value = person.reliability ?? 50;
