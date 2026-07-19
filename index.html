@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -176,12 +176,12 @@
       </dl>
       <div class="profile-editor-grid">
         <div class="range-group skills-range-group">
-          <label for="skillsRange">Schopnosti <output id="skillsOutput">50 %</output></label>
-          <input id="skillsRange" type="range" min="0" max="100" step="5" value="50">
+          <label for="skillsRange"><span>Schopnosti <small>automaticky</small></span><output id="skillsOutput">50 %</output></label>
+          <input id="skillsRange" type="range" min="0" max="100" step="5" value="50" disabled>
         </div>
         <div class="range-group reliability-range-group">
-          <label for="reliabilityRange">Docházková morálka <output id="reliabilityOutput">50 %</output></label>
-          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50">
+          <label for="reliabilityRange"><span>Docházková morálka <small>automaticky</small></span><output id="reliabilityOutput">50 %</output></label>
+          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50" disabled>
         </div>
         <fieldset class="department-editor">
           <legend>Zaškolení na oddělení</legend>
@@ -201,6 +201,7 @@
         </label>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
           <h3 id="feedbackHistoryHeading">Historie palců</h3>
+          <div id="feedbackBreakdown" class="feedback-breakdown"></div>
           <div id="feedbackHistory"></div>
         </section>
         <section class="audit-history" aria-labelledby="auditHistoryHeading">
@@ -226,6 +227,14 @@
       </div>
       <input id="feedbackPersonId" type="hidden">
       <input id="feedbackType" type="hidden">
+      <label>Kategorie hodnocení
+        <select id="feedbackCategory" required>
+          <option value="" selected disabled>Vyberte kategorii…</option>
+          <option value="attendance">Docházka</option>
+          <option value="training">Zaškolení</option>
+          <option value="general">Obecné</option>
+        </select>
+      </label>
       <label>Důvod hodnocení
         <textarea id="feedbackNote" rows="4" required placeholder="Popište konkrétní situaci…"></textarea>
       </label>
@@ -299,6 +308,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

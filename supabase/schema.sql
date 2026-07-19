@@ -46,10 +46,28 @@ create table if not exists public.feedback (
   id uuid primary key default gen_random_uuid(),
   worker_id uuid not null references public.workers(id) on delete cascade,
   kind text not null check (kind in ('positive', 'negative')),
+  category text not null default 'general' check (category in ('attendance', 'training', 'general')),
   note text not null check (length(trim(note)) > 0),
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now()
 );
+
+alter table public.feedback
+  add column if not exists category text not null default 'general';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'feedback_category_check'
+      and conrelid = 'public.feedback'::regclass
+  ) then
+    alter table public.feedback
+      add constraint feedback_category_check
+      check (category in ('attendance', 'training', 'general'));
+  end if;
+end
+$$;
 
 create table if not exists public.worker_audit (
   id bigint generated always as identity primary key,

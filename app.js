@@ -63,12 +63,14 @@ const elements = {
   profileEmail: document.querySelector("#profileEmail"),
   savePersonButton: document.querySelector("#savePersonButton"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
+  feedbackBreakdown: document.querySelector("#feedbackBreakdown"),
   auditHistory: document.querySelector("#auditHistory"),
   feedbackDialog: document.querySelector("#feedbackDialog"),
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackDialogTitle: document.querySelector("#feedbackDialogTitle"),
   feedbackPersonId: document.querySelector("#feedbackPersonId"),
   feedbackType: document.querySelector("#feedbackType"),
+  feedbackCategory: document.querySelector("#feedbackCategory"),
   feedbackNote: document.querySelector("#feedbackNote"),
   cancelFeedbackButton: document.querySelector("#cancelFeedbackButton"),
   cancelFeedbackAction: document.querySelector("#cancelFeedbackAction"),
@@ -100,8 +102,6 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
   render();
 });
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
-elements.skillsRange.addEventListener("input", () => updateRangeControl(elements.skillsRange, elements.skillsOutput));
-elements.reliabilityRange.addEventListener("input", () => updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput));
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
 elements.clearNotesButton.addEventListener("click", () => {
@@ -144,14 +144,10 @@ elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const person = state.people[elements.personId.value];
   if (!person) return;
-  person.skills = Number(elements.skillsRange.value);
-  person.reliability = Number(elements.reliabilityRange.value);
   person.departments = elements.personDepartments.filter(input => input.checked).map(input => input.value);
   person.notes = elements.notesInput.value.trim();
   if (supabaseClient && remoteUser && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({
-      skills: person.skills,
-      reliability: person.reliability,
       departments: person.departments,
       notes: person.notes
     }).eq("id", person.remoteId);
@@ -174,6 +170,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
   const feedbackItem = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     type: elements.feedbackType.value,
+    category: elements.feedbackCategory.value,
     note,
     createdAt: new Date().toISOString()
   };
@@ -181,9 +178,10 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     const { data, error } = await supabaseClient.from("feedback").insert({
       worker_id: person.remoteId,
       kind: feedbackItem.type,
+      category: feedbackItem.category,
       note: feedbackItem.note,
       created_by: remoteUser.id
-    }).select("id, kind, note, created_at").single();
+    }).select("id, kind, category, note, created_at").single();
     if (error) {
       elements.feedbackNote.setCustomValidity(error.message);
       elements.feedbackNote.reportValidity();
@@ -191,14 +189,29 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     }
     elements.feedbackNote.setCustomValidity("");
     feedbackItem.id = data.id;
+    feedbackItem.category = data.category;
     feedbackItem.createdAt = data.created_at;
   }
   if (!Array.isArray(person.feedback)) person.feedback = [];
   person.feedback.push(feedbackItem);
+  const metrics = calculateAutomaticMetrics(person.feedback);
+  person.skills = metrics.skills;
+  person.reliability = metrics.reliability;
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
+    if (error) setMessage(`Hodnocení je uložené, ale ukazatele se nepodařilo zapsat: ${error.message}`, true);
+    else await refreshWorkerAudit(person);
+  }
   saveState();
   elements.feedbackDialog.close();
   render();
-  if (elements.dialog.open && elements.personId.value === person.id) renderFeedbackHistory(person);
+  if (elements.dialog.open && elements.personId.value === person.id) {
+    elements.skillsRange.value = person.skills;
+    elements.reliabilityRange.value = person.reliability;
+    updateRangeControl(elements.skillsRange, elements.skillsOutput);
+    updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
+    renderFeedbackHistory(person);
+  }
 });
 
 function loadState() {
@@ -321,7 +334,7 @@ async function loadRemoteState() {
   const [workersResult, attendanceResult, feedbackResult, auditResult] = await Promise.all([
     supabaseClient.from("workers").select("*").eq("active", true).order("full_name"),
     supabaseClient.from("attendance_totals").select("worker_id, period, hours"),
-    supabaseClient.from("feedback").select("id, worker_id, kind, note, created_at").order("created_at"),
+    supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_at").order("created_at"),
     supabaseClient.from("worker_audit").select("*").order("changed_at", { ascending: false }).limit(500)
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
@@ -337,6 +350,7 @@ async function loadRemoteState() {
     feedbackByWorker.get(item.worker_id).push({
       id: item.id,
       type: item.kind,
+      category: item.category || "general",
       note: item.note,
       createdAt: item.created_at
     });
@@ -357,6 +371,8 @@ async function loadRemoteState() {
   const remotePeople = {};
   workersResult.data.forEach(worker => {
     const id = slugify(worker.full_name);
+    const workerFeedback = feedbackByWorker.get(worker.id) || [];
+    const metrics = calculateAutomaticMetrics(workerFeedback);
     remotePeople[id] = {
       id,
       remoteId: worker.id,
@@ -367,13 +383,13 @@ async function loadRemoteState() {
       status: worker.status,
       photo: worker.photo_url || "",
       hours: hoursByWorker.get(worker.id) || 0,
-      skills: worker.skills,
-      reliability: worker.reliability,
+      skills: metrics.skills,
+      reliability: metrics.reliability,
       departments: worker.departments || [],
       notes: worker.notes || "",
       positive: 0,
       negative: 0,
-      feedback: feedbackByWorker.get(worker.id) || [],
+      feedback: workerFeedback,
       audit: auditByWorker.get(worker.id) || [],
       aliases: worker.aliases || []
     };
@@ -743,6 +759,7 @@ function openFeedback(id, type) {
   const person = state.people[id];
   elements.feedbackPersonId.value = id;
   elements.feedbackType.value = type;
+  elements.feedbackCategory.value = "";
   elements.feedbackNote.value = "";
   elements.feedbackDialogTitle.textContent = `${type === "positive" ? "👍 Palec nahoru" : "👎 Palec dolů"} — ${person.name}`;
   elements.feedbackDialog.showModal();
@@ -753,6 +770,22 @@ function feedbackCount(person, type) {
   const legacy = Number(person[type] || 0);
   const recorded = Array.isArray(person.feedback) ? person.feedback.filter(item => item.type === type).length : 0;
   return legacy + recorded;
+}
+
+function calculateAutomaticMetrics(feedback = []) {
+  const net = category => feedback.reduce((total, item) => {
+    if ((item.category || "general") !== category) return total;
+    return total + (item.type === "positive" ? 1 : -1);
+  }, 0);
+  const general = net("general");
+  return {
+    skills: clampMetric(50 + net("training") * 5 + general * 2),
+    reliability: clampMetric(50 + net("attendance") * 5 + general * 2)
+  };
+}
+
+function clampMetric(value) {
+  return Math.min(100, Math.max(0, Number(value)));
 }
 
 function score(person) { return feedbackCount(person, "positive") - feedbackCount(person, "negative"); }
@@ -780,6 +813,7 @@ function openPerson(id) {
 
 function renderFeedbackHistory(person) {
   const feedback = Array.isArray(person.feedback) ? [...person.feedback].reverse() : [];
+  renderFeedbackBreakdown(feedback);
   if (!feedback.length) {
     elements.feedbackHistory.innerHTML = '<p class="no-feedback">Zatím bez hodnocení s poznámkou.</p>';
     return;
@@ -791,15 +825,42 @@ function renderFeedbackHistory(person) {
     entry.className = "feedback-entry";
     const icon = document.createElement("span");
     icon.textContent = item.type === "positive" ? "👍" : "👎";
+    const category = document.createElement("span");
+    category.className = `feedback-category ${item.category || "general"}`;
+    category.textContent = feedbackCategoryLabel(item.category);
     const time = document.createElement("time");
     time.dateTime = item.createdAt;
     time.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt));
     const note = document.createElement("p");
     note.textContent = item.note;
-    entry.append(icon, time, note);
+    const heading = document.createElement("div");
+    heading.className = "feedback-entry-heading";
+    heading.append(category, time);
+    entry.append(icon, heading, note);
     list.append(entry);
   });
   elements.feedbackHistory.replaceChildren(list);
+}
+
+function renderFeedbackBreakdown(feedback) {
+  const categories = ["attendance", "training", "general"];
+  elements.feedbackBreakdown.replaceChildren(...categories.map(category => {
+    const items = feedback.filter(item => (item.category || "general") === category);
+    const positive = items.filter(item => item.type === "positive").length;
+    const negative = items.filter(item => item.type === "negative").length;
+    const card = document.createElement("div");
+    card.className = `feedback-breakdown-item ${category}`;
+    const label = document.createElement("span");
+    label.textContent = feedbackCategoryLabel(category);
+    const counts = document.createElement("strong");
+    counts.textContent = `${positive} 👍  ${negative} 👎`;
+    card.append(label, counts);
+    return card;
+  }));
+}
+
+function feedbackCategoryLabel(category) {
+  return ({ attendance: "Docházka", training: "Zaškolení", general: "Obecné" })[category] || "Obecné";
 }
 
 function renderAuditHistory(person) {
