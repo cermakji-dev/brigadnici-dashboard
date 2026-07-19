@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -78,7 +78,6 @@
         <select id="sheetSelect"></select>
       </label>
 
-      <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
     </section>
 
     <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
@@ -156,6 +155,8 @@
       <div id="peopleGrid" class="people-grid" aria-live="polite"></div>
     </section>
   </main>
+
+  <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
 
   <dialog id="personDialog">
     <form id="personForm" method="dialog">
@@ -308,6 +309,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
