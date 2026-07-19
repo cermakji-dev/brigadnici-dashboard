@@ -62,7 +62,6 @@ const elements = {
   resetAllFilters: document.querySelector("#resetAllFilters"),
   attendancePeople: document.querySelector("#attendancePeople"),
   attendanceHours: document.querySelector("#attendanceHours"),
-  attendanceUpdated: document.querySelector("#attendanceUpdated"),
   alertsPanel: document.querySelector("#alertsPanel"),
   alertsDrawer: document.querySelector("#alertsDrawer"),
   alertsToggle: document.querySelector("#alertsToggle"),
@@ -1224,9 +1223,6 @@ function render() {
   const allPeople = Object.values(state.people);
   elements.attendancePeople.textContent = allPeople.length;
   elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
-  elements.attendanceUpdated.textContent = state.lastImport
-    ? `Aktualizováno ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport))}`
-    : "Čeká na načtení";
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
     elements.emptyStateText.textContent = query
@@ -1258,7 +1254,6 @@ function comparePeople(a, b, key) {
 }
 
 function renderSyncStatus() {
-  const period = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
   if (!state.lastImport) {
     elements.syncStatusTitle.textContent = "Docházka není načtená";
     elements.syncStatusMeta.textContent = "Připraveno k synchronizaci";
@@ -1266,7 +1261,7 @@ function renderSyncStatus() {
   }
   const imported = new Date(state.lastImport);
   const today = imported.toDateString() === new Date().toDateString() ? "dnes" : new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(imported);
-  elements.syncStatusTitle.textContent = `Docházka · ${period}`;
+  elements.syncStatusTitle.textContent = "Docházka synchronizována";
   elements.syncStatusMeta.textContent = `Synchronizováno ${today} v ${new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(imported)}`;
 }
 
