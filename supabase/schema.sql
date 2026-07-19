@@ -26,7 +26,7 @@ create table if not exists public.workers (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint workers_departments_allowed check (
-    departments <@ array['Výdej', 'Prodej', 'Lego', 'Pokladny', 'Upsell', 'MV', 'LOG']::text[]
+    departments <@ array['Výdej', 'Prodej', 'Lego', 'Pokladny', 'Upsell', 'MV', 'LOG', 'PS']::text[]
   )
 );
 

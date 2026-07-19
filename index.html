@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -163,6 +163,7 @@
             <label><input class="department-filter" type="checkbox" value="Upsell"> Upsell</label>
             <label><input class="department-filter" type="checkbox" value="MV"> MV</label>
             <label><input class="department-filter" type="checkbox" value="LOG"> LOG</label>
+            <label><input class="department-filter" type="checkbox" value="PS"> PS</label>
           </div>
           <div class="filter-actions">
             <label>Podmínka
@@ -246,6 +247,7 @@
             <label><input class="person-department" type="checkbox" value="Upsell"> Upsell</label>
             <label><input class="person-department" type="checkbox" value="MV"> MV</label>
             <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
+            <label><input class="person-department" type="checkbox" value="PS"> PS</label>
           </div>
         </fieldset>
         <label class="notes-field">
@@ -415,6 +417,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=36"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>
