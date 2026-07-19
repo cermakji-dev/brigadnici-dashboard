@@ -364,7 +364,6 @@ select::-ms-expand { display: none; }
 .bar .reliability-bar { background: #16a34a; }
 .card-note { margin-top: 16px; padding: 10px 11px; background: color-mix(in srgb, var(--brand-soft) 58%, transparent); border: 1px solid transparent; border-radius: 10px; }
 .person-card:hover .card-note, .card-note:focus-within { border-color: var(--border); }
-.card-note > label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .inline-note { width: 100%; min-height: 48px; padding: 7px 9px; resize: vertical; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 8px; font-size: .82rem; line-height: 1.35; transition: border-color 140ms, background 140ms, box-shadow 140ms; }
 .inline-note:hover { background: color-mix(in srgb, var(--surface) 45%, transparent); border-color: var(--border); }
 .inline-note:focus { background: var(--input-bg); border-color: #4f7ee8; box-shadow: 0 0 0 3px var(--focus); outline: none; }
