@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -204,7 +204,6 @@
       </dl>
       <nav class="profile-tabs" aria-label="Sekce profilu">
         <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
-        <button class="profile-tab" type="button" data-profile-tab="training">Zaškolení</button>
         <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
         <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
       </nav>
@@ -217,12 +216,6 @@
           <label for="reliabilityRange"><span>Docházková morálka <small>výchozí hodnota 100 %</small></span><output id="reliabilityOutput">100 %</output></label>
           <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="100" disabled>
         </div>
-        <label class="notes-field">
-          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
-          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
-        </label>
-      </div>
-      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="training" hidden>
         <fieldset class="department-editor">
           <legend>Zaškolení na oddělení</legend>
           <div class="department-options">
@@ -235,6 +228,10 @@
             <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
           </div>
         </fieldset>
+        <label class="notes-field">
+          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
+          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
+        </label>
       </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" hidden>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
@@ -381,6 +378,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>
