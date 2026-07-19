@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -45,9 +45,9 @@
     </div>
     <div class="header-actions">
       <a class="topbar-action topbar-action-primary" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
-        <span aria-hidden="true">▦</span> Směnová tabulka <span class="sheet-link-arrow" aria-hidden="true">↗</span>
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16"/></svg> Směnová tabulka <svg class="ui-icon sheet-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
       </a>
-      <button id="appFeedbackButton" class="topbar-action" type="button"><span aria-hidden="true">✦</span> Zpětná vazba</button>
+      <button id="appFeedbackButton" class="topbar-action" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18"/></svg> Zpětná vazba</button>
       <button class="topbar-action" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
         <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
       </button>
@@ -57,8 +57,16 @@
   </header>
 
   <main class="app-content" hidden>
-    <section class="import-panel" aria-labelledby="importHeading">
-      <div>
+    <section id="importPanel" class="import-panel" aria-labelledby="importHeading">
+      <div class="import-summary">
+        <div class="sync-state">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.9 4M4 12A8 8 0 0 1 18.9 8M5 19v-3h3M19 5v3h-3"/></svg>
+          <div><strong id="syncStatusTitle">Docházka není načtená</strong><small id="syncStatusMeta">Připraveno k synchronizaci</small></div>
+        </div>
+        <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="true"><span>Sbalit</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <div id="importPanelBody" class="import-panel-body">
+      <div class="import-copy">
         <p class="step-label">Krok 1</p>
         <h2 id="importHeading">Načíst docházku</h2>
         <p class="section-copy">Nahrajte váš Excel nebo CSV export z Google Sheets. U Excelu vyberete měsíční list a aplikace načte hotový souhrn hodin.</p>
@@ -69,14 +77,14 @@
 
       <div id="dropZone" class="drop-zone">
         <input id="attendanceInput" class="visually-hidden" type="file" accept="text/csv,.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-        <div class="drop-icon" aria-hidden="true">↻</div>
+        <svg class="ui-icon drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.9 4M4 12A8 8 0 0 1 18.9 8M5 19v-3h3M19 5v3h-3"/></svg>
         <strong>Načíst aktuální data</strong>
         <span>přímo z veřejné tabulky Google Sheets</span>
         <button id="googleSheetsButton" class="button button-primary" type="button">Načíst z Google Sheets</button>
         <span class="upload-separator">nebo ručně</span>
         <label class="button button-secondary" for="attendanceInput">Vybrat XLSX / CSV</label>
       </div>
-
+      </div>
     </section>
 
     <div id="alertsDrawer" class="alerts-drawer">
@@ -122,6 +130,10 @@
           <option value="hours-desc">Nejvíce hodin</option>
           <option value="rating-desc">Nejlepší hodnocení</option>
         </select>
+        <div class="view-switch" aria-label="Způsob zobrazení">
+          <button id="cardViewButton" class="view-button is-active" type="button" aria-label="Zobrazit karty"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
+          <button id="tableViewButton" class="view-button" type="button" aria-label="Zobrazit tabulku"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
+        </div>
       </div>
 
       <details class="advanced-filters">
@@ -153,7 +165,17 @@
         <h3>Žádná shoda</h3>
         <p>Změňte hledaný text nebo vybraná oddělení.</p>
       </div>
+      <div id="skeletonGrid" class="skeleton-grid" aria-label="Načítám brigádníky">
+        <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
+        <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
+      </div>
       <div id="peopleGrid" class="people-grid" aria-live="polite"></div>
+      <div id="peopleTableWrap" class="people-table-wrap" hidden>
+        <table class="people-table">
+          <thead><tr><th>Brigádník</th><th>Hodiny</th><th>Schopnosti</th><th>Docházka</th><th>Zaškolení</th><th>Hodnocení</th></tr></thead>
+          <tbody id="peopleTableBody"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
@@ -175,7 +197,13 @@
         <div><dt>Role</dt><dd id="profileRole">—</dd></div>
         <div><dt>E-mail</dt><dd id="profileEmail">—</dd></div>
       </dl>
-      <div class="profile-editor-grid">
+      <nav class="profile-tabs" aria-label="Sekce profilu">
+        <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
+        <button class="profile-tab" type="button" data-profile-tab="training">Zaškolení</button>
+        <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
+        <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
+      </nav>
+      <div class="profile-editor-grid profile-tab-panel is-active" data-profile-panel="overview">
         <div class="range-group skills-range-group">
           <label for="skillsRange"><span>Schopnosti <small>podle zaškolených oddělení</small></span><output id="skillsOutput">0 %</output></label>
           <input id="skillsRange" type="range" min="0" max="100" step="5" value="50" disabled>
@@ -184,6 +212,12 @@
           <label for="reliabilityRange"><span>Docházková morálka <small>výchozí hodnota 100 %</small></span><output id="reliabilityOutput">100 %</output></label>
           <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="100" disabled>
         </div>
+        <label class="notes-field">
+          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
+          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
+        </label>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="training" hidden>
         <fieldset class="department-editor">
           <legend>Zaškolení na oddělení</legend>
           <div class="department-options">
@@ -196,15 +230,15 @@
             <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
           </div>
         </fieldset>
-        <label class="notes-field">
-          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
-          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
-        </label>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" hidden>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
           <h3 id="feedbackHistoryHeading">Historie palců</h3>
           <div id="feedbackBreakdown" class="feedback-breakdown"></div>
           <div id="feedbackHistory"></div>
         </section>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="history" hidden>
         <section class="audit-history" aria-labelledby="auditHistoryHeading">
           <h3 id="auditHistoryHeading">Historie změn profilu</h3>
           <div id="auditHistory"></div>
@@ -298,7 +332,6 @@
         <div><span>Docházková morálka</span><strong class="reliability-value"></strong></div>
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
-      <p class="note-preview"></p>
       <div class="feedback-row">
         <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
         <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
@@ -310,6 +343,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=18"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

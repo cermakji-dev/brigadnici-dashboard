@@ -1,4 +1,5 @@
 const STORAGE_KEY = "brigadnici-dashboard-v1";
+const VIEW_KEY = "brigadnici-dashboard-view";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG"];
 const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
@@ -9,6 +10,7 @@ let supabaseClient = null;
 let remoteUser = null;
 let messageTimer = null;
 let hasAutoSynced = false;
+let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 
 const state = loadState();
 const elements = {
@@ -25,10 +27,19 @@ const elements = {
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
   dropZone: document.querySelector("#dropZone"),
+  importPanel: document.querySelector("#importPanel"),
+  importPanelToggle: document.querySelector("#importPanelToggle"),
+  syncStatusTitle: document.querySelector("#syncStatusTitle"),
+  syncStatusMeta: document.querySelector("#syncStatusMeta"),
   importMessage: document.querySelector("#importMessage"),
   sheetSelectWrap: document.querySelector("#sheetSelectWrap"),
   sheetSelect: document.querySelector("#sheetSelect"),
   peopleGrid: document.querySelector("#peopleGrid"),
+  skeletonGrid: document.querySelector("#skeletonGrid"),
+  peopleTableWrap: document.querySelector("#peopleTableWrap"),
+  peopleTableBody: document.querySelector("#peopleTableBody"),
+  cardViewButton: document.querySelector("#cardViewButton"),
+  tableViewButton: document.querySelector("#tableViewButton"),
   emptyState: document.querySelector("#emptyState"),
   peopleCount: document.querySelector("#peopleCount"),
   hoursTotal: document.querySelector("#hoursTotal"),
@@ -66,6 +77,8 @@ const elements = {
   feedbackHistory: document.querySelector("#feedbackHistory"),
   feedbackBreakdown: document.querySelector("#feedbackBreakdown"),
   auditHistory: document.querySelector("#auditHistory"),
+  profileTabs: [...document.querySelectorAll("[data-profile-tab]")],
+  profilePanels: [...document.querySelectorAll("[data-profile-panel]")],
   feedbackDialog: document.querySelector("#feedbackDialog"),
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackDialogTitle: document.querySelector("#feedbackDialogTitle"),
@@ -94,6 +107,10 @@ elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
+elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
+elements.cardViewButton.addEventListener("click", () => setViewMode("cards"));
+elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
+elements.profileTabs.forEach(button => button.addEventListener("click", () => activateProfileTab(button.dataset.profileTab)));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
 elements.searchInput.addEventListener("input", render);
 elements.sortSelect.addEventListener("change", render);
@@ -275,7 +292,9 @@ function toggleTheme() {
 function updateThemeControls() {
   const dark = document.documentElement.dataset.theme === "dark";
   elements.themeToggles.forEach(button => {
-    button.querySelector(".theme-icon").textContent = dark ? "☀" : "☾";
+    button.querySelector(".theme-icon").innerHTML = dark
+      ? '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+      : '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.4A8 8 0 0 1 8.6 4 8 8 0 1 0 20 15.4Z"/></svg>';
     button.querySelector(".theme-label").textContent = dark ? "Světlý režim" : "Tmavý režim";
     button.setAttribute("aria-pressed", String(dark));
   });
@@ -291,6 +310,34 @@ function closeDialogFromBackdrop(event) {
 function updateRangeControl(input, output) {
   output.value = `${input.value} %`;
   input.style.setProperty("--range-value", `${input.value}%`);
+  if (input === elements.reliabilityRange) input.style.setProperty("--metric-color", reliabilityColor(input.value));
+}
+
+function activateProfileTab(tab) {
+  elements.profileTabs.forEach(button => {
+    const active = button.dataset.profileTab === tab;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  elements.profilePanels.forEach(panel => {
+    const active = panel.dataset.profilePanel === tab;
+    panel.classList.toggle("is-active", active);
+    panel.hidden = !active;
+  });
+}
+
+function setImportCollapsed(collapsed) {
+  elements.importPanel.classList.toggle("is-collapsed", collapsed);
+  elements.importPanelToggle.setAttribute("aria-expanded", String(!collapsed));
+  elements.importPanelToggle.querySelector("span").textContent = collapsed ? "Rozbalit" : "Sbalit";
+}
+
+function setViewMode(view) {
+  currentView = view;
+  localStorage.setItem(VIEW_KEY, view);
+  elements.cardViewButton.classList.toggle("is-active", view === "cards");
+  elements.tableViewButton.classList.toggle("is-active", view === "table");
+  render();
 }
 
 function previewDepartmentSkills() {
@@ -548,6 +595,7 @@ async function importRows(rows, sourceName) {
   if (supabaseClient && remoteUser) await saveAttendanceRemote(totals, sourceName);
   saveState();
   render();
+  setImportCollapsed(true);
   setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.`);
 }
 
@@ -634,12 +682,57 @@ function render() {
   });
 
   elements.peopleGrid.replaceChildren(...people.map(createCard));
-  elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date());
+  renderPeopleTable(people);
+  elements.skeletonGrid.hidden = true;
+  elements.peopleGrid.hidden = people.length === 0 || currentView !== "cards";
+  elements.peopleTableWrap.hidden = people.length === 0 || currentView !== "table";
+  elements.cardViewButton.classList.toggle("is-active", currentView === "cards");
+  elements.tableViewButton.classList.toggle("is-active", currentView === "table");
+  elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
   elements.peopleCount.textContent = people.length;
   elements.hoursTotal.textContent = formatNumber(people.reduce((total, person) => total + Number(person.hours || 0), 0));
   elements.emptyState.hidden = people.length > 0;
-  elements.peopleGrid.hidden = people.length === 0;
+  renderSyncStatus();
   renderAlerts();
+}
+
+function renderSyncStatus() {
+  const period = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
+  if (!state.lastImport) {
+    elements.syncStatusTitle.textContent = "Docházka není načtená";
+    elements.syncStatusMeta.textContent = "Připraveno k synchronizaci";
+    return;
+  }
+  const imported = new Date(state.lastImport);
+  const today = imported.toDateString() === new Date().toDateString() ? "dnes" : new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(imported);
+  elements.syncStatusTitle.textContent = `Docházka · ${period}`;
+  elements.syncStatusMeta.textContent = `Synchronizováno ${today} v ${new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(imported)}`;
+}
+
+function renderPeopleTable(people) {
+  elements.peopleTableBody.replaceChildren(...people.map(person => {
+    const row = document.createElement("tr");
+    row.tabIndex = 0;
+    const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
+    const rating = score(person);
+    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-score"></td>`;
+    row.querySelector("strong").textContent = person.name;
+    row.querySelector("small").textContent = person.email || "Bez e-mailu";
+    row.querySelector(".table-departments").textContent = departments;
+    const scoreCell = row.querySelector(".table-score");
+    scoreCell.textContent = rating > 0 ? `+${rating}` : String(rating);
+    scoreCell.classList.toggle("positive-score", rating > 0);
+    scoreCell.classList.toggle("negative-score", rating < 0);
+    row.addEventListener("click", () => openPerson(person.id));
+    row.addEventListener("keydown", event => { if (event.key === "Enter") openPerson(person.id); });
+    return row;
+  }));
+}
+
+function metricCell(value, type) {
+  const safeValue = clampMetric(value);
+  const color = type === "reliability" ? reliabilityColor(safeValue) : "var(--brand)";
+  return `<span class="table-metric"><span>${safeValue} %</span><i><b style="width:${safeValue}%;background:${color}"></b></i></span>`;
 }
 
 function renderAlerts() {
@@ -724,9 +817,6 @@ function createCard(person) {
   renderDepartmentBadges(card.querySelector(".department-badges"), person.departments);
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
-  const note = card.querySelector(".note-preview");
-  note.textContent = person.notes || "Zatím bez poznámky.";
-
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
@@ -752,7 +842,17 @@ function createCard(person) {
 function setMetric(card, key, value = 50) {
   const safeValue = Math.min(100, Math.max(0, Number(value)));
   card.querySelector(`.${key}-value`).textContent = `${safeValue} %`;
-  card.querySelector(`.${key}-bar`).style.width = `${safeValue}%`;
+  const bar = card.querySelector(`.${key}-bar`);
+  bar.style.width = `${safeValue}%`;
+  if (key === "reliability") bar.style.background = reliabilityColor(safeValue);
+}
+
+function reliabilityColor(value) {
+  const metric = clampMetric(value);
+  if (metric < 25) return "#dc2626";
+  if (metric < 50) return "#f97316";
+  if (metric < 75) return "#eab308";
+  return "#16a34a";
 }
 
 function renderDepartmentBadges(container, departments) {
@@ -811,6 +911,7 @@ function score(person) { return feedbackCount(person, "positive") - feedbackCoun
 
 function openPerson(id) {
   const person = state.people[id];
+  activateProfileTab("overview");
   elements.dialogTitle.textContent = person.name;
   elements.personId.value = id;
   elements.profileUserId.textContent = person.userId || "—";
