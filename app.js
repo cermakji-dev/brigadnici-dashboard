@@ -1,5 +1,6 @@
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
+const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG"];
 const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
@@ -17,6 +18,8 @@ let messageTimer = null;
 let hasAutoSynced = false;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 const activeQuickFilters = new Set();
+const dismissedAlertSignatures = new Set(loadDismissedAlerts());
+let visibleAlertSignatures = [];
 
 const state = loadState();
 const elements = {
@@ -56,6 +59,7 @@ const elements = {
   alertsDrawer: document.querySelector("#alertsDrawer"),
   alertsToggle: document.querySelector("#alertsToggle"),
   alertsClose: document.querySelector("#alertsClose"),
+  alertsClear: document.querySelector("#alertsClear"),
   alertsHandleIcon: document.querySelector("#alertsHandleIcon"),
   alertsEarCount: document.querySelector("#alertsEarCount"),
   alertsList: document.querySelector("#alertsList"),
@@ -175,6 +179,7 @@ elements.clearNotesButton.addEventListener("click", () => {
 });
 elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
 elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
+elements.alertsClear.addEventListener("click", clearCurrentAlerts);
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && elements.alertsPanel.classList.contains("is-open")) setAlertsOpen(false);
 });
@@ -1196,12 +1201,25 @@ function renderAlerts() {
     if (reasons.length) alerts.push({ person, reasons });
   });
 
-  elements.alertsCount.textContent = alerts.length;
-  elements.alertsEarCount.textContent = alerts.length;
-  elements.alertsToggle.classList.toggle("has-alerts", alerts.length > 0);
-  elements.alertsEmpty.hidden = alerts.length > 0;
-  elements.alertsList.hidden = alerts.length === 0;
-  elements.alertsList.replaceChildren(...alerts.map(({ person, reasons }) => {
+  alerts.forEach(alert => { alert.signature = alertSignature(alert.person, alert.reasons); });
+  const currentSignatures = new Set(alerts.map(alert => alert.signature));
+  let dismissedChanged = false;
+  [...dismissedAlertSignatures].forEach(signature => {
+    if (!currentSignatures.has(signature)) {
+      dismissedAlertSignatures.delete(signature);
+      dismissedChanged = true;
+    }
+  });
+  if (dismissedChanged) saveDismissedAlerts();
+  const visibleAlerts = alerts.filter(alert => !dismissedAlertSignatures.has(alert.signature));
+  visibleAlertSignatures = visibleAlerts.map(alert => alert.signature);
+  elements.alertsCount.textContent = visibleAlerts.length;
+  elements.alertsEarCount.textContent = visibleAlerts.length;
+  elements.alertsClear.hidden = visibleAlerts.length === 0;
+  elements.alertsToggle.classList.toggle("has-alerts", visibleAlerts.length > 0);
+  elements.alertsEmpty.hidden = visibleAlerts.length > 0;
+  elements.alertsList.hidden = visibleAlerts.length === 0;
+  elements.alertsList.replaceChildren(...visibleAlerts.map(({ person, reasons }) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "alert-item";
@@ -1222,6 +1240,30 @@ function renderAlerts() {
     });
     return button;
   }));
+}
+
+function alertSignature(person, reasons) {
+  return `${person.remoteId || person.id}|${reasons.map(reason => `${reason.type}:${reason.text}`).sort().join("|")}`;
+}
+
+function loadDismissedAlerts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DISMISSED_ALERTS_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDismissedAlerts() {
+  localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlertSignatures]));
+}
+
+function clearCurrentAlerts() {
+  visibleAlertSignatures.forEach(signature => dismissedAlertSignatures.add(signature));
+  saveDismissedAlerts();
+  renderAlerts();
+  setMessage("Aktuální upozornění byla vyprázdněna.");
 }
 
 function setAlertsOpen(open) {
