@@ -53,6 +53,21 @@ body {
   transition: background-color 180ms ease, color 180ms ease;
 }
 
+.app-loader { position: fixed; z-index: 100; inset: 0; display: grid; overflow: hidden; place-items: center; background: linear-gradient(160deg, #244a9b 0%, #343d8f 48%, #5a287d 100%); opacity: 0; transition: opacity 220ms ease; }
+.app-loader[hidden] { display: none; }
+.app-loader.is-visible { opacity: 1; }
+.loader-card { position: relative; z-index: 2; display: grid; min-width: min(310px, calc(100vw - 48px)); justify-items: center; gap: 14px; padding: 32px 36px; color: #fff; text-align: center; }
+.loader-card > strong { font-size: 1.25rem; letter-spacing: -.02em; }
+.loader-card > span { color: rgba(255, 255, 255, .72); font-size: .86rem; }
+.loader-mark { width: 68px; height: 68px; display: grid; place-items: center; margin-bottom: 4px; background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .28); border-radius: 20px; box-shadow: 0 18px 45px rgba(12, 18, 55, .28); font-size: 1.7rem; font-weight: 800; backdrop-filter: blur(14px); animation: loader-float 2.2s ease-in-out infinite; }
+.loader-progress { width: 180px; height: 4px; overflow: hidden; background: rgba(255, 255, 255, .16); border-radius: 99px; }
+.loader-progress span { display: block; width: 45%; height: 100%; background: rgba(255, 255, 255, .9); border-radius: inherit; animation: loader-progress 1.15s ease-in-out infinite; }
+.loader-glow { position: absolute; width: 44vw; height: 44vw; background: rgba(255, 255, 255, .08); border-radius: 50%; filter: blur(2px); }
+.loader-glow-one { top: -22vw; left: -8vw; }
+.loader-glow-two { right: -16vw; bottom: -27vw; background: rgba(201, 110, 255, .16); }
+@keyframes loader-progress { 0% { transform: translateX(-110%); } 55%, 100% { transform: translateX(225%); } }
+@keyframes loader-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
 :root[data-theme="dark"] body {
   background: linear-gradient(180deg, #234a9a 0%, #343d8f 42%, #5a287d 100%) fixed;
 }
@@ -551,4 +566,5 @@ textarea { resize: vertical; }
 
 @media (prefers-reduced-motion: reduce) {
   .import-panel-body, .import-panel-content, .compact-action .chevron { transition-duration: 0.01ms; }
+  .loader-mark, .loader-progress span { animation: none; }
 }
