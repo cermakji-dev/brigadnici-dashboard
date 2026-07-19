@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=28">
+  <link rel="stylesheet" href="styles.css?v=29">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -117,12 +117,22 @@
         </div>
         <div class="overview-actions">
           <button id="addWorkerButton" class="button button-primary compact-button" type="button">+ Přidat brigádníka</button>
+          <button id="inactiveWorkersButton" class="button button-secondary compact-button" type="button">Neaktivní</button>
         <div class="summary" aria-label="Souhrn týmu">
           <span><strong id="currentPeriodLabel">—</strong></span>
           <span><strong id="peopleCount">0</strong> brigádníků</span>
           <span><strong id="hoursTotal">0</strong> hodin</span>
         </div>
         </div>
+      </div>
+
+      <div class="quick-filters" aria-label="Rychlé filtry">
+        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
+        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky</button>
+        <button class="quick-filter" type="button" data-quick-filter="low-attendance">Docházka pod 75 %</button>
+        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
+        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
+        <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
       </div>
 
       <div class="toolbar">
@@ -184,7 +194,7 @@
     </section>
   </main>
 
-  <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <dialog id="personDialog">
     <form id="personForm" method="dialog">
@@ -248,9 +258,26 @@
       </div>
       <div class="dialog-actions">
         <button id="deleteWorkerButton" class="button button-danger dialog-danger-action" type="button">Odebrat brigádníka</button>
-        <button class="button button-secondary" value="cancel" type="submit">Zrušit</button>
-        <button id="savePersonButton" class="button button-primary" value="default" type="submit">Uložit změny</button>
+        <span class="autosave-label">Změny se ukládají automaticky</span>
+        <button class="button button-secondary" value="cancel" type="submit">Zavřít</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="inactiveWorkersDialog" class="simple-dialog inactive-dialog">
+    <form id="inactiveWorkersForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Archiv týmu</p><h2>Neaktivní brigádníci</h2></div>
+        <button id="closeInactiveWorkers" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <div id="inactiveWorkersList" class="inactive-workers-list"></div>
+      <p id="inactiveWorkersEmpty" class="empty-copy">Žádní neaktivní brigádníci.</p>
+      <div id="restoreWorkerConfirm" class="restore-confirm" hidden>
+        <p>Obnovit brigádníka <strong id="restoreWorkerName"></strong>?</p>
+        <label>Vaše heslo pro potvrzení<input id="restoreWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
+        <p id="restoreWorkerStatus" class="message" role="status"></p>
+      </div>
+      <div class="dialog-actions"><button id="cancelRestoreWorker" class="button button-secondary" type="button" hidden>Zrušit obnovu</button><button id="confirmRestoreWorker" class="button button-primary" type="submit" hidden>Obnovit brigádníka</button></div>
     </form>
   </dialog>
 
@@ -378,6 +405,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ let remoteUser = null;
 let messageTimer = null;
 let hasAutoSynced = false;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
+const activeQuickFilters = new Set();
 
 const state = loadState();
 const elements = {
@@ -33,6 +34,8 @@ const elements = {
   syncStatusTitle: document.querySelector("#syncStatusTitle"),
   syncStatusMeta: document.querySelector("#syncStatusMeta"),
   importMessage: document.querySelector("#importMessage"),
+  toastText: document.querySelector("#toastText"),
+  toastUndo: document.querySelector("#toastUndo"),
   sheetSelectWrap: document.querySelector("#sheetSelectWrap"),
   sheetSelect: document.querySelector("#sheetSelect"),
   peopleGrid: document.querySelector("#peopleGrid"),
@@ -60,6 +63,8 @@ const elements = {
   departmentFilters: [...document.querySelectorAll(".department-filter")],
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
   clearDepartmentFilters: document.querySelector("#clearDepartmentFilters"),
+  quickFilters: [...document.querySelectorAll(".quick-filter")],
+  clearQuickFilters: document.querySelector("#clearQuickFilters"),
   personDepartments: [...document.querySelectorAll(".person-department")],
   cardTemplate: document.querySelector("#personCardTemplate"),
   dialog: document.querySelector("#personDialog"),
@@ -75,7 +80,6 @@ const elements = {
   profileUserId: document.querySelector("#profileUserId"),
   profileRole: document.querySelector("#profileRole"),
   profileEmail: document.querySelector("#profileEmail"),
-  savePersonButton: document.querySelector("#savePersonButton"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
   feedbackBreakdown: document.querySelector("#feedbackBreakdown"),
   auditHistory: document.querySelector("#auditHistory"),
@@ -118,7 +122,19 @@ const elements = {
   deleteWorkerStatus: document.querySelector("#deleteWorkerStatus"),
   confirmDeleteWorker: document.querySelector("#confirmDeleteWorker"),
   closeDeleteWorker: document.querySelector("#closeDeleteWorker"),
-  cancelDeleteWorker: document.querySelector("#cancelDeleteWorker")
+  cancelDeleteWorker: document.querySelector("#cancelDeleteWorker"),
+  inactiveWorkersButton: document.querySelector("#inactiveWorkersButton"),
+  inactiveWorkersDialog: document.querySelector("#inactiveWorkersDialog"),
+  inactiveWorkersForm: document.querySelector("#inactiveWorkersForm"),
+  inactiveWorkersList: document.querySelector("#inactiveWorkersList"),
+  inactiveWorkersEmpty: document.querySelector("#inactiveWorkersEmpty"),
+  closeInactiveWorkers: document.querySelector("#closeInactiveWorkers"),
+  restoreWorkerConfirm: document.querySelector("#restoreWorkerConfirm"),
+  restoreWorkerName: document.querySelector("#restoreWorkerName"),
+  restoreWorkerPassword: document.querySelector("#restoreWorkerPassword"),
+  restoreWorkerStatus: document.querySelector("#restoreWorkerStatus"),
+  cancelRestoreWorker: document.querySelector("#cancelRestoreWorker"),
+  confirmRestoreWorker: document.querySelector("#confirmRestoreWorker")
 };
 
 elements.loginForm.addEventListener("submit", signInWithPassword);
@@ -145,10 +161,11 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
-elements.personDepartments.forEach(input => input.addEventListener("change", previewDepartmentSkills));
+elements.personDepartments.forEach(input => input.addEventListener("change", saveDepartmentTraining));
+elements.notesInput.addEventListener("blur", saveDetailNotes);
 elements.clearNotesButton.addEventListener("click", () => {
   elements.notesInput.value = "";
-  elements.notesInput.focus();
+  void saveDetailNotes();
 });
 elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
 elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
@@ -170,6 +187,8 @@ elements.appFeedbackButton.addEventListener("click", () => {
 elements.closeAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
 elements.cancelAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
 elements.appFeedbackForm.addEventListener("submit", submitAppFeedback);
+elements.quickFilters.forEach(button => button.addEventListener("click", () => toggleQuickFilter(button)));
+elements.clearQuickFilters.addEventListener("click", clearQuickFilters);
 elements.addWorkerButton.addEventListener("click", openAddWorkerDialog);
 elements.closeAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
 elements.cancelAddWorker.addEventListener("click", () => elements.addWorkerDialog.close());
@@ -180,6 +199,11 @@ elements.cancelDeleteWorker.addEventListener("click", () => elements.deleteWorke
 elements.deleteWorkerForm.addEventListener("submit", removeWorker);
 elements.addWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.deleteWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.inactiveWorkersButton.addEventListener("click", openInactiveWorkers);
+elements.closeInactiveWorkers.addEventListener("click", () => elements.inactiveWorkersDialog.close());
+elements.cancelRestoreWorker.addEventListener("click", cancelRestoreWorker);
+elements.inactiveWorkersForm.addEventListener("submit", restoreWorker);
+elements.inactiveWorkersDialog.addEventListener("click", closeDialogFromBackdrop);
 
 ["dragenter", "dragover"].forEach(type => elements.dropZone.addEventListener(type, (event) => {
   event.preventDefault();
@@ -190,34 +214,6 @@ elements.deleteWorkerDialog.addEventListener("click", closeDialogFromBackdrop);
   elements.dropZone.classList.remove("is-dragging");
 }));
 elements.dropZone.addEventListener("drop", (event) => importAttendance(event.dataTransfer.files[0]));
-
-elements.form.addEventListener("submit", async (event) => {
-  if (event.submitter !== elements.savePersonButton) return;
-  event.preventDefault();
-  const person = state.people[elements.personId.value];
-  if (!person) return;
-  person.departments = elements.personDepartments.filter(input => input.checked).map(input => input.value);
-  person.notes = elements.notesInput.value.trim();
-  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
-  person.skills = metrics.skills;
-  person.reliability = metrics.reliability;
-  if (supabaseClient && remoteUser && person.remoteId) {
-    const { error } = await supabaseClient.from("workers").update({
-      departments: person.departments,
-      notes: person.notes,
-      skills: person.skills,
-      reliability: person.reliability
-    }).eq("id", person.remoteId);
-    if (error) {
-      setMessage(`Profil se nepodařilo uložit: ${error.message}`, true);
-      return;
-    }
-    await refreshWorkerAudit(person);
-  }
-  saveState();
-  elements.dialog.close();
-  render();
-});
 
 elements.feedbackForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -305,7 +301,7 @@ async function addWorker(event) {
   try {
     await verifyCurrentPassword(elements.addWorkerPassword.value);
     setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
-    const { error } = await supabaseClient.from("workers").insert({
+    const { data: createdWorker, error } = await supabaseClient.from("workers").insert({
       external_user_id: externalId,
       full_name: name,
       email,
@@ -317,7 +313,7 @@ async function addWorker(event) {
       departments: [],
       aliases: [],
       notes: ""
-    });
+    }).select("id").single();
     if (error) {
       if (error.code === "23505") throw new Error("Brigádník s tímto interním ID už existuje.");
       throw new Error(error.message);
@@ -325,7 +321,12 @@ async function addWorker(event) {
     await loadRemoteState();
     render();
     elements.addWorkerDialog.close();
-    setMessage(`Karta pro ${name} byla vytvořena.`);
+    setMessage(`Karta pro ${name} byla vytvořena.`, false, async () => {
+      const { error: undoError } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).eq("id", createdWorker.id);
+      if (undoError) throw undoError;
+      await loadRemoteState();
+      render();
+    });
   } catch (error) {
     setDialogStatus(elements.addWorkerStatus, error.message || "Kartu se nepodařilo vytvořit.", true);
   } finally {
@@ -350,12 +351,102 @@ async function removeWorker(event) {
     elements.deleteWorkerDialog.close();
     elements.dialog.close();
     render();
-    setMessage(`${person.name} byl odebrán z aktivního přehledu.`);
+    setMessage(`${person.name} byl odebrán z aktivního přehledu.`, false, async () => {
+      const { error: undoError } = await supabaseClient.from("workers").update({ active: true, status: "Aktivní" }).eq("id", person.remoteId);
+      if (undoError) throw undoError;
+      await loadRemoteState();
+      render();
+    });
   } catch (error) {
     setDialogStatus(elements.deleteWorkerStatus, error.message || "Brigádníka se nepodařilo odebrat.", true);
   } finally {
     elements.confirmDeleteWorker.disabled = false;
     elements.deleteWorkerPassword.value = "";
+  }
+}
+
+async function openInactiveWorkers() {
+  elements.inactiveWorkersList.replaceChildren();
+  elements.inactiveWorkersEmpty.hidden = true;
+  cancelRestoreWorker();
+  elements.inactiveWorkersDialog.showModal();
+  const { data, error } = await supabaseClient.from("workers")
+    .select("id, external_user_id, full_name, email")
+    .eq("active", false)
+    .order("full_name");
+  if (error) {
+    elements.inactiveWorkersEmpty.hidden = false;
+    elements.inactiveWorkersEmpty.textContent = `Seznam se nepodařilo načíst: ${error.message}`;
+    return;
+  }
+  elements.inactiveWorkersEmpty.textContent = "Žádní neaktivní brigádníci.";
+  elements.inactiveWorkersEmpty.hidden = data.length > 0;
+  elements.inactiveWorkersList.replaceChildren(...data.map(worker => {
+    const row = document.createElement("div");
+    row.className = "inactive-worker-row";
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = worker.full_name;
+    const meta = document.createElement("small");
+    meta.textContent = [worker.external_user_id, worker.email].filter(Boolean).join(" · ");
+    info.append(name, meta);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button button-secondary compact-button";
+    button.textContent = "Obnovit";
+    button.addEventListener("click", () => selectWorkerForRestore(worker));
+    row.append(info, button);
+    return row;
+  }));
+}
+
+function selectWorkerForRestore(worker) {
+  elements.inactiveWorkersDialog.dataset.workerId = worker.id;
+  elements.inactiveWorkersDialog.dataset.workerName = worker.full_name;
+  elements.restoreWorkerName.textContent = worker.full_name;
+  elements.restoreWorkerConfirm.hidden = false;
+  elements.cancelRestoreWorker.hidden = false;
+  elements.confirmRestoreWorker.hidden = false;
+  elements.restoreWorkerPassword.value = "";
+  setDialogStatus(elements.restoreWorkerStatus, "");
+  elements.restoreWorkerPassword.focus();
+}
+
+function cancelRestoreWorker() {
+  delete elements.inactiveWorkersDialog.dataset.workerId;
+  delete elements.inactiveWorkersDialog.dataset.workerName;
+  elements.restoreWorkerConfirm.hidden = true;
+  elements.cancelRestoreWorker.hidden = true;
+  elements.confirmRestoreWorker.hidden = true;
+  elements.restoreWorkerPassword.value = "";
+  setDialogStatus(elements.restoreWorkerStatus, "");
+}
+
+async function restoreWorker(event) {
+  event.preventDefault();
+  const workerId = elements.inactiveWorkersDialog.dataset.workerId;
+  const workerName = elements.inactiveWorkersDialog.dataset.workerName;
+  if (!workerId) return;
+  elements.confirmRestoreWorker.disabled = true;
+  setDialogStatus(elements.restoreWorkerStatus, "Ověřuji heslo…");
+  try {
+    await verifyCurrentPassword(elements.restoreWorkerPassword.value);
+    const { error } = await supabaseClient.from("workers").update({ active: true, status: "Aktivní" }).eq("id", workerId);
+    if (error) throw error;
+    await loadRemoteState();
+    render();
+    elements.inactiveWorkersDialog.close();
+    setMessage(`${workerName} byl obnoven.`, false, async () => {
+      const { error: undoError } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).eq("id", workerId);
+      if (undoError) throw undoError;
+      await loadRemoteState();
+      render();
+    });
+  } catch (error) {
+    setDialogStatus(elements.restoreWorkerStatus, error.message || "Brigádníka se nepodařilo obnovit.", true);
+  } finally {
+    elements.confirmRestoreWorker.disabled = false;
+    elements.restoreWorkerPassword.value = "";
   }
 }
 
@@ -469,6 +560,105 @@ function previewDepartmentSkills() {
   const trainedCount = elements.personDepartments.filter(input => input.checked).length;
   elements.skillsRange.value = Math.round((trainedCount / DEPARTMENTS.length) * 100);
   updateRangeControl(elements.skillsRange, elements.skillsOutput);
+}
+
+async function saveDepartmentTraining() {
+  const person = state.people[elements.personId.value];
+  if (!person) return;
+  const previous = [...(person.departments || [])];
+  const next = elements.personDepartments.filter(input => input.checked).map(input => input.value);
+  previewDepartmentSkills();
+  if (JSON.stringify(previous) === JSON.stringify(next)) return;
+  const metrics = calculateAutomaticMetrics(person.feedback, next);
+  elements.personDepartments.forEach(input => { input.disabled = true; });
+  try {
+    if (supabaseClient && remoteUser && person.remoteId) {
+      const { error } = await supabaseClient.from("workers").update({ departments: next, skills: metrics.skills }).eq("id", person.remoteId);
+      if (error) throw error;
+      await refreshWorkerAudit(person);
+    }
+    person.departments = next;
+    person.skills = metrics.skills;
+    saveState();
+    render();
+    setMessage("Zaškolení bylo uloženo.", false, () => restoreDepartments(person, previous));
+  } catch (error) {
+    elements.personDepartments.forEach(input => { input.checked = previous.includes(input.value); });
+    previewDepartmentSkills();
+    setMessage(`Zaškolení se nepodařilo uložit: ${error.message}`, true);
+  } finally {
+    elements.personDepartments.forEach(input => { input.disabled = false; });
+  }
+}
+
+async function restoreDepartments(person, departments) {
+  const metrics = calculateAutomaticMetrics(person.feedback, departments);
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update({ departments, skills: metrics.skills }).eq("id", person.remoteId);
+    if (error) throw error;
+  }
+  person.departments = [...departments];
+  person.skills = metrics.skills;
+  saveState();
+  if (elements.dialog.open && elements.personId.value === person.id) {
+    elements.personDepartments.forEach(input => { input.checked = departments.includes(input.value); });
+    elements.skillsRange.value = metrics.skills;
+    updateRangeControl(elements.skillsRange, elements.skillsOutput);
+  }
+  render();
+}
+
+async function saveDetailNotes() {
+  const person = state.people[elements.personId.value];
+  if (!person) return;
+  const previous = person.notes || "";
+  const next = elements.notesInput.value.trim();
+  if (previous === next) return;
+  try {
+    if (supabaseClient && remoteUser && person.remoteId) {
+      const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
+      if (error) throw error;
+      await refreshWorkerAudit(person);
+    }
+    person.notes = next;
+    elements.clearNotesButton.hidden = !next;
+    saveState();
+    render();
+    setMessage("Poznámka byla uložena.", false, () => restoreNote(person, previous));
+  } catch (error) {
+    elements.notesInput.value = previous;
+    setMessage(`Poznámku se nepodařilo uložit: ${error.message}`, true);
+  }
+}
+
+async function restoreNote(person, note) {
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update({ notes: note }).eq("id", person.remoteId);
+    if (error) throw error;
+  }
+  person.notes = note;
+  saveState();
+  if (elements.dialog.open && elements.personId.value === person.id) {
+    elements.notesInput.value = note;
+    elements.clearNotesButton.hidden = !note;
+  }
+  render();
+}
+
+function toggleQuickFilter(button) {
+  const filter = button.dataset.quickFilter;
+  if (activeQuickFilters.has(filter)) activeQuickFilters.delete(filter);
+  else activeQuickFilters.add(filter);
+  button.classList.toggle("is-active", activeQuickFilters.has(filter));
+  elements.clearQuickFilters.hidden = activeQuickFilters.size === 0;
+  render();
+}
+
+function clearQuickFilters() {
+  activeQuickFilters.clear();
+  elements.quickFilters.forEach(button => button.classList.remove("is-active"));
+  elements.clearQuickFilters.hidden = true;
+  render();
 }
 
 async function handleSession(session) {
@@ -804,6 +994,11 @@ function render() {
   const selectedDepartments = elements.departmentFilters.filter(input => input.checked).map(input => input.value);
   const people = Object.values(state.people).filter(person => {
     if (!normalize(person.name).includes(query)) return false;
+    if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
+    if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
+    if (activeQuickFilters.has("low-attendance") && Number(person.reliability) >= 75) return false;
+    if (activeQuickFilters.has("negative") && feedbackCount(person, "negative") === 0) return false;
+    if (activeQuickFilters.has("zero-hours") && Number(person.hours || 0) !== 0) return false;
     if (!selectedDepartments.length) return true;
     const trained = Array.isArray(person.departments) ? person.departments : [];
     return elements.departmentMatchMode.value === "all"
@@ -1017,7 +1212,7 @@ async function saveInlineNote(person, input) {
   input.classList.remove("is-saving", "has-error");
   input.classList.add("is-saved");
   setTimeout(() => input.classList.remove("is-saved"), 1200);
-  setMessage("Poznámka byla uložena.");
+  setMessage("Poznámka byla uložena.", false, () => restoreNote(person, previous));
 }
 
 function setMetric(card, key, value = 50) {
@@ -1262,15 +1457,28 @@ async function submitAppFeedback(event) {
   setTimeout(() => elements.appFeedbackDialog.close(), 900);
 }
 
-function setMessage(text, error = false) {
+function setMessage(text, error = false, undoAction = null) {
   clearTimeout(messageTimer);
-  elements.importMessage.textContent = text;
+  elements.toastText.textContent = text;
   elements.importMessage.classList.toggle("error", error);
   elements.importMessage.hidden = !text;
+  elements.toastUndo.hidden = !undoAction || error;
+  elements.toastUndo.disabled = false;
+  elements.toastUndo.onclick = undoAction ? async () => {
+    clearTimeout(messageTimer);
+    elements.toastUndo.disabled = true;
+    elements.toastText.textContent = "Vracím změnu…";
+    try {
+      await undoAction();
+      setMessage("Změna byla vrácena.");
+    } catch (undoError) {
+      setMessage(`Změnu se nepodařilo vrátit: ${undoError.message}`, true);
+    }
+  } : null;
   if (text) {
     messageTimer = setTimeout(() => {
       elements.importMessage.hidden = true;
-    }, error ? 8000 : 4000);
+    }, undoAction ? 7000 : (error ? 8000 : 4000));
   }
 }
 
