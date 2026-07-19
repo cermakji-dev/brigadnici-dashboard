@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
+  <title>Brigádníci</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section id="authGate" class="auth-gate">
+    <form id="loginForm" class="login-card">
+      <p class="eyebrow">Interní aplikace</p>
+      <h1>Přihlášení</h1>
+      <p class="section-copy">Zadejte povolený e-mail. Supabase vám pošle bezpečný přihlašovací odkaz.</p>
+      <label>E-mail
+        <input id="loginEmail" type="email" required autocomplete="email" placeholder="jmeno@firma.cz">
+      </label>
+      <button class="button button-primary" type="submit">Poslat přihlašovací odkaz</button>
+      <p id="authMessage" class="message" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <header class="topbar app-content" hidden>
+    <div>
+      <p class="eyebrow">Personální přehled</p>
+      <h1>Brigádníci</h1>
+    </div>
+    <div class="header-actions">
+      <span id="signedInUser" class="signed-in-user"></span>
+      <button id="signOutButton" class="button button-secondary" type="button">Odhlásit</button>
+      <button id="exportButton" class="button button-secondary" type="button">Exportovat data</button>
+      <label class="button button-secondary" for="importBackupInput">Importovat zálohu</label>
+      <input id="importBackupInput" class="visually-hidden" type="file" accept="application/json,.json">
+    </div>
+  </header>
+
+  <main class="app-content" hidden>
+    <section class="import-panel" aria-labelledby="importHeading">
+      <div>
+        <p class="step-label">Krok 1</p>
+        <h2 id="importHeading">Načíst docházku</h2>
+        <p class="section-copy">Nahrajte váš Excel nebo CSV export z Google Sheets. U Excelu vyberete měsíční list a aplikace načte hotový souhrn hodin.</p>
+      </div>
+
+      <div id="dropZone" class="drop-zone">
+        <input id="attendanceInput" class="visually-hidden" type="file" accept="text/csv,.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <div class="drop-icon" aria-hidden="true">↥</div>
+        <strong>Přetáhněte XLSX nebo CSV sem</strong>
+        <span>nebo</span>
+        <label class="button button-primary" for="attendanceInput">Vybrat soubor</label>
+      </div>
+
+      <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
+        <select id="sheetSelect"></select>
+      </label>
+
+      <details class="format-help">
+        <summary>Jak má tabulka vypadat?</summary>
+        <p>V dodaném Excelu aplikace hledá sloupce <code>Jméno</code> a <code>Počet zapsaných hodin</code>. U běžného CSV podporuje <code>Jméno</code> a <code>Hodiny</code>, volitelně také <code>Foto</code> a <code>Email</code>.</p>
+        <a href="sample-attendance.csv" download>Stáhnout ukázkové CSV</a>
+      </details>
+      <p id="importMessage" class="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="overview" aria-labelledby="overviewHeading">
+      <div class="section-heading">
+        <div>
+          <p class="step-label">Krok 2</p>
+          <h2 id="overviewHeading">Přehled týmu</h2>
+        </div>
+        <div class="summary" aria-label="Souhrn týmu">
+          <span><strong id="peopleCount">0</strong> brigádníků</span>
+          <span><strong id="hoursTotal">0</strong> hodin</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label class="search-field">
+          <span class="visually-hidden">Hledat brigádníka</span>
+          <input id="searchInput" type="search" placeholder="Hledat podle jména…">
+        </label>
+        <select id="sortSelect" aria-label="Řazení brigádníků">
+          <option value="name">Podle jména</option>
+          <option value="hours-desc">Nejvíce hodin</option>
+          <option value="rating-desc">Nejlepší hodnocení</option>
+        </select>
+      </div>
+
+      <details class="advanced-filters">
+        <summary>Pokročilé filtrování podle zaškolení</summary>
+        <div class="filter-content">
+          <div class="department-options" aria-label="Filtrovat podle oddělení">
+            <label><input class="department-filter" type="checkbox" value="Výdej"> Výdej</label>
+            <label><input class="department-filter" type="checkbox" value="Prodej"> Prodej</label>
+            <label><input class="department-filter" type="checkbox" value="Lego"> Lego</label>
+            <label><input class="department-filter" type="checkbox" value="Pokladny"> Pokladny</label>
+            <label><input class="department-filter" type="checkbox" value="Upsell"> Upsell</label>
+            <label><input class="department-filter" type="checkbox" value="MV"> MV</label>
+            <label><input class="department-filter" type="checkbox" value="LOG"> LOG</label>
+          </div>
+          <div class="filter-actions">
+            <label>Podmínka
+              <select id="departmentMatchMode">
+                <option value="all">Umí všechna vybraná</option>
+                <option value="any">Umí alespoň jedno</option>
+              </select>
+            </label>
+            <button id="clearDepartmentFilters" class="button button-secondary" type="button">Zrušit filtry</button>
+          </div>
+        </div>
+      </details>
+
+      <div id="emptyState" class="empty-state">
+        <div aria-hidden="true">◎</div>
+        <h3>Žádná shoda</h3>
+        <p>Změňte hledaný text nebo vybraná oddělení.</p>
+      </div>
+      <div id="peopleGrid" class="people-grid" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <dialog id="personDialog">
+    <form id="personForm" method="dialog">
+      <div class="dialog-heading">
+        <div>
+          <p class="step-label">Detail brigádníka</p>
+          <h2 id="dialogTitle">Profil</h2>
+        </div>
+        <button class="icon-button" value="cancel" type="submit" aria-label="Zavřít">×</button>
+      </div>
+
+      <input id="personId" type="hidden">
+      <dl class="profile-facts">
+        <div><dt>Interní ID</dt><dd id="profileUserId">—</dd></div>
+        <div><dt>Role</dt><dd id="profileRole">—</dd></div>
+        <div><dt>Stav</dt><dd id="profileStatus">—</dd></div>
+        <div><dt>E-mail</dt><dd id="profileEmail">—</dd></div>
+      </dl>
+      <label>URL fotografie
+        <input id="photoUrl" type="url" placeholder="https://…">
+      </label>
+      <div class="range-group">
+        <label for="skillsRange">Schopnosti <output id="skillsOutput">50 %</output></label>
+        <input id="skillsRange" type="range" min="0" max="100" step="5" value="50">
+      </div>
+      <div class="range-group">
+        <label for="reliabilityRange">Docházková morálka <output id="reliabilityOutput">50 %</output></label>
+        <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50">
+      </div>
+      <fieldset class="department-editor">
+        <legend>Zaškolení na oddělení</legend>
+        <div class="department-options">
+          <label><input class="person-department" type="checkbox" value="Výdej"> Výdej</label>
+          <label><input class="person-department" type="checkbox" value="Prodej"> Prodej</label>
+          <label><input class="person-department" type="checkbox" value="Lego"> Lego</label>
+          <label><input class="person-department" type="checkbox" value="Pokladny"> Pokladny</label>
+          <label><input class="person-department" type="checkbox" value="Upsell"> Upsell</label>
+          <label><input class="person-department" type="checkbox" value="MV"> MV</label>
+          <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
+        </div>
+      </fieldset>
+      <label>Poznámky
+        <textarea id="notesInput" rows="5" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
+      </label>
+      <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
+        <h3 id="feedbackHistoryHeading">Historie palců</h3>
+        <div id="feedbackHistory"></div>
+      </section>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel" type="submit">Zrušit</button>
+        <button id="savePersonButton" class="button button-primary" value="default" type="submit">Uložit změny</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="feedbackDialog">
+    <form id="feedbackForm">
+      <div class="dialog-heading">
+        <div>
+          <p class="step-label">Nové hodnocení</p>
+          <h2 id="feedbackDialogTitle">Palec</h2>
+        </div>
+        <button id="cancelFeedbackButton" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <input id="feedbackPersonId" type="hidden">
+      <input id="feedbackType" type="hidden">
+      <label>Důvod hodnocení
+        <textarea id="feedbackNote" rows="4" required placeholder="Popište konkrétní situaci…"></textarea>
+      </label>
+      <p class="field-hint">Poznámka je povinná, aby bylo později jasné, čeho se hodnocení týkalo.</p>
+      <div class="dialog-actions">
+        <button id="cancelFeedbackAction" class="button button-secondary" type="button">Zrušit</button>
+        <button class="button button-primary" type="submit">Uložit hodnocení</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="personCardTemplate">
+    <article class="person-card">
+      <div class="person-card-top">
+        <div class="avatar" aria-hidden="true"></div>
+        <div class="person-title">
+          <h3></h3>
+          <p class="email"></p>
+        </div>
+        <button class="icon-button edit-button" type="button" aria-label="Upravit profil">•••</button>
+      </div>
+      <div class="hours-block">
+        <strong class="hours-value"></strong>
+        <span>odpracovaných hodin</span>
+      </div>
+      <div class="department-badges" aria-label="Zaškolení"></div>
+      <div class="metric">
+        <div><span>Schopnosti</span><strong class="skills-value"></strong></div>
+        <div class="bar"><span class="skills-bar"></span></div>
+      </div>
+      <div class="metric">
+        <div><span>Docházková morálka</span><strong class="reliability-value"></strong></div>
+        <div class="bar"><span class="reliability-bar"></span></div>
+      </div>
+      <p class="note-preview"></p>
+      <div class="feedback-row">
+        <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
+        <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
+        <strong class="score"></strong>
+      </div>
+    </article>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
