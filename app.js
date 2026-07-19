@@ -530,7 +530,8 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   if (requireCurrentMonth && !currentSheet) throw new Error("V Google tabulce nebyl nalezen list pro aktuální měsíc.");
   elements.sheetSelect.value = currentSheet || compatible[compatible.length - 1];
   elements.sheetSelectWrap.hidden = false;
-  await importWorkbookSheet(elements.sheetSelect.value);
+  const imported = await importWorkbookSheet(elements.sheetSelect.value);
+  if (requireCurrentMonth && !imported) throw new Error("Aktuální list se nepodařilo načíst.");
 }
 
 function findWorkbookHeader(sheet) {
@@ -545,7 +546,7 @@ function findWorkbookHeader(sheet) {
 }
 
 async function importWorkbookSheet(sheetName) {
-  if (!pendingWorkbook || !sheetName) return;
+  if (!pendingWorkbook || !sheetName) return false;
   try {
     const match = findWorkbookHeader(pendingWorkbook.Sheets[sheetName]);
     if (!match) throw new Error("Vybraný list nemá očekávaný souhrn hodin.");
@@ -559,8 +560,10 @@ async function importWorkbookSheet(sheetName) {
     }
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
     await importRows(rows, `${pendingWorkbookName} — ${sheetName}`);
+    return true;
   } catch (error) {
     setMessage(error.message || "List se nepodařilo načíst.", true);
+    return false;
   }
 }
 
@@ -725,12 +728,18 @@ function renderPeopleTable(people) {
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
-    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"></td>`;
+    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
     row.querySelector("strong").textContent = person.name;
     row.querySelector("small").textContent = person.email || "Bez e-mailu";
     row.querySelector(".table-departments").textContent = departments;
     setupInlineNote(row.querySelector(".inline-note"), person);
-    const scoreCell = row.querySelector(".table-score");
+    const positive = row.querySelector(".feedback-button.positive");
+    const negative = row.querySelector(".feedback-button.negative");
+    positive.querySelector("span").textContent = feedbackCount(person, "positive");
+    negative.querySelector("span").textContent = feedbackCount(person, "negative");
+    positive.addEventListener("click", event => { event.stopPropagation(); openFeedback(person.id, "positive"); });
+    negative.addEventListener("click", event => { event.stopPropagation(); openFeedback(person.id, "negative"); });
+    const scoreCell = row.querySelector(".score");
     scoreCell.textContent = rating > 0 ? `+${rating}` : String(rating);
     scoreCell.classList.toggle("positive-score", rating > 0);
     scoreCell.classList.toggle("negative-score", rating < 0);
@@ -977,6 +986,7 @@ function openPerson(id) {
   renderFeedbackHistory(person);
   renderAuditHistory(person);
   elements.dialog.showModal();
+  elements.dialog.querySelector('[data-profile-tab="overview"]').focus({ preventScroll: true });
 }
 
 function renderFeedbackHistory(person) {
