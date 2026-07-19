@@ -193,6 +193,7 @@ elements.monthPickerButton.addEventListener("click", event => {
   const willOpen = elements.monthPickerMenu.hidden;
   elements.monthPickerMenu.hidden = !willOpen;
   elements.monthPickerButton.setAttribute("aria-expanded", String(willOpen));
+  elements.importPanel.classList.toggle("month-picker-open", willOpen);
 });
 document.addEventListener("click", event => {
   if (!elements.sheetSelectWrap.contains(event.target)) closeMonthPicker();
@@ -999,6 +1000,7 @@ function renderMonthPicker(months) {
 function closeMonthPicker() {
   elements.monthPickerMenu.hidden = true;
   elements.monthPickerButton.setAttribute("aria-expanded", "false");
+  elements.importPanel.classList.remove("month-picker-open");
 }
 
 function applyRolling60Hours(workbook) {
