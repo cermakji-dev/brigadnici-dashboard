@@ -49,9 +49,13 @@ body {
   transition: background-color 180ms ease, color 180ms ease;
 }
 
-.auth-gate { position: relative; min-height: 100vh; display: grid; place-items: center; overflow: hidden; padding: 72px 24px 32px; background: radial-gradient(circle at 18% 10%, color-mix(in srgb, var(--brand-blue) 28%, transparent), transparent 34%), radial-gradient(circle at 86% 88%, color-mix(in srgb, var(--brand-purple) 25%, transparent), transparent 36%), var(--bg); }
-.auth-gate::before { position: absolute; width: min(720px, 80vw); height: min(720px, 80vw); background: linear-gradient(180deg, var(--brand-blue), var(--brand-purple)); border-radius: 50%; content: ""; filter: blur(120px); opacity: 0.09; pointer-events: none; }
-.login-card { position: relative; display: grid; width: min(460px, 100%); gap: 18px; padding: clamp(28px, 5vw, 44px); background: color-mix(in srgb, var(--surface) 96%, transparent); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 24px 70px rgba(17, 24, 39, 0.12); }
+:root[data-theme="dark"] body {
+  background: linear-gradient(180deg, #234a9a 0%, #343d8f 42%, #5a287d 100%) fixed;
+}
+
+.auth-gate { position: relative; min-height: 100vh; display: grid; place-items: center; overflow: hidden; padding: 72px 24px 32px; background: linear-gradient(180deg, #234a9a 0%, #343d8f 42%, #5a287d 100%); }
+.auth-gate::before { position: absolute; inset: 0; background: radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.14), transparent 32%), radial-gradient(circle at 85% 88%, rgba(15, 23, 42, 0.2), transparent 38%); content: ""; pointer-events: none; }
+.login-card { position: relative; display: grid; width: min(460px, 100%); gap: 18px; padding: clamp(28px, 5vw, 44px); background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid color-mix(in srgb, #ffffff 25%, transparent); border-radius: 24px; box-shadow: 0 28px 80px rgba(9, 14, 35, 0.32); backdrop-filter: blur(18px); }
 .login-brand { width: 52px; height: 52px; display: grid; place-items: center; background: var(--brand-gradient); border-radius: 15px; box-shadow: 0 10px 24px color-mix(in srgb, var(--brand-purple) 30%, transparent); color: #fff; font-size: 1.35rem; font-weight: 800; }
 .login-heading { margin-bottom: 2px; }
 .login-heading h1 { margin-bottom: 10px; }
@@ -67,7 +71,7 @@ body {
 .theme-toggle { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; padding: 8px 12px; background: var(--brand-soft); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 650; }
 .theme-toggle:hover { border-color: var(--muted); }
 .theme-icon { width: 1.1em; font-size: 1rem; line-height: 1; }
-.auth-theme-toggle { position: absolute; top: 22px; right: 24px; }
+.auth-theme-toggle { position: absolute; z-index: 2; top: 22px; right: 24px; background: rgba(15, 23, 42, 0.32); color: #fff; border-color: rgba(255, 255, 255, 0.25); backdrop-filter: blur(10px); }
 .signed-in-user { max-width: 220px; overflow: hidden; color: var(--muted); font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
 
 button, input, select, textarea { font: inherit; }
@@ -81,6 +85,14 @@ button, label[for] { -webkit-tap-highlight-color: transparent; }
   padding: 28px clamp(20px, 5vw, 72px);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .import-panel,
+:root[data-theme="dark"] .advanced-filters,
+:root[data-theme="dark"] .person-card {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(14px);
 }
 
 h1, h2, h3, p { margin-top: 0; }
