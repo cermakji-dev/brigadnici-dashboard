@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -78,13 +78,15 @@
           </button>
           <div><strong id="syncStatusTitle">Docházka není načtená</strong><small id="syncStatusMeta">Připraveno k synchronizaci</small></div>
         </div>
-        <label id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
-          <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
-        </label>
-        <div class="attendance-mini-summary" aria-label="Souhrn vybraného měsíce">
-          <span><strong id="attendancePeople">0</strong> lidí</span>
-          <span><strong id="attendanceHours">0</strong> h</span>
-          <span id="attendanceUpdated">Čeká na načtení</span>
+        <div class="attendance-period-block">
+          <label id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
+            <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
+          </label>
+          <div class="attendance-mini-summary" aria-label="Souhrn vybraného měsíce">
+            <span><strong id="attendancePeople">0</strong> lidí</span>
+            <span><strong id="attendanceHours">0</strong> plánovaných hodin</span>
+            <span id="attendanceUpdated">Čeká na načtení</span>
+          </div>
         </div>
         <div class="import-summary-actions">
           <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="false"><span>Možnosti</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -144,11 +146,6 @@
               <button id="inactiveWorkersButton" type="button">Neaktivní brigádníci</button>
             </div>
           </details>
-        <div class="summary" aria-label="Souhrn týmu">
-          <span><strong id="currentPeriodLabel">—</strong></span>
-          <span><strong id="peopleCount">0</strong> brigádníků</span>
-          <span><strong id="hoursTotal">—</strong> plánovaných hodin</span>
-        </div>
         </div>
       </div>
 
@@ -444,6 +441,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=56"></script>
+  <script src="app.js?v=57"></script>
 </body>
 </html>
