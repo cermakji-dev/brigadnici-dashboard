@@ -282,7 +282,7 @@ dialog label { display: grid; gap: 8px; font-weight: 650; }
 .department-editor, .notes-field, .feedback-history, .audit-history { grid-column: 1 / -1; }
 .department-editor { margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; }
 .department-editor legend { padding: 0 6px; font-weight: 650; }
-.profile-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 20px 28px; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border-bottom: 1px solid var(--border); }
+.profile-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 20px 28px; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border-bottom: 1px solid var(--border); }
 .profile-facts div { min-width: 0; }
 .profile-facts dt { margin-bottom: 4px; color: var(--muted); font-size: 0.78rem; }
 .profile-facts dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }
@@ -335,6 +335,19 @@ textarea { resize: vertical; }
 #feedbackDialog form { gap: 20px; padding: 26px; }
 #feedbackDialog .dialog-heading { position: static; padding: 0; background: transparent; border-bottom: 0; }
 #feedbackDialog .dialog-actions { position: static; padding: 0; background: transparent; border-top: 0; backdrop-filter: none; }
+.feedback-kind-badge { display: inline-flex; margin-top: 9px; padding: 5px 9px; background: var(--brand-soft); border-radius: 999px; font-size: 0.78rem; font-weight: 750; }
+.feedback-kind-badge.positive { background: color-mix(in srgb, var(--positive) 16%, transparent); color: var(--positive); }
+.feedback-kind-badge.negative { background: color-mix(in srgb, var(--negative) 16%, transparent); color: var(--negative); }
+.feedback-category-picker { margin: 0; padding: 0; border: 0; }
+.feedback-category-picker legend { margin-bottom: 9px; font-weight: 650; }
+.feedback-category-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.feedback-category-options label { position: relative; display: block; cursor: pointer; }
+.feedback-category-options input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.feedback-category-options label > span { display: grid; min-height: 78px; align-content: center; gap: 4px; padding: 11px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 11px; transition: border-color 150ms, background 150ms, transform 150ms; }
+.feedback-category-options label:hover > span { border-color: var(--muted); transform: translateY(-1px); }
+.feedback-category-options input:checked + span { background: color-mix(in srgb, var(--brand-purple) 14%, var(--brand-soft)); border-color: var(--brand-purple); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-purple) 18%, transparent); }
+.feedback-category-options input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.feedback-category-options small { color: var(--muted); font-size: 0.72rem; line-height: 1.3; }
 .simple-dialog { width: min(540px, calc(100% - 32px)); }
 .simple-dialog form { gap: 20px; padding: 26px; }
 .simple-dialog .dialog-heading { position: static; padding: 0; background: transparent; border-bottom: 0; }
@@ -369,6 +382,8 @@ textarea { resize: vertical; }
   .department-editor, .notes-field, .feedback-history, .audit-history { grid-column: auto; }
   .profile-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 18px; }
   .feedback-breakdown { grid-template-columns: 1fr; }
+  .feedback-category-options { grid-template-columns: 1fr; }
+  .feedback-category-options label > span { min-height: auto; }
   .theme-label { display: none; }
   .toast { top: 188px; right: 16px; }
   .alerts-drawer { top: 74px; transform: translateX(calc(-100vw + 58px)); }

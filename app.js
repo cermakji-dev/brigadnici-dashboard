@@ -61,7 +61,6 @@ const elements = {
   clearNotesButton: document.querySelector("#clearNotesButton"),
   profileUserId: document.querySelector("#profileUserId"),
   profileRole: document.querySelector("#profileRole"),
-  profileStatus: document.querySelector("#profileStatus"),
   profileEmail: document.querySelector("#profileEmail"),
   savePersonButton: document.querySelector("#savePersonButton"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
@@ -70,9 +69,10 @@ const elements = {
   feedbackDialog: document.querySelector("#feedbackDialog"),
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackDialogTitle: document.querySelector("#feedbackDialogTitle"),
+  feedbackKindBadge: document.querySelector("#feedbackKindBadge"),
   feedbackPersonId: document.querySelector("#feedbackPersonId"),
   feedbackType: document.querySelector("#feedbackType"),
-  feedbackCategory: document.querySelector("#feedbackCategory"),
+  feedbackCategoryInputs: [...document.querySelectorAll('input[name="feedbackCategory"]')],
   feedbackNote: document.querySelector("#feedbackNote"),
   cancelFeedbackButton: document.querySelector("#cancelFeedbackButton"),
   cancelFeedbackAction: document.querySelector("#cancelFeedbackAction"),
@@ -178,7 +178,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
   const feedbackItem = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     type: elements.feedbackType.value,
-    category: elements.feedbackCategory.value,
+    category: elements.feedbackCategoryInputs.find(input => input.checked)?.value,
     note,
     createdAt: new Date().toISOString()
   };
@@ -776,9 +776,11 @@ function openFeedback(id, type) {
   const person = state.people[id];
   elements.feedbackPersonId.value = id;
   elements.feedbackType.value = type;
-  elements.feedbackCategory.value = "";
+  elements.feedbackCategoryInputs.forEach(input => { input.checked = false; });
   elements.feedbackNote.value = "";
-  elements.feedbackDialogTitle.textContent = `${type === "positive" ? "👍 Palec nahoru" : "👎 Palec dolů"} — ${person.name}`;
+  elements.feedbackDialogTitle.textContent = person.name;
+  elements.feedbackKindBadge.textContent = type === "positive" ? "👍 Palec nahoru" : "👎 Palec dolů";
+  elements.feedbackKindBadge.className = `feedback-kind-badge ${type}`;
   elements.feedbackDialog.showModal();
   elements.feedbackNote.focus();
 }
@@ -813,7 +815,6 @@ function openPerson(id) {
   elements.personId.value = id;
   elements.profileUserId.textContent = person.userId || "—";
   elements.profileRole.textContent = person.role || "—";
-  elements.profileStatus.textContent = person.status || "—";
   elements.profileEmail.textContent = person.email || "—";
   elements.skillsRange.value = person.skills ?? 50;
   updateRangeControl(elements.skillsRange, elements.skillsOutput);

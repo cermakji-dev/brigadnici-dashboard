@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -174,7 +174,6 @@
       <dl class="profile-facts">
         <div><dt>Interní ID</dt><dd id="profileUserId">—</dd></div>
         <div><dt>Role</dt><dd id="profileRole">—</dd></div>
-        <div><dt>Stav</dt><dd id="profileStatus">—</dd></div>
         <div><dt>E-mail</dt><dd id="profileEmail">—</dd></div>
       </dl>
       <div class="profile-editor-grid">
@@ -224,20 +223,21 @@
       <div class="dialog-heading">
         <div>
           <p class="step-label">Nové hodnocení</p>
-          <h2 id="feedbackDialogTitle">Palec</h2>
+          <h2 id="feedbackDialogTitle">Brigádník</h2>
+          <span id="feedbackKindBadge" class="feedback-kind-badge"></span>
         </div>
         <button id="cancelFeedbackButton" class="icon-button" type="button" aria-label="Zavřít">×</button>
       </div>
       <input id="feedbackPersonId" type="hidden">
       <input id="feedbackType" type="hidden">
-      <label>Kategorie hodnocení
-        <select id="feedbackCategory" required>
-          <option value="" selected disabled>Vyberte kategorii…</option>
-          <option value="attendance">Docházka</option>
-          <option value="training">Zaškolení</option>
-          <option value="general">Obecné</option>
-        </select>
-      </label>
+      <fieldset class="feedback-category-picker">
+        <legend>Čeho se hodnocení týká?</legend>
+        <div class="feedback-category-options">
+          <label><input type="radio" name="feedbackCategory" value="attendance" required><span><strong>Docházka</strong><small>Příchody a spolehlivost</small></span></label>
+          <label><input type="radio" name="feedbackCategory" value="training"><span><strong>Zaškolení</strong><small>Práce na oddělení</small></span></label>
+          <label><input type="radio" name="feedbackCategory" value="general"><span><strong>Obecné</strong><small>Ostatní situace</small></span></label>
+        </div>
+      </fieldset>
       <label>Důvod hodnocení
         <textarea id="feedbackNote" rows="4" required placeholder="Popište konkrétní situaci…"></textarea>
       </label>
@@ -311,6 +311,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
