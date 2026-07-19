@@ -6,7 +6,7 @@ const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
 const WORKER_IDENTITIES = [
   { externalId: "USER92212", name: "Frey Jakub", aliases: ["Frey Jakub", "Frey Golobov Jakub", "Jakub Frey"] },
-  { externalId: "USER98794", name: "Buy Martin", aliases: ["Bui Martin", "Bui Anh Duc", "Martin Buy", "Buy Martin"] },
+  { externalId: "USER98794", name: "Bui Martin", aliases: ["Bui Martin", "Bui Anh Duc", "Martin Bui", "Martin Buy", "Buy Martin"] },
   { externalId: "USER98678", name: "Lain Jan", aliases: ["Lain Jan", "Lain Jan Matyas", "Jan Lain"] }
 ];
 let pendingWorkbook = null;
