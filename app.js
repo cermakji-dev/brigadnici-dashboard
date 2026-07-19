@@ -1200,7 +1200,7 @@ function renderPeopleTable(people) {
     const rating = score(person);
     row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
     row.querySelector("strong").textContent = person.name;
-    row.querySelector("small").textContent = person.email || "Bez e-mailu";
+    row.querySelector("small").textContent = person.email || "";
     row.querySelector(".table-departments").textContent = departments;
     setupInlineNote(row.querySelector(".inline-note"), person);
     const positive = row.querySelector(".feedback-button.positive");
@@ -1336,7 +1336,7 @@ function createCard(person) {
   card.setAttribute("aria-label", `Zobrazit detail: ${person.name}`);
   card.querySelector("h3").textContent = person.name;
   const email = card.querySelector(".email");
-  email.textContent = person.email || "Bez e-mailu";
+  email.textContent = person.email || "";
   const avatar = card.querySelector(".avatar");
   if (person.photo) avatar.style.backgroundImage = `url("${safeCssUrl(person.photo)}")`;
   else avatar.textContent = initials(person.name);
@@ -1482,7 +1482,7 @@ function openPerson(id) {
   elements.personId.value = id;
   elements.profileUserId.textContent = person.userId || "—";
   elements.profileRole.textContent = person.role || "—";
-  elements.profileEmail.textContent = person.email || "—";
+  elements.profileEmail.textContent = person.email || "";
   elements.profileHours60.textContent = `${formatNumber(person.hours60 || 0)} hodin`;
   elements.skillsRange.value = person.skills ?? 50;
   updateRangeControl(elements.skillsRange, elements.skillsOutput);
