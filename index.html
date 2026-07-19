@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=57">
+  <link rel="stylesheet" href="styles.css?v=58">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -83,9 +83,8 @@
             <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
           </label>
           <div class="attendance-mini-summary" aria-label="Souhrn vybraného měsíce">
-            <span><strong id="attendancePeople">0</strong> lidí</span>
-            <span><strong id="attendanceHours">0</strong> plánovaných hodin</span>
-            <span id="attendanceUpdated">Čeká na načtení</span>
+            <span><strong id="attendancePeople">0</strong><small>brigádníků</small></span>
+            <span><strong id="attendanceHours">0</strong><small>plánovaných hodin</small></span>
           </div>
         </div>
         <div class="import-summary-actions">
@@ -441,6 +440,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=57"></script>
+  <script src="app.js?v=58"></script>
 </body>
 </html>
