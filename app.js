@@ -17,6 +17,7 @@ let remoteUser = null;
 let messageTimer = null;
 let hasAutoSynced = false;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
+let currentSort = { key: "name", direction: "asc" };
 const activeQuickFilters = new Set();
 const dismissedAlertSignatures = new Set(loadDismissedAlerts());
 let visibleAlertSignatures = [];
@@ -68,6 +69,7 @@ const elements = {
   currentPeriodLabel: document.querySelector("#currentPeriodLabel"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
+  tableSortButtons: [...document.querySelectorAll(".table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
@@ -161,7 +163,15 @@ elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
 elements.profileTabs.forEach(button => button.addEventListener("click", () => activateProfileTab(button.dataset.profileTab)));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
 elements.searchInput.addEventListener("input", render);
-elements.sortSelect.addEventListener("change", render);
+elements.sortSelect.addEventListener("change", () => {
+  currentSort = {
+    name: { key: "name", direction: "asc" },
+    "hours-desc": { key: "hours", direction: "desc" },
+    "rating-desc": { key: "rating", direction: "desc" }
+  }[elements.sortSelect.value] || { key: "name", direction: "asc" };
+  render();
+});
+elements.tableSortButtons.forEach(button => button.addEventListener("click", () => setTableSort(button.dataset.sortKey)));
 elements.departmentFilters.forEach(input => input.addEventListener("change", render));
 elements.departmentMatchMode.addEventListener("change", render);
 elements.clearDepartmentFilters.addEventListener("click", () => {
@@ -672,6 +682,24 @@ function clearQuickFilters() {
   render();
 }
 
+function setTableSort(key) {
+  const defaultDirection = ["name", "notes"].includes(key) ? "asc" : "desc";
+  currentSort = currentSort.key === key
+    ? { key, direction: currentSort.direction === "asc" ? "desc" : "asc" }
+    : { key, direction: defaultDirection };
+  updateTableSortIndicators();
+  render();
+}
+
+function updateTableSortIndicators() {
+  elements.tableSortButtons.forEach(button => {
+    const active = button.dataset.sortKey === currentSort.key;
+    button.classList.toggle("is-active", active);
+    button.querySelector("span").textContent = active ? (currentSort.direction === "asc" ? "↑" : "↓") : "↕";
+    button.closest("th").setAttribute("aria-sort", active ? (currentSort.direction === "asc" ? "ascending" : "descending") : "none");
+  });
+}
+
 async function handleSession(session) {
   if (!session?.user) {
     remoteUser = null;
@@ -1120,12 +1148,11 @@ function render() {
       ? selectedDepartments.every(department => trained.includes(department))
       : selectedDepartments.some(department => trained.includes(department));
   });
-  const sort = elements.sortSelect.value;
   people.sort((a, b) => {
-    if (sort === "hours-desc") return b.hours - a.hours || a.name.localeCompare(b.name, "cs");
-    if (sort === "rating-desc") return score(b) - score(a) || a.name.localeCompare(b.name, "cs");
-    return a.name.localeCompare(b.name, "cs");
+    const comparison = comparePeople(a, b, currentSort.key);
+    return (currentSort.direction === "asc" ? comparison : -comparison) || a.name.localeCompare(b.name, "cs");
   });
+  updateTableSortIndicators();
 
   elements.peopleGrid.replaceChildren(...people.map(createCard));
   renderPeopleTable(people);
@@ -1140,6 +1167,16 @@ function render() {
   elements.emptyState.hidden = people.length > 0;
   renderSyncStatus();
   renderAlerts();
+}
+
+function comparePeople(a, b, key) {
+  if (key === "hours") return Number(a.hours || 0) - Number(b.hours || 0);
+  if (key === "skills") return Number(a.skills || 0) - Number(b.skills || 0);
+  if (key === "reliability") return Number(a.reliability || 0) - Number(b.reliability || 0);
+  if (key === "departments") return (a.departments || []).length - (b.departments || []).length;
+  if (key === "notes") return String(a.notes || "").localeCompare(String(b.notes || ""), "cs");
+  if (key === "rating") return score(a) - score(b);
+  return a.name.localeCompare(b.name, "cs");
 }
 
 function renderSyncStatus() {
