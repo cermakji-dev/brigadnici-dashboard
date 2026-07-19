@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -62,6 +62,9 @@
         <p class="step-label">Krok 1</p>
         <h2 id="importHeading">Načíst docházku</h2>
         <p class="section-copy">Nahrajte váš Excel nebo CSV export z Google Sheets. U Excelu vyberete měsíční list a aplikace načte hotový souhrn hodin.</p>
+        <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
+          <select id="sheetSelect"></select>
+        </label>
       </div>
 
       <div id="dropZone" class="drop-zone">
@@ -73,10 +76,6 @@
         <span class="upload-separator">nebo ručně</span>
         <label class="button button-secondary" for="attendanceInput">Vybrat XLSX / CSV</label>
       </div>
-
-      <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
-        <select id="sheetSelect"></select>
-      </label>
 
     </section>
 
@@ -311,6 +310,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>
