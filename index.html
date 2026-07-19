@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -172,7 +172,7 @@
       <div id="peopleGrid" class="people-grid" aria-live="polite"></div>
       <div id="peopleTableWrap" class="people-table-wrap" hidden>
         <table class="people-table">
-          <thead><tr><th>Brigádník</th><th>Hodiny</th><th>Schopnosti</th><th>Docházka</th><th>Zaškolení</th><th>Hodnocení</th></tr></thead>
+          <thead><tr><th>Brigádník</th><th>Hodiny</th><th>Schopnosti</th><th>Docházka</th><th>Zaškolení</th><th>Obecná poznámka</th><th>Hodnocení</th></tr></thead>
           <tbody id="peopleTableBody"></tbody>
         </table>
       </div>
@@ -332,6 +332,10 @@
         <div><span>Docházková morálka</span><strong class="reliability-value"></strong></div>
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
+      <div class="card-note">
+        <span>Obecná poznámka</span>
+        <p class="note-preview"></p>
+      </div>
       <div class="feedback-row">
         <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
         <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
@@ -343,6 +347,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

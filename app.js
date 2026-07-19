@@ -715,10 +715,14 @@ function renderPeopleTable(people) {
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
-    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-score"></td>`;
+    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"></td><td class="table-score"></td>`;
     row.querySelector("strong").textContent = person.name;
     row.querySelector("small").textContent = person.email || "Bez e-mailu";
     row.querySelector(".table-departments").textContent = departments;
+    const noteCell = row.querySelector(".table-note");
+    noteCell.textContent = person.notes || "Bez poznámky";
+    noteCell.classList.toggle("is-empty", !person.notes);
+    noteCell.title = person.notes || "";
     const scoreCell = row.querySelector(".table-score");
     scoreCell.textContent = rating > 0 ? `+${rating}` : String(rating);
     scoreCell.classList.toggle("positive-score", rating > 0);
@@ -817,6 +821,9 @@ function createCard(person) {
   renderDepartmentBadges(card.querySelector(".department-badges"), person.departments);
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
+  const note = card.querySelector(".note-preview");
+  note.textContent = person.notes || "Bez poznámky";
+  note.classList.toggle("is-empty", !person.notes);
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
