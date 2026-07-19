@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=65">
+  <link rel="stylesheet" href="styles.css?v=66">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -433,7 +433,6 @@
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
       <div class="card-note">
-        <label>Obecná poznámka</label>
         <textarea class="note-preview inline-note" rows="2" placeholder="Klikněte a napište poznámku…" aria-label="Obecná poznámka"></textarea>
       </div>
       <div class="feedback-row">
