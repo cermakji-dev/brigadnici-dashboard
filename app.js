@@ -60,8 +60,6 @@ const elements = {
   emptyState: document.querySelector("#emptyState"),
   emptyStateText: document.querySelector("#emptyStateText"),
   resetAllFilters: document.querySelector("#resetAllFilters"),
-  peopleCount: document.querySelector("#peopleCount"),
-  hoursTotal: document.querySelector("#hoursTotal"),
   attendancePeople: document.querySelector("#attendancePeople"),
   attendanceHours: document.querySelector("#attendanceHours"),
   attendanceUpdated: document.querySelector("#attendanceUpdated"),
@@ -75,7 +73,6 @@ const elements = {
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
   alertsEmpty: document.querySelector("#alertsEmpty"),
-  currentPeriodLabel: document.querySelector("#currentPeriodLabel"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
   tableSortButtons: [...document.querySelectorAll(".table-sort")],
@@ -1224,12 +1221,9 @@ function render() {
   elements.peopleTableWrap.hidden = people.length === 0 || currentView !== "table";
   elements.cardViewButton.classList.toggle("is-active", currentView === "cards");
   elements.tableViewButton.classList.toggle("is-active", currentView === "table");
-  elements.currentPeriodLabel.textContent = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(currentImportPeriod));
-  elements.peopleCount.textContent = people.length;
-  elements.hoursTotal.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   const allPeople = Object.values(state.people);
   elements.attendancePeople.textContent = allPeople.length;
-  elements.attendanceHours.textContent = formatNumber(allPeople.reduce((sum, person) => sum + Number(person.hours || 0), 0));
+  elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   elements.attendanceUpdated.textContent = state.lastImport
     ? `Aktualizováno ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport))}`
     : "Čeká na načtení";
