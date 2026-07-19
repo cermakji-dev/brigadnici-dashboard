@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=54">
+  <link rel="stylesheet" href="styles.css?v=55">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -70,7 +70,7 @@
   </header>
 
   <main class="app-content" hidden>
-    <section id="importPanel" class="import-panel" aria-labelledby="importHeading">
+    <section id="importPanel" class="import-panel is-collapsed" aria-labelledby="importHeading">
       <div class="import-summary">
         <div class="sync-state">
           <button id="syncRefreshButton" class="sync-refresh" type="button" aria-label="Znovu načíst docházku z Google Sheets" title="Aktualizovat docházku">
@@ -78,16 +78,18 @@
           </button>
           <div><strong id="syncStatusTitle">Docházka není načtená</strong><small id="syncStatusMeta">Připraveno k synchronizaci</small></div>
         </div>
-        <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="true"><span>Sbalit</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <label id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
+          <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
+        </label>
+        <div class="import-summary-actions">
+          <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="false"><span>Možnosti</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
       </div>
       <div id="importPanelBody" class="import-panel-body">
         <div class="import-panel-content">
       <div class="import-copy">
-        <h2 id="importHeading">Načíst docházku</h2>
-        <p class="section-copy">Nahrajte váš Excel nebo CSV export z Google Sheets. U Excelu vyberete měsíční list a aplikace načte hotový souhrn hodin.</p>
-        <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
-          <select id="sheetSelect"></select>
-        </label>
+        <h2 id="importHeading">Další možnosti načtení</h2>
+        <p class="section-copy">Aktuální data se načítají automaticky. Tady můžete synchronizaci spustit ručně nebo použít vlastní XLSX či CSV soubor.</p>
       </div>
 
       <div id="dropZone" class="drop-zone">
@@ -429,6 +431,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=54"></script>
+  <script src="app.js?v=55"></script>
 </body>
 </html>
