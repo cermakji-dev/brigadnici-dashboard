@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -36,22 +36,23 @@
   </section>
 
   <header class="topbar app-content" hidden>
-    <div>
-      <p class="eyebrow">Personální přehled</p>
-      <h1>Brigádníci</h1>
+    <div class="topbar-brand">
+      <div class="topbar-mark" aria-hidden="true">B</div>
+      <div>
+        <p class="eyebrow">Personální přehled</p>
+        <h1>Brigádníci</h1>
+      </div>
     </div>
     <div class="header-actions">
-      <a class="sheet-link" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
+      <a class="topbar-action topbar-action-primary" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
         <span aria-hidden="true">▦</span> Směnová tabulka <span class="sheet-link-arrow" aria-hidden="true">↗</span>
       </a>
-      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
+      <button id="appFeedbackButton" class="topbar-action" type="button"><span aria-hidden="true">✦</span> Zpětná vazba</button>
+      <button class="topbar-action" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
         <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
       </button>
       <span id="signedInUser" class="signed-in-user"></span>
-      <button id="signOutButton" class="button button-secondary" type="button">Odhlásit</button>
-      <button id="exportButton" class="button button-secondary" type="button">Exportovat data</button>
-      <label class="button button-secondary" for="importBackupInput">Importovat zálohu</label>
-      <input id="importBackupInput" class="visually-hidden" type="file" accept="application/json,.json">
+      <button id="signOutButton" class="topbar-action signout-action" type="button">Odhlásit</button>
     </div>
   </header>
 
@@ -236,6 +237,33 @@
     </form>
   </dialog>
 
+  <dialog id="appFeedbackDialog" class="simple-dialog">
+    <form id="appFeedbackForm">
+      <div class="dialog-heading">
+        <div>
+          <p class="step-label">Pomozte aplikaci zlepšit</p>
+          <h2>Zpětná vazba</h2>
+        </div>
+        <button id="closeAppFeedback" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <label>Typ
+        <select id="appFeedbackCategory">
+          <option value="suggestion">Nápad na zlepšení</option>
+          <option value="bug">Nahlášení chyby</option>
+          <option value="other">Ostatní</option>
+        </select>
+      </label>
+      <label>Zpráva
+        <textarea id="appFeedbackMessage" rows="5" required maxlength="2000" placeholder="Co bychom měli změnit nebo doplnit?"></textarea>
+      </label>
+      <p id="appFeedbackStatus" class="message" role="status" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button id="cancelAppFeedback" class="button button-secondary" type="button">Zrušit</button>
+        <button id="sendAppFeedback" class="button button-primary" type="submit">Odeslat zpětnou vazbu</button>
+      </div>
+    </form>
+  </dialog>
+
   <template id="personCardTemplate">
     <article class="person-card">
       <div class="person-card-top">
@@ -271,6 +299,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

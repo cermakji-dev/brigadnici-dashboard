@@ -24,8 +24,6 @@ const elements = {
   signOutButton: document.querySelector("#signOutButton"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
-  importBackupInput: document.querySelector("#importBackupInput"),
-  exportButton: document.querySelector("#exportButton"),
   dropZone: document.querySelector("#dropZone"),
   importMessage: document.querySelector("#importMessage"),
   sheetSelectWrap: document.querySelector("#sheetSelectWrap"),
@@ -73,7 +71,16 @@ const elements = {
   feedbackType: document.querySelector("#feedbackType"),
   feedbackNote: document.querySelector("#feedbackNote"),
   cancelFeedbackButton: document.querySelector("#cancelFeedbackButton"),
-  cancelFeedbackAction: document.querySelector("#cancelFeedbackAction")
+  cancelFeedbackAction: document.querySelector("#cancelFeedbackAction"),
+  appFeedbackButton: document.querySelector("#appFeedbackButton"),
+  appFeedbackDialog: document.querySelector("#appFeedbackDialog"),
+  appFeedbackForm: document.querySelector("#appFeedbackForm"),
+  appFeedbackCategory: document.querySelector("#appFeedbackCategory"),
+  appFeedbackMessage: document.querySelector("#appFeedbackMessage"),
+  appFeedbackStatus: document.querySelector("#appFeedbackStatus"),
+  closeAppFeedback: document.querySelector("#closeAppFeedback"),
+  cancelAppFeedback: document.querySelector("#cancelAppFeedback"),
+  sendAppFeedback: document.querySelector("#sendAppFeedback")
 };
 
 elements.loginForm.addEventListener("submit", signInWithPassword);
@@ -84,8 +91,6 @@ elements.signOutButton.addEventListener("click", async () => {
 });
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
-elements.importBackupInput.addEventListener("change", (event) => importBackup(event.target.files[0]));
-elements.exportButton.addEventListener("click", exportBackup);
 elements.searchInput.addEventListener("input", render);
 elements.sortSelect.addEventListener("change", render);
 elements.departmentFilters.forEach(input => input.addEventListener("change", render));
@@ -114,6 +119,15 @@ document.addEventListener("click", event => {
 });
 elements.dialog.addEventListener("click", closeDialogFromBackdrop);
 elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.appFeedbackDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.appFeedbackButton.addEventListener("click", () => {
+  elements.appFeedbackForm.reset();
+  elements.appFeedbackStatus.textContent = "";
+  elements.appFeedbackDialog.showModal();
+});
+elements.closeAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
+elements.cancelAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
+elements.appFeedbackForm.addEventListener("submit", submitAppFeedback);
 
 ["dragenter", "dragover"].forEach(type => elements.dropZone.addEventListener(type, (event) => {
   event.preventDefault();
@@ -860,30 +874,30 @@ async function refreshWorkerAudit(person) {
   }));
 }
 
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `brigadnici-zaloha-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-async function importBackup(file) {
-  if (!file) return;
-  try {
-    const data = JSON.parse(await file.text());
-    if (!data.people || typeof data.people !== "object") throw new Error("Neplatný formát zálohy.");
-    state.people = data.people;
-    state.lastImport = data.lastImport || null;
-    saveState();
-    render();
-    setMessage(`Záloha ${file.name} byla načtena.`);
-    elements.importBackupInput.value = "";
-  } catch (error) {
-    setMessage(error.message || "Zálohu se nepodařilo načíst.", true);
+async function submitAppFeedback(event) {
+  event.preventDefault();
+  const message = elements.appFeedbackMessage.value.trim();
+  if (!message || !supabaseClient || !remoteUser) return;
+  elements.sendAppFeedback.disabled = true;
+  elements.sendAppFeedback.textContent = "Odesílám…";
+  elements.appFeedbackStatus.textContent = "";
+  elements.appFeedbackStatus.classList.remove("error");
+  const { error } = await supabaseClient.from("app_feedback").insert({
+    category: elements.appFeedbackCategory.value,
+    message,
+    page_url: window.location.href,
+    created_by: remoteUser.id,
+    created_by_email: remoteUser.email.toLocaleLowerCase()
+  });
+  elements.sendAppFeedback.disabled = false;
+  elements.sendAppFeedback.textContent = "Odeslat zpětnou vazbu";
+  if (error) {
+    elements.appFeedbackStatus.textContent = `Zpětnou vazbu se nepodařilo odeslat: ${error.message}`;
+    elements.appFeedbackStatus.classList.add("error");
+    return;
   }
+  elements.appFeedbackStatus.textContent = "Děkujeme, zpětná vazba byla odeslána.";
+  setTimeout(() => elements.appFeedbackDialog.close(), 900);
 }
 
 function setMessage(text, error = false) {
