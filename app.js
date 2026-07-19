@@ -5,6 +5,7 @@ let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
 let supabaseClient = null;
 let remoteUser = null;
+let messageTimer = null;
 
 const state = loadState();
 const elements = {
@@ -662,8 +663,15 @@ async function importBackup(file) {
 }
 
 function setMessage(text, error = false) {
+  clearTimeout(messageTimer);
   elements.importMessage.textContent = text;
   elements.importMessage.classList.toggle("error", error);
+  elements.importMessage.hidden = !text;
+  if (text) {
+    messageTimer = setTimeout(() => {
+      elements.importMessage.hidden = true;
+    }, error ? 8000 : 4000);
+  }
 }
 
 function initials(name) { return name.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toLocaleUpperCase("cs"); }

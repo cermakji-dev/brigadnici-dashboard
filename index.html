@@ -72,12 +72,7 @@
         <select id="sheetSelect"></select>
       </label>
 
-      <details class="format-help">
-        <summary>Jak má tabulka vypadat?</summary>
-        <p>V dodaném Excelu aplikace hledá sloupce <code>Jméno</code> a <code>Počet zapsaných hodin</code>. U běžného CSV podporuje <code>Jméno</code> a <code>Hodiny</code>, volitelně také <code>Foto</code> a <code>Email</code>.</p>
-        <a href="sample-attendance.csv" download>Stáhnout ukázkové CSV</a>
-      </details>
-      <p id="importMessage" class="message" role="status" aria-live="polite"></p>
+      <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
     </section>
 
     <section class="overview" aria-labelledby="overviewHeading">
