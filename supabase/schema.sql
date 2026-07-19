@@ -164,7 +164,7 @@ revoke all on public.app_feedback from anon;
 grant select on public.app_members to authenticated;
 grant select, insert, update on public.workers to authenticated;
 grant select, insert, update on public.attendance_totals to authenticated;
-grant select, insert on public.feedback to authenticated;
+grant select, insert, delete on public.feedback to authenticated;
 grant select on public.worker_audit to authenticated;
 grant insert on public.app_feedback to authenticated;
 
@@ -206,6 +206,10 @@ for select to authenticated using (public.is_app_member());
 drop policy if exists "authenticated insert feedback" on public.feedback;
 create policy "authenticated insert feedback" on public.feedback
 for insert to authenticated with check (public.is_app_member() and created_by = auth.uid());
+
+drop policy if exists "authenticated delete feedback" on public.feedback;
+create policy "authenticated delete feedback" on public.feedback
+for delete to authenticated using (public.is_app_member());
 
 drop policy if exists "authenticated read audit" on public.worker_audit;
 create policy "authenticated read audit" on public.worker_audit
