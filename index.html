@@ -5,22 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
   <title>Brigádníci</title>
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
+    <button class="theme-toggle auth-theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
+      <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
+    </button>
     <form id="loginForm" class="login-card">
-      <p class="eyebrow">Interní aplikace</p>
-      <h1>Přihlášení</h1>
-      <p class="section-copy">Přihlaste se povoleným e-mailem a heslem.</p>
+      <div class="login-brand" aria-hidden="true">B</div>
+      <div class="login-heading">
+        <p class="eyebrow">Brigádníci P7 · interní aplikace</p>
+        <h1>Vítejte zpět</h1>
+        <p class="section-copy">Přihlaste se ke správě týmu, docházky a hodnocení.</p>
+      </div>
       <label>E-mail
         <input id="loginEmail" type="email" required autocomplete="email" placeholder="jmeno@firma.cz">
       </label>
       <label>Heslo
         <input id="loginPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="Vaše heslo">
       </label>
-      <button class="button button-primary" type="submit">Přihlásit se</button>
+      <button id="loginButton" class="button button-primary login-button" type="submit">Přihlásit se</button>
       <p id="authMessage" class="message" role="status" aria-live="polite"></p>
+      <p class="login-help">Přístup mají pouze povolené účty vedoucích.</p>
     </form>
   </section>
 
@@ -30,6 +41,9 @@
       <h1>Brigádníci</h1>
     </div>
     <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
+        <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
+      </button>
       <span id="signedInUser" class="signed-in-user"></span>
       <button id="signOutButton" class="button button-secondary" type="button">Odhlásit</button>
       <button id="exportButton" class="button button-secondary" type="button">Exportovat data</button>

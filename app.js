@@ -12,6 +12,8 @@ const elements = {
   loginForm: document.querySelector("#loginForm"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
+  loginButton: document.querySelector("#loginButton"),
+  themeToggles: [...document.querySelectorAll("[data-theme-toggle]")],
   authMessage: document.querySelector("#authMessage"),
   appContent: [...document.querySelectorAll(".app-content")],
   signedInUser: document.querySelector("#signedInUser"),
@@ -61,6 +63,8 @@ const elements = {
 };
 
 elements.loginForm.addEventListener("submit", signInWithPassword);
+elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
+updateThemeControls();
 elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
@@ -186,11 +190,31 @@ async function signInWithPassword(event) {
   event.preventDefault();
   if (!supabaseClient) return;
   showAuthMessage("Přihlašuji…");
+  elements.loginButton.disabled = true;
+  elements.loginButton.textContent = "Přihlašuji…";
   const { error } = await supabaseClient.auth.signInWithPassword({
     email: elements.loginEmail.value.trim(),
     password: elements.loginPassword.value
   });
+  elements.loginButton.disabled = false;
+  elements.loginButton.textContent = "Přihlásit se";
   showAuthMessage(error ? "E-mail nebo heslo není správné." : "Přihlášení proběhlo úspěšně.", Boolean(error));
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem("brigadnici-theme", nextTheme);
+  updateThemeControls();
+}
+
+function updateThemeControls() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  elements.themeToggles.forEach(button => {
+    button.querySelector(".theme-icon").textContent = dark ? "☀" : "☾";
+    button.querySelector(".theme-label").textContent = dark ? "Světlý režim" : "Tmavý režim";
+    button.setAttribute("aria-pressed", String(dark));
+  });
 }
 
 async function handleSession(session) {
