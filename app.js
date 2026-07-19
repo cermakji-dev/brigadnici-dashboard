@@ -639,10 +639,10 @@ function renderAlerts() {
     const previousReliability = previousAuditValue(person, "reliability");
     if (previousReliability !== null && Number(person.reliability) < Number(previousReliability)) {
       reasons.push({ type: "attendance", text: `Docházka klesla z ${previousReliability} na ${person.reliability} %` });
-    } else if (Number(person.reliability) < 60) {
+    } else if (Number(person.reliability) < 40) {
       reasons.push({ type: "attendance", text: `Nízká docházková morálka (${person.reliability} %)` });
     }
-    if (medianHours > 0 && Number(person.hours || 0) < medianHours * 0.5) {
+    if (medianHours > 0 && Number(person.hours || 0) > 0 && Number(person.hours || 0) < medianHours * 0.5) {
       reasons.push({ type: "hours", text: `Málo hodin (${formatNumber(person.hours || 0)} oproti mediánu ${formatNumber(medianHours)})` });
     }
     const negative = feedbackCount(person, "negative");
