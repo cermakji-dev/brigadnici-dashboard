@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=55">
+  <link rel="stylesheet" href="styles.css?v=56">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -81,6 +81,11 @@
         <label id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
           <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
         </label>
+        <div class="attendance-mini-summary" aria-label="Souhrn vybraného měsíce">
+          <span><strong id="attendancePeople">0</strong> lidí</span>
+          <span><strong id="attendanceHours">0</strong> h</span>
+          <span id="attendanceUpdated">Čeká na načtení</span>
+        </div>
         <div class="import-summary-actions">
           <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="false"><span>Možnosti</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         </div>
@@ -132,8 +137,13 @@
           <h2 id="overviewHeading">Přehled týmu</h2>
         </div>
         <div class="overview-actions">
-          <button id="addWorkerButton" class="button button-primary compact-button" type="button">+ Přidat brigádníka</button>
-          <button id="inactiveWorkersButton" class="button button-secondary compact-button" type="button">Neaktivní</button>
+          <details class="team-management">
+            <summary>Správa týmu</summary>
+            <div class="team-management-menu">
+              <button id="addWorkerButton" type="button">+ Přidat brigádníka</button>
+              <button id="inactiveWorkersButton" type="button">Neaktivní brigádníci</button>
+            </div>
+          </details>
         <div class="summary" aria-label="Souhrn týmu">
           <span><strong id="currentPeriodLabel">—</strong></span>
           <span><strong id="peopleCount">0</strong> brigádníků</span>
@@ -142,14 +152,7 @@
         </div>
       </div>
 
-      <div class="quick-filters" aria-label="Rychlé filtry">
-        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
-        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky</button>
-        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
-        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
-        <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
-      </div>
-
+      <div class="team-controls">
       <div class="toolbar">
         <label class="search-field">
           <span class="visually-hidden">Hledat brigádníka</span>
@@ -164,6 +167,14 @@
           <button id="cardViewButton" class="view-button is-active" type="button" aria-label="Zobrazit karty"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
           <button id="tableViewButton" class="view-button" type="button" aria-label="Zobrazit tabulku"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
         </div>
+      </div>
+
+      <div class="quick-filters" aria-label="Rychlé filtry">
+        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
+        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky</button>
+        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
+        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
+        <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
       </div>
 
       <details class="advanced-filters">
@@ -190,11 +201,13 @@
           </div>
         </div>
       </details>
+      </div>
 
       <div id="emptyState" class="empty-state">
         <div aria-hidden="true">◎</div>
         <h3>Žádná shoda</h3>
-        <p>Změňte hledaný text nebo vybraná oddělení.</p>
+        <p id="emptyStateText">Aktivní filtry neodpovídají žádnému brigádníkovi.</p>
+        <button id="resetAllFilters" class="button button-secondary" type="button">Zrušit všechny filtry</button>
       </div>
       <div id="skeletonGrid" class="skeleton-grid" aria-label="Načítám brigádníky">
         <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
@@ -431,6 +444,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=55"></script>
+  <script src="app.js?v=56"></script>
 </body>
 </html>
