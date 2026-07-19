@@ -275,9 +275,14 @@ select { width: auto; }
 .bar .skills-bar { background: #2563eb; }
 .bar .reliability-bar { background: #16a34a; }
 .card-note { margin-top: 16px; padding: 11px 12px; background: color-mix(in srgb, var(--brand-soft) 72%, transparent); border: 1px solid var(--border); border-radius: 10px; }
-.card-note > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.note-preview { display: -webkit-box; min-height: 2.65em; margin: 0; overflow: hidden; color: var(--text); font-size: .82rem; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.note-preview.is-empty, .table-note.is-empty { color: var(--muted); font-style: italic; }
+.card-note > label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.inline-note { width: 100%; min-height: 48px; padding: 7px 9px; resize: vertical; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 8px; font-size: .82rem; line-height: 1.35; transition: border-color 140ms, background 140ms, box-shadow 140ms; }
+.inline-note:hover { background: color-mix(in srgb, var(--surface) 45%, transparent); border-color: var(--border); }
+.inline-note:focus { background: var(--input-bg); border-color: #4f7ee8; box-shadow: 0 0 0 3px var(--focus); outline: none; }
+.inline-note::placeholder { color: var(--muted); font-style: italic; opacity: .85; }
+.inline-note.is-saving { cursor: wait; opacity: .65; }
+.inline-note.is-saved { border-color: var(--positive); }
+.inline-note.has-error { border-color: var(--negative); }
 .feedback-row { display: flex; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
 .feedback-button { padding: 8px 10px; background: var(--brand-soft); color: var(--text); }
 .feedback-button.positive:active { color: var(--positive); }
@@ -301,7 +306,8 @@ select { width: auto; }
 .people-table td:first-child strong, .people-table td:first-child small { display: block; }
 .people-table td:first-child small { max-width: 220px; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
 .table-departments { max-width: 240px; color: var(--muted); font-size: .82rem; }
-.table-note { min-width: 180px; max-width: 280px; overflow: hidden; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.table-note { min-width: 210px; max-width: 300px; }
+.table-note .inline-note { min-height: 42px; resize: vertical; }
 .table-score { font-weight: 750; }
 .table-metric { display: grid; min-width: 100px; gap: 6px; font-size: .8rem; }
 .table-metric i { height: 6px; overflow: hidden; background: var(--brand-soft); border-radius: 99px; }

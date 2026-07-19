@@ -715,20 +715,17 @@ function renderPeopleTable(people) {
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
-    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"></td><td class="table-score"></td>`;
+    row.innerHTML = `<td><strong></strong><small></small></td><td>${formatNumber(person.hours || 0)} h</td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"></td>`;
     row.querySelector("strong").textContent = person.name;
     row.querySelector("small").textContent = person.email || "Bez e-mailu";
     row.querySelector(".table-departments").textContent = departments;
-    const noteCell = row.querySelector(".table-note");
-    noteCell.textContent = person.notes || "Bez poznámky";
-    noteCell.classList.toggle("is-empty", !person.notes);
-    noteCell.title = person.notes || "";
+    setupInlineNote(row.querySelector(".inline-note"), person);
     const scoreCell = row.querySelector(".table-score");
     scoreCell.textContent = rating > 0 ? `+${rating}` : String(rating);
     scoreCell.classList.toggle("positive-score", rating > 0);
     scoreCell.classList.toggle("negative-score", rating < 0);
-    row.addEventListener("click", () => openPerson(person.id));
-    row.addEventListener("keydown", event => { if (event.key === "Enter") openPerson(person.id); });
+    row.addEventListener("click", event => { if (!event.target.closest("textarea, button, input, select")) openPerson(person.id); });
+    row.addEventListener("keydown", event => { if (event.target === row && event.key === "Enter") openPerson(person.id); });
     return row;
   }));
 }
@@ -821,9 +818,7 @@ function createCard(person) {
   renderDepartmentBadges(card.querySelector(".department-badges"), person.departments);
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
-  const note = card.querySelector(".note-preview");
-  note.textContent = person.notes || "Bez poznámky";
-  note.classList.toggle("is-empty", !person.notes);
+  setupInlineNote(card.querySelector(".inline-note"), person);
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
@@ -844,6 +839,43 @@ function createCard(person) {
   scoreElement.classList.toggle("positive-score", currentScore > 0);
   scoreElement.classList.toggle("negative-score", currentScore < 0);
   return card;
+}
+
+function setupInlineNote(input, person) {
+  input.value = person.notes || "";
+  input.addEventListener("click", event => event.stopPropagation());
+  input.addEventListener("keydown", event => {
+    event.stopPropagation();
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) input.blur();
+  });
+  input.addEventListener("blur", () => saveInlineNote(person, input));
+}
+
+async function saveInlineNote(person, input) {
+  const previous = person.notes || "";
+  const next = input.value.trim();
+  if (next === previous) return;
+  input.classList.add("is-saving");
+  input.disabled = true;
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
+    if (error) {
+      input.value = previous;
+      input.disabled = false;
+      input.classList.remove("is-saving");
+      input.classList.add("has-error");
+      setMessage(`Poznámku se nepodařilo uložit: ${error.message}`, true);
+      return;
+    }
+    await refreshWorkerAudit(person);
+  }
+  person.notes = next;
+  saveState();
+  input.disabled = false;
+  input.classList.remove("is-saving", "has-error");
+  input.classList.add("is-saved");
+  setTimeout(() => input.classList.remove("is-saved"), 1200);
+  setMessage("Poznámka byla uložena.");
 }
 
 function setMetric(card, key, value = 50) {

@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -333,8 +333,8 @@
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
       <div class="card-note">
-        <span>Obecná poznámka</span>
-        <p class="note-preview"></p>
+        <label>Obecná poznámka</label>
+        <textarea class="note-preview inline-note" rows="2" placeholder="Klikněte a napište poznámku…" aria-label="Obecná poznámka"></textarea>
       </div>
       <div class="feedback-row">
         <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
@@ -347,6 +347,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
