@@ -1139,7 +1139,6 @@ function render() {
     if (!normalize(person.name).includes(query)) return false;
     if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
     if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
-    if (activeQuickFilters.has("low-attendance") && Number(person.reliability) >= 75) return false;
     if (activeQuickFilters.has("negative") && feedbackCount(person, "negative") === 0) return false;
     if (activeQuickFilters.has("zero-hours") && Number(person.hours || 0) !== 0) return false;
     if (!selectedDepartments.length) return true;
@@ -1221,7 +1220,7 @@ function renderPeopleTable(people) {
 
 function metricCell(value, type) {
   const safeValue = clampMetric(value);
-  const color = type === "reliability" ? reliabilityColor(safeValue) : "var(--brand)";
+  const color = type === "reliability" ? reliabilityColor(safeValue) : "var(--skills-color)";
   return `<span class="table-metric"><span>${safeValue} %</span><i><b style="width:${safeValue}%;background:${color}"></b></i></span>`;
 }
 
@@ -1522,11 +1521,51 @@ function renderFeedbackHistory(person) {
     note.textContent = item.note;
     const heading = document.createElement("div");
     heading.className = "feedback-entry-heading";
-    heading.append(category, time);
+    const actions = document.createElement("div");
+    actions.className = "feedback-entry-actions";
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "feedback-delete";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Smazat";
+    deleteButton.setAttribute("aria-label", `Smazat ${item.type === "positive" ? "palec nahoru" : "palec dolů"}`);
+    deleteButton.addEventListener("click", () => deleteFeedback(person, item, deleteButton));
+    actions.append(time, deleteButton);
+    heading.append(category, actions);
     entry.append(icon, heading, note);
     list.append(entry);
   });
   elements.feedbackHistory.replaceChildren(list);
+}
+
+async function deleteFeedback(person, item, button) {
+  if (!confirm("Opravdu chcete toto hodnocení smazat?")) return;
+  button.disabled = true;
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("feedback").delete().eq("id", item.id).eq("worker_id", person.remoteId);
+    if (error) {
+      button.disabled = false;
+      setMessage(`Hodnocení se nepodařilo smazat: ${error.message}`, true);
+      return;
+    }
+  }
+  person.feedback = (person.feedback || []).filter(entry => entry.id !== item.id);
+  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
+  person.skills = metrics.skills;
+  person.reliability = metrics.reliability;
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
+    if (error) setMessage(`Hodnocení je smazané, ale ukazatele se nepodařilo přepočítat: ${error.message}`, true);
+    else await refreshWorkerAudit(person);
+  }
+  saveState();
+  render();
+  elements.skillsRange.value = person.skills;
+  elements.reliabilityRange.value = person.reliability;
+  updateRangeControl(elements.skillsRange, elements.skillsOutput);
+  updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
+  renderFeedbackHistory(person);
+  renderAuditHistory(person);
+  setMessage("Hodnocení a příslušný palec byly smazány.");
 }
 
 function renderFeedbackBreakdown(feedback) {

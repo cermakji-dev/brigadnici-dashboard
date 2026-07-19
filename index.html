@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
   <title>Brigádníci</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -68,8 +69,8 @@
         <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="true"><span>Sbalit</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
       </div>
       <div id="importPanelBody" class="import-panel-body">
+        <div class="import-panel-content">
       <div class="import-copy">
-        <p class="step-label">Krok 1</p>
         <h2 id="importHeading">Načíst docházku</h2>
         <p class="section-copy">Nahrajte váš Excel nebo CSV export z Google Sheets. U Excelu vyberete měsíční list a aplikace načte hotový souhrn hodin.</p>
         <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
@@ -86,6 +87,7 @@
         <span class="upload-separator">nebo ručně</span>
         <label class="button button-secondary" for="attendanceInput">Vybrat XLSX / CSV</label>
       </div>
+        </div>
       </div>
     </section>
 
@@ -113,7 +115,6 @@
     <section class="overview" aria-labelledby="overviewHeading">
       <div class="section-heading">
         <div>
-          <p class="step-label">Krok 2</p>
           <h2 id="overviewHeading">Přehled týmu</h2>
         </div>
         <div class="overview-actions">
@@ -130,7 +131,6 @@
       <div class="quick-filters" aria-label="Rychlé filtry">
         <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
         <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky</button>
-        <button class="quick-filter" type="button" data-quick-filter="low-attendance">Docházka pod 75 %</button>
         <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
         <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
         <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
@@ -417,6 +417,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=40"></script>
+  <script src="app.js?v=43"></script>
 </body>
 </html>
