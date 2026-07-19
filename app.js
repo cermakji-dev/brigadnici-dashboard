@@ -3,6 +3,11 @@ const VIEW_KEY = "brigadnici-dashboard-view";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG"];
 const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
+const WORKER_IDENTITIES = [
+  { externalId: "USER92212", name: "Jakub Frey", aliases: ["Frey Jakub", "Frey Golobov Jakub", "Jakub Frey"] },
+  { externalId: "USER98794", name: "Martin Buy", aliases: ["Bui Martin", "Bui Anh Duc", "Martin Buy", "Buy Martin"] },
+  { externalId: "USER98678", name: "Jan Lain", aliases: ["Lain Jan", "Lain Jan Matyas", "Jan Lain"] }
+];
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
@@ -747,13 +752,14 @@ async function loadRemoteState() {
 
   const remotePeople = {};
   workersResult.data.forEach(worker => {
-    const id = slugify(worker.full_name);
+    const identity = resolveWorkerIdentity(worker);
+    const id = slugify(identity.name);
     const workerFeedback = feedbackByWorker.get(worker.id) || [];
     const metrics = calculateAutomaticMetrics(workerFeedback, worker.departments || []);
     remotePeople[id] = {
       id,
       remoteId: worker.id,
-      name: worker.full_name,
+      name: identity.name,
       userId: worker.external_user_id,
       email: worker.email || "",
       role: worker.role,
@@ -769,12 +775,25 @@ async function loadRemoteState() {
       negative: 0,
       feedback: workerFeedback,
       audit: auditByWorker.get(worker.id) || [],
-      aliases: worker.aliases || []
+      aliases: identity.aliases
     };
   });
   state.people = remotePeople;
   if (latestPeriod) currentImportPeriod = latestPeriod;
   saveState();
+}
+
+function resolveWorkerIdentity(worker) {
+  const candidates = [worker.full_name, ...(worker.aliases || [])];
+  const override = WORKER_IDENTITIES.find(identity =>
+    identity.externalId === worker.external_user_id ||
+    identity.aliases.some(alias => candidates.some(candidate => slugify(candidate) === slugify(alias)))
+  );
+  if (!override) return { name: worker.full_name, aliases: [...new Set(worker.aliases || [])] };
+  return {
+    name: override.name,
+    aliases: [...new Set([...candidates, ...override.aliases].filter(Boolean))]
+  };
 }
 
 function findActiveWorker(name) {
@@ -944,12 +963,17 @@ async function importRows(rows, sourceName) {
   if (!nameColumn || !hoursColumn) throw new Error("Chybí sloupec Jméno nebo Hodiny.");
 
   const totals = new Map();
+  const unmatchedNames = new Set();
   rows.forEach(row => {
     const importedName = String(row[nameColumn] || "").trim();
+    if (!importedName) return;
     const activeWorker = findActiveWorker(importedName);
-    if (!activeWorker) return;
+    if (!activeWorker) {
+      unmatchedNames.add(importedName);
+      return;
+    }
     const name = activeWorker.name;
-    const id = slugify(name);
+    const id = activeWorker.id;
     if (!totals.has(id)) totals.set(id, { id, name, hours: 0, email: activeWorker.email, photo: "" });
     const imported = totals.get(id);
     imported.hours += parseHours(row[hoursColumn]);
@@ -957,7 +981,6 @@ async function importRows(rows, sourceName) {
     if (photoColumn && row[photoColumn]) imported.photo = String(row[photoColumn]).trim();
   });
 
-  Object.values(state.people).forEach(person => { person.hours = 0; });
   totals.forEach(imported => {
     if (!state.people[imported.id]) {
       state.people[imported.id] = {
@@ -976,7 +999,10 @@ async function importRows(rows, sourceName) {
   saveState();
   render();
   setImportCollapsed(true);
-  setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.`);
+  const unmatchedText = unmatchedNames.size
+    ? ` Nepřiřazená jména: ${[...unmatchedNames].join(", ")}. Jejich existující hodiny nebyly přepsány.`
+    : " Všechna jména byla úspěšně spárována.";
+  setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.${unmatchedText}`, unmatchedNames.size > 0);
 }
 
 async function saveAttendanceRemote(totals, sourceName) {
@@ -996,6 +1022,18 @@ async function saveAttendanceRemote(totals, sourceName) {
     onConflict: "worker_id,period"
   });
   if (error) throw new Error(`Docházku se nepodařilo uložit: ${error.message}`);
+  const { data: savedRows, error: verifyError } = await supabaseClient
+    .from("attendance_totals")
+    .select("worker_id, hours")
+    .eq("period", currentImportPeriod)
+    .in("worker_id", rows.map(row => row.worker_id));
+  if (verifyError) throw new Error(`Uloženou docházku se nepodařilo ověřit: ${verifyError.message}`);
+  const savedByWorker = new Map(savedRows.map(row => [row.worker_id, Number(row.hours)]));
+  const mismatches = rows.filter(row => {
+    const saved = savedByWorker.get(row.worker_id);
+    return !Number.isFinite(saved) || Math.abs(saved - Number(row.hours)) > 0.001;
+  });
+  if (mismatches.length) throw new Error(`Kontrola zápisu selhala u ${mismatches.length} brigádníků. Data nebyla potvrzena jako správná.`);
 }
 
 function parseCsv(text) {
@@ -1030,7 +1068,13 @@ function findColumn(columns, aliases, required = true) {
 }
 
 function normalize(value) {
-  return String(value ?? "").toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return String(value ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("cs")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
 function slugify(value) {
