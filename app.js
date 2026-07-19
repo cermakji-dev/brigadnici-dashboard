@@ -35,6 +35,7 @@ const elements = {
   alertsPanel: document.querySelector("#alertsPanel"),
   alertsToggle: document.querySelector("#alertsToggle"),
   alertsClose: document.querySelector("#alertsClose"),
+  alertsHandleIcon: document.querySelector("#alertsHandleIcon"),
   alertsEarCount: document.querySelector("#alertsEarCount"),
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
@@ -695,8 +696,10 @@ function renderAlerts() {
 
 function setAlertsOpen(open) {
   elements.alertsPanel.classList.toggle("is-open", open);
+  elements.alertsToggle.classList.toggle("is-open", open);
   elements.alertsPanel.setAttribute("aria-hidden", String(!open));
   elements.alertsToggle.setAttribute("aria-expanded", String(open));
+  elements.alertsHandleIcon.textContent = open ? "‹" : "›";
 }
 
 function previousAuditValue(person, field) {

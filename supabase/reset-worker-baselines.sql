@@ -2,7 +2,7 @@
 -- Současně nastaví docházkovou morálku na 100 % a schopnosti podle počtu oddělení.
 update public.workers as w
 set
-  notes = null,
+  notes = '',
   reliability = 100,
   skills = round((
     select count(distinct department)::numeric / 7 * 100
