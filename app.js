@@ -16,6 +16,7 @@ let supabaseClient = null;
 let remoteUser = null;
 let messageTimer = null;
 let loaderHideTimer = null;
+let sessionLoadPromise = null;
 let hasAutoSynced = false;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
@@ -501,11 +502,11 @@ async function initializeApp() {
   }
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey);
   supabaseClient.auth.onAuthStateChange((_event, session) => {
-    void handleSession(session);
+    void processSession(session);
   });
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) showAuthMessage(error.message, true);
-  else await handleSession(data.session);
+  else await processSession(data.session);
 }
 
 async function signInWithPassword(event) {
@@ -705,6 +706,18 @@ function updateTableSortIndicators() {
   });
 }
 
+async function processSession(session) {
+  if (!session?.user) return handleSession(session);
+  if (sessionLoadPromise) return sessionLoadPromise;
+  const currentLoad = handleSession(session);
+  sessionLoadPromise = currentLoad;
+  try {
+    return await currentLoad;
+  } finally {
+    if (sessionLoadPromise === currentLoad) sessionLoadPromise = null;
+  }
+}
+
 async function handleSession(session) {
   if (!session?.user) {
     hideAppLoader();
@@ -744,8 +757,10 @@ async function handleSession(session) {
       updateAppLoader("Synchronizuji docházku…");
       await syncGoogleSheets(true);
     }
+    render();
     elements.appContent.forEach(element => { element.hidden = false; });
     updateAppLoader("Přehled je připravený");
+    await waitForAppPaint();
     hideAppLoader();
   } catch (error) {
     hideAppLoader();
@@ -753,6 +768,10 @@ async function handleSession(session) {
     elements.appContent.forEach(element => { element.hidden = true; });
     showAuthMessage(error.message, true);
   }
+}
+
+function waitForAppPaint() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 function showAppLoader(text = "Načítám týmový přehled…") {
