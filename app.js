@@ -51,6 +51,9 @@ const elements = {
   toastUndo: document.querySelector("#toastUndo"),
   sheetSelectWrap: document.querySelector("#sheetSelectWrap"),
   sheetSelect: document.querySelector("#sheetSelect"),
+  monthPickerButton: document.querySelector("#monthPickerButton"),
+  monthPickerValue: document.querySelector("#monthPickerValue"),
+  monthPickerMenu: document.querySelector("#monthPickerMenu"),
   peopleGrid: document.querySelector("#peopleGrid"),
   skeletonGrid: document.querySelector("#skeletonGrid"),
   peopleTableWrap: document.querySelector("#peopleTableWrap"),
@@ -185,6 +188,15 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
 });
 elements.resetAllFilters.addEventListener("click", resetAllFilters);
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
+elements.monthPickerButton.addEventListener("click", event => {
+  event.stopPropagation();
+  const willOpen = elements.monthPickerMenu.hidden;
+  elements.monthPickerMenu.hidden = !willOpen;
+  elements.monthPickerButton.setAttribute("aria-expanded", String(willOpen));
+});
+document.addEventListener("click", event => {
+  if (!elements.sheetSelectWrap.contains(event.target)) closeMonthPicker();
+});
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
 elements.personDepartments.forEach(input => input.addEventListener("change", saveDepartmentTraining));
@@ -956,10 +968,37 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   const currentSheet = compatible.find(name => periodFromSheetName(name) === currentPeriod);
   if (requireCurrentMonth && !currentSheet) throw new Error("V Google tabulce nebyl nalezen list pro aktuální měsíc.");
   elements.sheetSelect.value = currentSheet || compatible[compatible.length - 1];
+  renderMonthPicker(compatible);
   elements.sheetSelectWrap.hidden = false;
   const imported = await importWorkbookSheet(elements.sheetSelect.value);
   if (requireCurrentMonth && !imported) throw new Error("Aktuální list se nepodařilo načíst.");
   if (imported) applyRolling60Hours(pendingWorkbook);
+}
+
+function renderMonthPicker(months) {
+  elements.monthPickerValue.textContent = elements.sheetSelect.value || "Vyberte měsíc";
+  elements.monthPickerMenu.replaceChildren(...months.map(month => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.role = "option";
+    button.textContent = month;
+    button.classList.toggle("is-selected", month === elements.sheetSelect.value);
+    button.setAttribute("aria-selected", String(month === elements.sheetSelect.value));
+    button.addEventListener("click", async () => {
+      if (month === elements.sheetSelect.value) return closeMonthPicker();
+      elements.sheetSelect.value = month;
+      elements.monthPickerValue.textContent = month;
+      closeMonthPicker();
+      await importWorkbookSheet(month);
+      renderMonthPicker(months);
+    });
+    return button;
+  }));
+}
+
+function closeMonthPicker() {
+  elements.monthPickerMenu.hidden = true;
+  elements.monthPickerButton.setAttribute("aria-expanded", "false");
 }
 
 function applyRolling60Hours(workbook) {
