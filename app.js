@@ -572,7 +572,7 @@ function activateProfileTab(tab) {
 function setImportCollapsed(collapsed) {
   elements.importPanel.classList.toggle("is-collapsed", collapsed);
   elements.importPanelToggle.setAttribute("aria-expanded", String(!collapsed));
-  elements.importPanelToggle.querySelector("span").textContent = collapsed ? "Rozbalit" : "Sbalit";
+  elements.importPanelToggle.querySelector("span").textContent = collapsed ? "Možnosti" : "Skrýt";
 }
 
 function setViewMode(view) {
