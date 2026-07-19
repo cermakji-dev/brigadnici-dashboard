@@ -35,6 +35,9 @@ const elements = {
   peopleCount: document.querySelector("#peopleCount"),
   hoursTotal: document.querySelector("#hoursTotal"),
   alertsPanel: document.querySelector("#alertsPanel"),
+  alertsToggle: document.querySelector("#alertsToggle"),
+  alertsClose: document.querySelector("#alertsClose"),
+  alertsEarCount: document.querySelector("#alertsEarCount"),
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
   alertsEmpty: document.querySelector("#alertsEmpty"),
@@ -99,6 +102,15 @@ elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackD
 elements.clearNotesButton.addEventListener("click", () => {
   elements.notesInput.value = "";
   elements.notesInput.focus();
+});
+elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
+elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && elements.alertsPanel.classList.contains("is-open")) setAlertsOpen(false);
+});
+document.addEventListener("click", event => {
+  if (!elements.alertsPanel.classList.contains("is-open")) return;
+  if (!elements.alertsPanel.contains(event.target) && !elements.alertsToggle.contains(event.target)) setAlertsOpen(false);
 });
 elements.dialog.addEventListener("click", closeDialogFromBackdrop);
 elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
@@ -612,6 +624,8 @@ function renderAlerts() {
   });
 
   elements.alertsCount.textContent = alerts.length;
+  elements.alertsEarCount.textContent = alerts.length;
+  elements.alertsToggle.classList.toggle("has-alerts", alerts.length > 0);
   elements.alertsEmpty.hidden = alerts.length > 0;
   elements.alertsList.hidden = alerts.length === 0;
   elements.alertsList.replaceChildren(...alerts.map(({ person, reasons }) => {
@@ -629,9 +643,18 @@ function renderAlerts() {
       badges.append(badge);
     });
     button.append(title, badges);
-    button.addEventListener("click", () => openPerson(person.id));
+    button.addEventListener("click", () => {
+      setAlertsOpen(false);
+      openPerson(person.id);
+    });
     return button;
   }));
+}
+
+function setAlertsOpen(open) {
+  elements.alertsPanel.classList.toggle("is-open", open);
+  elements.alertsPanel.setAttribute("aria-hidden", String(!open));
+  elements.alertsToggle.setAttribute("aria-expanded", String(open));
 }
 
 function previousAuditValue(person, field) {

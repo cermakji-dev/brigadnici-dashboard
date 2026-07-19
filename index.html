@@ -80,17 +80,23 @@
       <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
     </section>
 
-    <section id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading">
+    <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
+      <span aria-hidden="true">!</span><span class="alerts-ear-label">Pozornost</span><strong id="alertsEarCount">0</strong>
+    </button>
+    <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
       <div class="alerts-heading">
         <div>
           <p class="step-label">Pozornost</p>
           <h2 id="alertsHeading">Upozornění týmu</h2>
         </div>
-        <span id="alertsCount" class="alerts-count">0</span>
+        <div class="alerts-heading-actions">
+          <span id="alertsCount" class="alerts-count">0</span>
+          <button id="alertsClose" class="icon-button" type="button" aria-label="Zavřít upozornění">×</button>
+        </div>
       </div>
       <div id="alertsList" class="alerts-list"></div>
       <p id="alertsEmpty" class="alerts-empty">Aktuálně není potřeba nic řešit.</p>
-    </section>
+    </aside>
 
     <section class="overview" aria-labelledby="overviewHeading">
       <div class="section-heading">
