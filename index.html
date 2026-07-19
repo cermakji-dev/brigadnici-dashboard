@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=61">
+  <link rel="stylesheet" href="styles.css?v=62">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -79,9 +79,16 @@
           <div><strong id="syncStatusTitle">Docházka není načtená</strong><small id="syncStatusMeta">Připraveno k synchronizaci</small></div>
         </div>
         <div class="attendance-period-block">
-          <label id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
-            <select id="sheetSelect" aria-label="Vyberte měsíc docházky"></select>
-          </label>
+          <div id="sheetSelectWrap" class="sheet-select summary-month" hidden><span>Měsíc</span>
+            <div class="month-picker">
+              <button id="monthPickerButton" class="month-picker-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <strong id="monthPickerValue">—</strong>
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div id="monthPickerMenu" class="month-picker-menu" role="listbox" aria-label="Vyberte měsíc docházky" hidden></div>
+              <select id="sheetSelect" class="visually-hidden" tabindex="-1" aria-hidden="true"></select>
+            </div>
+          </div>
           <div class="attendance-mini-summary" aria-label="Souhrn vybraného měsíce">
             <span><strong id="attendancePeople">0</strong><small>brigádníků</small></span>
             <span><strong id="attendanceHours">0</strong><small>plánovaných hodin</small></span>
@@ -440,6 +447,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=58"></script>
+  <script src="app.js?v=62"></script>
 </body>
 </html>
