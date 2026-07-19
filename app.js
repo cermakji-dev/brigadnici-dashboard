@@ -104,6 +104,7 @@ elements.clearDepartmentFilters.addEventListener("click", () => {
 elements.sheetSelect.addEventListener("change", () => importWorkbookSheet(elements.sheetSelect.value));
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
+elements.personDepartments.forEach(input => input.addEventListener("change", previewDepartmentSkills));
 elements.clearNotesButton.addEventListener("click", () => {
   elements.notesInput.value = "";
   elements.notesInput.focus();
@@ -146,10 +147,15 @@ elements.form.addEventListener("submit", async (event) => {
   if (!person) return;
   person.departments = elements.personDepartments.filter(input => input.checked).map(input => input.value);
   person.notes = elements.notesInput.value.trim();
+  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
+  person.skills = metrics.skills;
+  person.reliability = metrics.reliability;
   if (supabaseClient && remoteUser && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({
       departments: person.departments,
-      notes: person.notes
+      notes: person.notes,
+      skills: person.skills,
+      reliability: person.reliability
     }).eq("id", person.remoteId);
     if (error) {
       setMessage(`Profil se nepodařilo uložit: ${error.message}`, true);
@@ -194,7 +200,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
   }
   if (!Array.isArray(person.feedback)) person.feedback = [];
   person.feedback.push(feedbackItem);
-  const metrics = calculateAutomaticMetrics(person.feedback);
+  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
   person.skills = metrics.skills;
   person.reliability = metrics.reliability;
   if (supabaseClient && remoteUser && person.remoteId) {
@@ -285,6 +291,12 @@ function updateRangeControl(input, output) {
   input.style.setProperty("--range-value", `${input.value}%`);
 }
 
+function previewDepartmentSkills() {
+  const trainedCount = elements.personDepartments.filter(input => input.checked).length;
+  elements.skillsRange.value = Math.round((trainedCount / DEPARTMENTS.length) * 100);
+  updateRangeControl(elements.skillsRange, elements.skillsOutput);
+}
+
 async function handleSession(session) {
   if (!session?.user) {
     remoteUser = null;
@@ -372,7 +384,7 @@ async function loadRemoteState() {
   workersResult.data.forEach(worker => {
     const id = slugify(worker.full_name);
     const workerFeedback = feedbackByWorker.get(worker.id) || [];
-    const metrics = calculateAutomaticMetrics(workerFeedback);
+    const metrics = calculateAutomaticMetrics(workerFeedback, worker.departments || []);
     remotePeople[id] = {
       id,
       remoteId: worker.id,
@@ -772,15 +784,15 @@ function feedbackCount(person, type) {
   return legacy + recorded;
 }
 
-function calculateAutomaticMetrics(feedback = []) {
+function calculateAutomaticMetrics(feedback = [], departments = []) {
   const net = category => feedback.reduce((total, item) => {
     if ((item.category || "general") !== category) return total;
     return total + (item.type === "positive" ? 1 : -1);
   }, 0);
-  const general = net("general");
+  const trainedDepartments = new Set(departments.filter(department => DEPARTMENTS.includes(department))).size;
   return {
-    skills: clampMetric(50 + net("training") * 5 + general * 2),
-    reliability: clampMetric(50 + net("attendance") * 5 + general * 2)
+    skills: Math.round((trainedDepartments / DEPARTMENTS.length) * 100),
+    reliability: clampMetric(100 + net("attendance") * 5)
   };
 }
 

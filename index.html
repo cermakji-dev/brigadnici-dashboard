@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -177,12 +177,12 @@
       </dl>
       <div class="profile-editor-grid">
         <div class="range-group skills-range-group">
-          <label for="skillsRange"><span>Schopnosti <small>automaticky</small></span><output id="skillsOutput">50 %</output></label>
+          <label for="skillsRange"><span>Schopnosti <small>podle zaškolených oddělení</small></span><output id="skillsOutput">0 %</output></label>
           <input id="skillsRange" type="range" min="0" max="100" step="5" value="50" disabled>
         </div>
         <div class="range-group reliability-range-group">
-          <label for="reliabilityRange"><span>Docházková morálka <small>automaticky</small></span><output id="reliabilityOutput">50 %</output></label>
-          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50" disabled>
+          <label for="reliabilityRange"><span>Docházková morálka <small>výchozí hodnota 100 %</small></span><output id="reliabilityOutput">100 %</output></label>
+          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="100" disabled>
         </div>
         <fieldset class="department-editor">
           <legend>Zaškolení na oddělení</legend>
@@ -309,6 +309,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>
