@@ -175,15 +175,15 @@ main {
 .sync-state small { color: var(--muted); }
 .summary-month { display: grid; width: 100%; grid-template-columns: auto minmax(130px, 1fr); align-items: center; justify-self: center; gap: 10px; margin: 0; color: var(--muted); font-size: .76rem; }
 .summary-month select { min-height: 40px; background-color: var(--brand-soft); font-size: .84rem; font-weight: 680; }
-.attendance-period-block { grid-column: 2; display: grid; width: min(100%, 440px); grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; justify-content: center; gap: 8px; }
-.attendance-period-block .summary-month { display: flex; width: auto; min-width: 0; flex-direction: column; justify-content: center; gap: 0; padding: 9px 12px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 11px; }
-.attendance-period-block .summary-month span { order: 2; margin-top: 2px; font-size: .66rem; }
-.attendance-period-block .summary-month select { order: 1; width: 100%; min-height: 20px; padding: 0 22px 0 0; border: 0; outline: 0; background-color: transparent; background-position: right center; color: var(--text); font-size: .9rem; line-height: 1.1; }
-.attendance-period-block .summary-month select:focus-visible { box-shadow: 0 0 0 2px var(--focus); border-radius: 5px; }
-.attendance-mini-summary { display: contents; color: var(--muted); white-space: nowrap; }
-.attendance-mini-summary span { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 9px 12px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 11px; }
+.attendance-period-block { grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 16px; }
+.attendance-period-block .summary-month { display: flex; width: auto; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: .72rem; }
+.attendance-period-block .summary-month select { width: 158px; min-height: 40px; padding: 8px 36px 8px 12px; background-color: var(--input-bg); background-position: right 11px center; border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: .84rem; font-weight: 700; }
+.attendance-period-block .summary-month select:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.attendance-mini-summary { display: flex; align-items: center; color: var(--muted); white-space: nowrap; }
+.attendance-mini-summary span { display: flex; align-items: baseline; gap: 4px; padding: 0 14px; }
+.attendance-mini-summary span + span { border-left: 1px solid var(--border); }
 .attendance-mini-summary strong { color: var(--text); font-size: .9rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.attendance-mini-summary small { margin-top: 2px; color: var(--muted); font-size: .66rem; }
+.attendance-mini-summary small { color: var(--muted); font-size: .7rem; }
 .import-summary-actions { grid-column: 3; display: flex; align-items: center; justify-self: end; justify-content: flex-end; }
 .compact-action { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; background: transparent; color: var(--muted); border: 0; border-radius: 8px; cursor: pointer; font-weight: 650; }
 .compact-action:hover { background: var(--brand-soft); color: var(--text); }
@@ -555,8 +555,9 @@ textarea { resize: vertical; }
   .import-panel-content { grid-template-columns: 1fr; padding: 20px; }
   .import-summary { grid-template-columns: 1fr auto; gap: 10px 12px; padding: 12px 14px; }
   .sync-state small { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .attendance-period-block { grid-column: 1 / -1; grid-row: 2; width: 100%; grid-template-columns: 1fr; align-items: stretch; gap: 5px; }
+  .attendance-period-block { grid-column: 1 / -1; grid-row: 2; width: 100%; flex-direction: column; align-items: stretch; gap: 10px; }
   .attendance-period-block .summary-month { width: 100%; }
+  .attendance-period-block .summary-month select { flex: 1; width: auto; }
   .attendance-mini-summary { justify-content: center; overflow-x: auto; padding-bottom: 2px; }
   .import-summary-actions { grid-column: 2; grid-row: 1; }
   .import-summary .compact-action span { display: inline; }
