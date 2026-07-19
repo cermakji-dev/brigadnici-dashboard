@@ -154,36 +154,38 @@
         <div><dt>Stav</dt><dd id="profileStatus">—</dd></div>
         <div><dt>E-mail</dt><dd id="profileEmail">—</dd></div>
       </dl>
-      <label>URL fotografie
-        <input id="photoUrl" type="url" placeholder="https://…">
-      </label>
-      <div class="range-group">
-        <label for="skillsRange">Schopnosti <output id="skillsOutput">50 %</output></label>
-        <input id="skillsRange" type="range" min="0" max="100" step="5" value="50">
-      </div>
-      <div class="range-group">
-        <label for="reliabilityRange">Docházková morálka <output id="reliabilityOutput">50 %</output></label>
-        <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50">
-      </div>
-      <fieldset class="department-editor">
-        <legend>Zaškolení na oddělení</legend>
-        <div class="department-options">
-          <label><input class="person-department" type="checkbox" value="Výdej"> Výdej</label>
-          <label><input class="person-department" type="checkbox" value="Prodej"> Prodej</label>
-          <label><input class="person-department" type="checkbox" value="Lego"> Lego</label>
-          <label><input class="person-department" type="checkbox" value="Pokladny"> Pokladny</label>
-          <label><input class="person-department" type="checkbox" value="Upsell"> Upsell</label>
-          <label><input class="person-department" type="checkbox" value="MV"> MV</label>
-          <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
+      <div class="profile-editor-grid">
+        <label class="photo-field">URL fotografie
+          <input id="photoUrl" type="url" placeholder="https://…">
+        </label>
+        <div class="range-group skills-range-group">
+          <label for="skillsRange">Schopnosti <output id="skillsOutput">50 %</output></label>
+          <input id="skillsRange" type="range" min="0" max="100" step="5" value="50">
         </div>
-      </fieldset>
-      <label>Poznámky
-        <textarea id="notesInput" rows="5" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
-      </label>
-      <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
-        <h3 id="feedbackHistoryHeading">Historie palců</h3>
-        <div id="feedbackHistory"></div>
-      </section>
+        <div class="range-group reliability-range-group">
+          <label for="reliabilityRange">Docházková morálka <output id="reliabilityOutput">50 %</output></label>
+          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="50">
+        </div>
+        <fieldset class="department-editor">
+          <legend>Zaškolení na oddělení</legend>
+          <div class="department-options">
+            <label><input class="person-department" type="checkbox" value="Výdej"> Výdej</label>
+            <label><input class="person-department" type="checkbox" value="Prodej"> Prodej</label>
+            <label><input class="person-department" type="checkbox" value="Lego"> Lego</label>
+            <label><input class="person-department" type="checkbox" value="Pokladny"> Pokladny</label>
+            <label><input class="person-department" type="checkbox" value="Upsell"> Upsell</label>
+            <label><input class="person-department" type="checkbox" value="MV"> MV</label>
+            <label><input class="person-department" type="checkbox" value="LOG"> LOG</label>
+          </div>
+        </fieldset>
+        <label class="notes-field">Poznámky
+          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
+        </label>
+        <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
+          <h3 id="feedbackHistoryHeading">Historie palců</h3>
+          <div id="feedbackHistory"></div>
+        </section>
+      </div>
       <div class="dialog-actions">
         <button class="button button-secondary" value="cancel" type="submit">Zrušit</button>
         <button id="savePersonButton" class="button button-primary" value="default" type="submit">Uložit změny</button>
