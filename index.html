@@ -9,7 +9,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -60,7 +60,9 @@
     <section id="importPanel" class="import-panel" aria-labelledby="importHeading">
       <div class="import-summary">
         <div class="sync-state">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.9 4M4 12A8 8 0 0 1 18.9 8M5 19v-3h3M19 5v3h-3"/></svg>
+          <button id="syncRefreshButton" class="sync-refresh" type="button" aria-label="Znovu načíst docházku z Google Sheets" title="Aktualizovat docházku">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.9 4M4 12A8 8 0 0 1 18.9 8M5 19v-3h3M19 5v3h-3"/></svg>
+          </button>
           <div><strong id="syncStatusTitle">Docházka není načtená</strong><small id="syncStatusMeta">Připraveno k synchronizaci</small></div>
         </div>
         <button id="importPanelToggle" class="compact-action" type="button" aria-expanded="true"><span>Sbalit</span><svg class="ui-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -347,6 +349,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>

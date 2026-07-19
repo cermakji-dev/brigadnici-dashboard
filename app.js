@@ -25,6 +25,7 @@ const elements = {
   signedInUser: document.querySelector("#signedInUser"),
   signOutButton: document.querySelector("#signOutButton"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
+  syncRefreshButton: document.querySelector("#syncRefreshButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
   dropZone: document.querySelector("#dropZone"),
   importPanel: document.querySelector("#importPanel"),
@@ -107,6 +108,7 @@ elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
+elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
 elements.cardViewButton.addEventListener("click", () => setViewMode("cards"));
 elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
@@ -468,7 +470,11 @@ function findActiveWorker(name) {
 async function syncGoogleSheets(automatic = false) {
   const button = elements.googleSheetsButton;
   button.disabled = true;
+  elements.syncRefreshButton.disabled = true;
+  elements.syncRefreshButton.classList.add("is-loading");
   button.textContent = "Načítám…";
+  elements.syncStatusTitle.textContent = "Načítám změny…";
+  elements.syncStatusMeta.textContent = "Kontroluji aktuální data v Google Sheets";
   setMessage("");
   try {
     const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" });
@@ -480,9 +486,13 @@ async function syncGoogleSheets(automatic = false) {
     });
     await prepareWorkbook(file, true);
   } catch (error) {
+    elements.syncStatusTitle.textContent = "Synchronizace se nezdařila";
+    elements.syncStatusMeta.textContent = "Kliknutím na ikonu ji můžete zopakovat";
     setMessage(`${automatic ? "Automatická synchronizace: " : ""}${error.message || "Google tabulku se nepodařilo načíst."}`, true);
   } finally {
     button.disabled = false;
+    elements.syncRefreshButton.disabled = false;
+    elements.syncRefreshButton.classList.remove("is-loading");
     button.textContent = "Načíst z Google Sheets";
   }
 }
@@ -520,7 +530,7 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   if (requireCurrentMonth && !currentSheet) throw new Error("V Google tabulce nebyl nalezen list pro aktuální měsíc.");
   elements.sheetSelect.value = currentSheet || compatible[compatible.length - 1];
   elements.sheetSelectWrap.hidden = false;
-  importWorkbookSheet(elements.sheetSelect.value);
+  await importWorkbookSheet(elements.sheetSelect.value);
 }
 
 function findWorkbookHeader(sheet) {
