@@ -1,5 +1,7 @@
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG"];
+const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
+const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
@@ -19,6 +21,7 @@ const elements = {
   appContent: [...document.querySelectorAll(".app-content")],
   signedInUser: document.querySelector("#signedInUser"),
   signOutButton: document.querySelector("#signOutButton"),
+  googleSheetsButton: document.querySelector("#googleSheetsButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
   importBackupInput: document.querySelector("#importBackupInput"),
   exportButton: document.querySelector("#exportButton"),
@@ -30,6 +33,10 @@ const elements = {
   emptyState: document.querySelector("#emptyState"),
   peopleCount: document.querySelector("#peopleCount"),
   hoursTotal: document.querySelector("#hoursTotal"),
+  alertsPanel: document.querySelector("#alertsPanel"),
+  alertsList: document.querySelector("#alertsList"),
+  alertsCount: document.querySelector("#alertsCount"),
+  alertsEmpty: document.querySelector("#alertsEmpty"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
@@ -53,6 +60,7 @@ const elements = {
   profileEmail: document.querySelector("#profileEmail"),
   savePersonButton: document.querySelector("#savePersonButton"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
+  auditHistory: document.querySelector("#auditHistory"),
   feedbackDialog: document.querySelector("#feedbackDialog"),
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackDialogTitle: document.querySelector("#feedbackDialogTitle"),
@@ -69,6 +77,7 @@ updateThemeControls();
 elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
+elements.googleSheetsButton.addEventListener("click", syncGoogleSheets);
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
 elements.importBackupInput.addEventListener("change", (event) => importBackup(event.target.files[0]));
 elements.exportButton.addEventListener("click", exportBackup);
@@ -118,6 +127,7 @@ elements.form.addEventListener("submit", async (event) => {
       setMessage(`Profil se nepodařilo uložit: ${error.message}`, true);
       return;
     }
+    await refreshWorkerAudit(person);
   }
   saveState();
   elements.dialog.close();
@@ -259,12 +269,13 @@ function showAuthMessage(text, error = false) {
 }
 
 async function loadRemoteState() {
-  const [workersResult, attendanceResult, feedbackResult] = await Promise.all([
+  const [workersResult, attendanceResult, feedbackResult, auditResult] = await Promise.all([
     supabaseClient.from("workers").select("*").eq("active", true).order("full_name"),
     supabaseClient.from("attendance_totals").select("worker_id, period, hours"),
-    supabaseClient.from("feedback").select("id, worker_id, kind, note, created_at").order("created_at")
+    supabaseClient.from("feedback").select("id, worker_id, kind, note, created_at").order("created_at"),
+    supabaseClient.from("worker_audit").select("*").order("changed_at", { ascending: false }).limit(500)
   ]);
-  const error = workersResult.error || attendanceResult.error || feedbackResult.error;
+  const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
 
   const latestPeriod = attendanceResult.data.reduce((latest, row) => !latest || row.period > latest ? row.period : latest, null);
@@ -279,6 +290,18 @@ async function loadRemoteState() {
       type: item.kind,
       note: item.note,
       createdAt: item.created_at
+    });
+  });
+  const auditByWorker = new Map();
+  auditResult.data.forEach(item => {
+    if (!auditByWorker.has(item.worker_id)) auditByWorker.set(item.worker_id, []);
+    auditByWorker.get(item.worker_id).push({
+      id: item.id,
+      changedAt: item.changed_at,
+      changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+      operation: item.operation,
+      before: item.before_data,
+      after: item.after_data
     });
   });
 
@@ -302,6 +325,7 @@ async function loadRemoteState() {
       positive: 0,
       negative: 0,
       feedback: feedbackByWorker.get(worker.id) || [],
+      audit: auditByWorker.get(worker.id) || [],
       aliases: worker.aliases || []
     };
   });
@@ -313,6 +337,28 @@ async function loadRemoteState() {
 function findActiveWorker(name) {
   const key = slugify(name);
   return Object.values(state.people).find(worker => [worker.name, ...(worker.aliases || [])].some(candidate => slugify(candidate) === key));
+}
+
+async function syncGoogleSheets() {
+  const button = elements.googleSheetsButton;
+  button.disabled = true;
+  button.textContent = "Načítám…";
+  setMessage("");
+  try {
+    const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Google Sheets vrátil chybu ${response.status}.`);
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/html")) throw new Error("Tabulka není dostupná bez přihlášení. Nastavte sdílení na Kdokoli s odkazem – čtenář.");
+    const file = new File([await response.blob()], "BRIGÁDNÍCI P7 – Google Sheets.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+    await prepareWorkbook(file);
+  } catch (error) {
+    setMessage(error.message || "Google tabulku se nepodařilo načíst.", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Načíst z Google Sheets";
+  }
 }
 
 async function importAttendance(file) {
@@ -343,7 +389,8 @@ async function prepareWorkbook(file) {
   const compatible = pendingWorkbook.SheetNames.filter(name => findWorkbookHeader(pendingWorkbook.Sheets[name]));
   if (!compatible.length) throw new Error("V Excelu nebyl nalezen list se sloupci Jméno a Počet zapsaných hodin.");
   elements.sheetSelect.replaceChildren(...compatible.map(name => new Option(name, name)));
-  elements.sheetSelect.value = compatible[compatible.length - 1];
+  const currentPeriod = firstDayOfMonth(new Date());
+  elements.sheetSelect.value = compatible.find(name => periodFromSheetName(name) === currentPeriod) || compatible[compatible.length - 1];
   elements.sheetSelectWrap.hidden = false;
   importWorkbookSheet(elements.sheetSelect.value);
 }
@@ -510,6 +557,61 @@ function render() {
   elements.hoursTotal.textContent = formatNumber(people.reduce((total, person) => total + Number(person.hours || 0), 0));
   elements.emptyState.hidden = people.length > 0;
   elements.peopleGrid.hidden = people.length === 0;
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const people = Object.values(state.people);
+  const workedHours = people.map(person => Number(person.hours || 0)).filter(hours => hours > 0).sort((a, b) => a - b);
+  const medianHours = workedHours.length ? workedHours[Math.floor(workedHours.length / 2)] : 0;
+  const alerts = [];
+
+  people.forEach(person => {
+    const reasons = [];
+    const previousReliability = previousAuditValue(person, "reliability");
+    if (previousReliability !== null && Number(person.reliability) < Number(previousReliability)) {
+      reasons.push({ type: "attendance", text: `Docházka klesla z ${previousReliability} na ${person.reliability} %` });
+    } else if (Number(person.reliability) < 60) {
+      reasons.push({ type: "attendance", text: `Nízká docházková morálka (${person.reliability} %)` });
+    }
+    if (medianHours > 0 && Number(person.hours || 0) < medianHours * 0.5) {
+      reasons.push({ type: "hours", text: `Málo hodin (${formatNumber(person.hours || 0)} oproti mediánu ${formatNumber(medianHours)})` });
+    }
+    const negative = feedbackCount(person, "negative");
+    const positive = feedbackCount(person, "positive");
+    if (negative >= 2 && negative > positive) {
+      reasons.push({ type: "feedback", text: `Převažují palce dolů (${negative} 👎 / ${positive} 👍)` });
+    }
+    if (reasons.length) alerts.push({ person, reasons });
+  });
+
+  elements.alertsCount.textContent = alerts.length;
+  elements.alertsEmpty.hidden = alerts.length > 0;
+  elements.alertsList.hidden = alerts.length === 0;
+  elements.alertsList.replaceChildren(...alerts.map(({ person, reasons }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "alert-item";
+    const title = document.createElement("strong");
+    title.textContent = person.name;
+    const badges = document.createElement("span");
+    badges.className = "alert-reasons";
+    reasons.forEach(reason => {
+      const badge = document.createElement("span");
+      badge.className = `alert-reason ${reason.type}`;
+      badge.textContent = reason.text;
+      badges.append(badge);
+    });
+    button.append(title, badges);
+    button.addEventListener("click", () => openPerson(person.id));
+    return button;
+  }));
+}
+
+function previousAuditValue(person, field) {
+  const audit = Array.isArray(person.audit) ? person.audit : [];
+  const change = audit.find(item => item.operation === "UPDATE" && item.before?.[field] !== item.after?.[field]);
+  return change ? change.before[field] : null;
 }
 
 function createCard(person) {
@@ -609,6 +711,7 @@ function openPerson(id) {
   elements.personDepartments.forEach(input => { input.checked = trained.includes(input.value); });
   elements.notesInput.value = person.notes || "";
   renderFeedbackHistory(person);
+  renderAuditHistory(person);
   elements.dialog.showModal();
 }
 
@@ -634,6 +737,78 @@ function renderFeedbackHistory(person) {
     list.append(entry);
   });
   elements.feedbackHistory.replaceChildren(list);
+}
+
+function renderAuditHistory(person) {
+  const audit = Array.isArray(person.audit) ? person.audit : [];
+  const relevant = audit.map(item => ({ ...item, changes: describeAuditChanges(item) }))
+    .filter(item => item.operation !== "UPDATE" || item.changes.length);
+  if (!relevant.length) {
+    elements.auditHistory.innerHTML = '<p class="no-feedback">Zatím bez zaznamenané změny profilu.</p>';
+    return;
+  }
+  const list = document.createElement("ul");
+  list.className = "audit-history-list";
+  relevant.slice(0, 20).forEach(item => {
+    const entry = document.createElement("li");
+    entry.className = "audit-entry";
+    const meta = document.createElement("div");
+    meta.className = "audit-meta";
+    const author = document.createElement("strong");
+    author.textContent = item.changedBy;
+    const time = document.createElement("time");
+    time.dateTime = item.changedAt;
+    time.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.changedAt));
+    meta.append(author, time);
+    const description = document.createElement("p");
+    description.textContent = item.operation === "INSERT" ? "Profil byl vytvořen." : item.changes.join(" · ");
+    entry.append(meta, description);
+    list.append(entry);
+  });
+  elements.auditHistory.replaceChildren(list);
+}
+
+function describeAuditChanges(item) {
+  if (item.operation !== "UPDATE" || !item.before || !item.after) return [];
+  const fields = [
+    ["skills", "Schopnosti"],
+    ["reliability", "Docházka"],
+    ["departments", "Zaškolení"],
+    ["notes", "Poznámka"],
+    ["photo_url", "Fotografie"]
+  ];
+  return fields.flatMap(([field, label]) => {
+    const before = item.before[field];
+    const after = item.after[field];
+    if (JSON.stringify(before) === JSON.stringify(after)) return [];
+    if (field === "notes") return [`${label} upravena`];
+    if (field === "photo_url") return [`${label} změněna`];
+    return [`${label}: ${formatAuditValue(before)} → ${formatAuditValue(after)}`];
+  });
+}
+
+function formatAuditValue(value) {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "bez zaškolení";
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
+}
+
+async function refreshWorkerAudit(person) {
+  const { data, error } = await supabaseClient
+    .from("worker_audit")
+    .select("*")
+    .eq("worker_id", person.remoteId)
+    .order("changed_at", { ascending: false })
+    .limit(20);
+  if (error) return;
+  person.audit = data.map(item => ({
+    id: item.id,
+    changedAt: item.changed_at,
+    changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+    operation: item.operation,
+    before: item.before_data,
+    after: item.after_data
+  }));
 }
 
 function exportBackup() {

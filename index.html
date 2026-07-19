@@ -62,10 +62,12 @@
 
       <div id="dropZone" class="drop-zone">
         <input id="attendanceInput" class="visually-hidden" type="file" accept="text/csv,.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-        <div class="drop-icon" aria-hidden="true">↥</div>
-        <strong>Přetáhněte XLSX nebo CSV sem</strong>
-        <span>nebo</span>
-        <label class="button button-primary" for="attendanceInput">Vybrat soubor</label>
+        <div class="drop-icon" aria-hidden="true">↻</div>
+        <strong>Načíst aktuální data</strong>
+        <span>přímo z veřejné tabulky Google Sheets</span>
+        <button id="googleSheetsButton" class="button button-primary" type="button">Načíst z Google Sheets</button>
+        <span class="upload-separator">nebo ručně</span>
+        <label class="button button-secondary" for="attendanceInput">Vybrat XLSX / CSV</label>
       </div>
 
       <label id="sheetSelectWrap" class="sheet-select" hidden>Vyberte měsíční list
@@ -73,6 +75,18 @@
       </label>
 
       <div id="importMessage" class="toast" role="status" aria-live="polite" hidden></div>
+    </section>
+
+    <section id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading">
+      <div class="alerts-heading">
+        <div>
+          <p class="step-label">Pozornost</p>
+          <h2 id="alertsHeading">Upozornění týmu</h2>
+        </div>
+        <span id="alertsCount" class="alerts-count">0</span>
+      </div>
+      <div id="alertsList" class="alerts-list"></div>
+      <p id="alertsEmpty" class="alerts-empty">Aktuálně není potřeba nic řešit.</p>
     </section>
 
     <section class="overview" aria-labelledby="overviewHeading">
@@ -179,6 +193,10 @@
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
           <h3 id="feedbackHistoryHeading">Historie palců</h3>
           <div id="feedbackHistory"></div>
+        </section>
+        <section class="audit-history" aria-labelledby="auditHistoryHeading">
+          <h3 id="auditHistoryHeading">Historie změn profilu</h3>
+          <div id="auditHistory"></div>
         </section>
       </div>
       <div class="dialog-actions">
