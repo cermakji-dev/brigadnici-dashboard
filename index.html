@@ -12,11 +12,14 @@
     <form id="loginForm" class="login-card">
       <p class="eyebrow">Interní aplikace</p>
       <h1>Přihlášení</h1>
-      <p class="section-copy">Zadejte povolený e-mail. Supabase vám pošle bezpečný přihlašovací odkaz.</p>
+      <p class="section-copy">Přihlaste se povoleným e-mailem a heslem.</p>
       <label>E-mail
         <input id="loginEmail" type="email" required autocomplete="email" placeholder="jmeno@firma.cz">
       </label>
-      <button class="button button-primary" type="submit">Poslat přihlašovací odkaz</button>
+      <label>Heslo
+        <input id="loginPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="Vaše heslo">
+      </label>
+      <button class="button button-primary" type="submit">Přihlásit se</button>
       <p id="authMessage" class="message" role="status" aria-live="polite"></p>
     </form>
   </section>

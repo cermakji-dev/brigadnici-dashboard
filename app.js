@@ -11,6 +11,7 @@ const elements = {
   authGate: document.querySelector("#authGate"),
   loginForm: document.querySelector("#loginForm"),
   loginEmail: document.querySelector("#loginEmail"),
+  loginPassword: document.querySelector("#loginPassword"),
   authMessage: document.querySelector("#authMessage"),
   appContent: [...document.querySelectorAll(".app-content")],
   signedInUser: document.querySelector("#signedInUser"),
@@ -59,7 +60,7 @@ const elements = {
   cancelFeedbackAction: document.querySelector("#cancelFeedbackAction")
 };
 
-elements.loginForm.addEventListener("submit", requestMagicLink);
+elements.loginForm.addEventListener("submit", signInWithPassword);
 elements.signOutButton.addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
 });
@@ -181,15 +182,15 @@ async function initializeApp() {
   else await handleSession(data.session);
 }
 
-async function requestMagicLink(event) {
+async function signInWithPassword(event) {
   event.preventDefault();
   if (!supabaseClient) return;
-  showAuthMessage("Odesílám přihlašovací odkaz…");
-  const { error } = await supabaseClient.auth.signInWithOtp({
+  showAuthMessage("Přihlašuji…");
+  const { error } = await supabaseClient.auth.signInWithPassword({
     email: elements.loginEmail.value.trim(),
-    options: { emailRedirectTo: window.location.href.split("#")[0] }
+    password: elements.loginPassword.value
   });
-  showAuthMessage(error ? error.message : "Odkaz byl odeslán. Otevřete jej ve svém e-mailu.", Boolean(error));
+  showAuthMessage(error ? "E-mail nebo heslo není správné." : "Přihlášení proběhlo úspěšně.", Boolean(error));
 }
 
 async function handleSession(session) {
