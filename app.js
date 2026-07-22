@@ -25,6 +25,7 @@ let salesDays = [];
 const nextShiftsByPerson = new Map();
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
+let currentSalesSort = { key: "date", direction: "desc" };
 const activeQuickFilters = new Set();
 const dismissedAlertSignatures = new Set(loadDismissedAlerts());
 let visibleAlertSignatures = [];
@@ -82,7 +83,8 @@ const elements = {
   alertsEmpty: document.querySelector("#alertsEmpty"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
-  tableSortButtons: [...document.querySelectorAll(".table-sort")],
+  tableSortButtons: [...document.querySelectorAll(".people-table .table-sort")],
+  salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
   teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
   teamViewSections: [...document.querySelectorAll(".team-view-section")], salesDashboard: document.querySelector("#salesDashboard"),
@@ -199,6 +201,7 @@ elements.sortSelect.addEventListener("change", () => {
   render();
 });
 elements.tableSortButtons.forEach(button => button.addEventListener("click", () => setTableSort(button.dataset.sortKey)));
+elements.salesSortButtons.forEach(button => button.addEventListener("click", () => setSalesTableSort(button.dataset.salesSortKey)));
 elements.departmentFilters.forEach(input => input.addEventListener("change", render));
 elements.departmentMatchMode.addEventListener("change", render);
 elements.clearDepartmentFilters.addEventListener("click", () => {
@@ -748,6 +751,23 @@ function updateTableSortIndicators() {
     button.classList.toggle("is-active", active);
     button.querySelector("span").textContent = active ? (currentSort.direction === "asc" ? "↑" : "↓") : "↕";
     button.closest("th").setAttribute("aria-sort", active ? (currentSort.direction === "asc" ? "ascending" : "descending") : "none");
+  });
+}
+
+function setSalesTableSort(key) {
+  const defaultDirection = key === "name" ? "asc" : "desc";
+  currentSalesSort = currentSalesSort.key === key
+    ? { key, direction: currentSalesSort.direction === "asc" ? "desc" : "asc" }
+    : { key, direction: defaultDirection };
+  renderSalesDashboard();
+}
+
+function updateSalesSortIndicators() {
+  elements.salesSortButtons.forEach(button => {
+    const active = button.dataset.salesSortKey === currentSalesSort.key;
+    button.classList.toggle("is-active", active);
+    button.querySelector("span").textContent = active ? (currentSalesSort.direction === "asc" ? "↑" : "↓") : "↕";
+    button.closest("th").setAttribute("aria-sort", active ? (currentSalesSort.direction === "asc" ? "ascending" : "descending") : "none");
   });
 }
 
@@ -1640,6 +1660,12 @@ function renderSalesDashboard() {
   if (status === "not_sales") rows = rows.filter(day => day.status === "not_sales");
   if (status === "below") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) < 100);
   if (status === "met") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) >= 100);
+  rows.sort((a, b) => {
+    const comparison = compareSalesDays(a, b, currentSalesSort.key);
+    return (currentSalesSort.direction === "asc" ? comparison : -comparison)
+      || String(b.date).localeCompare(String(a.date));
+  });
+  updateSalesSortIndicators();
   const reported = rows.filter(day => day.status === "reported");
   const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
   const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
@@ -1667,6 +1693,30 @@ function renderSalesDashboard() {
     row.querySelector("button").addEventListener("click", () => openSalesReport(day));
     return row;
   }));
+}
+
+function compareSalesDays(a, b, key) {
+  if (key === "name") {
+    const aName = personByRemoteId(a.workerId)?.name || "";
+    const bName = personByRemoteId(b.workerId)?.name || "";
+    return aName.localeCompare(bName, "cs");
+  }
+  if (key === "date") return String(a.date).localeCompare(String(b.date));
+  if (key === "hours") return Number(a.status === "reported" ? a.salesHours : a.plannedHours) - Number(b.status === "reported" ? b.salesHours : b.plannedHours);
+  if (key === "hardware") return Number(a.hardware || 0) - Number(b.hardware || 0);
+  if (key === "services") return Number(a.services || 0) - Number(b.services || 0);
+  if (key === "revenue") return salesRevenue(a) - salesRevenue(b);
+  if (key === "asr") return salesAsr(a) - salesAsr(b);
+  if (key === "aros") return Number(salesAros(a) ?? -1) - Number(salesAros(b) ?? -1);
+  if (key === "status") return salesStatusRank(a) - salesStatusRank(b);
+  return 0;
+}
+
+function salesStatusRank(day) {
+  if (day.status === "pending") return 0;
+  if (day.status === "not_sales") return 1;
+  if (salesTargetPercent(day) < 100) return 2;
+  return 3;
 }
 
 function openSalesForPerson(person) {
