@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=78">
+    <link rel="stylesheet" href="styles.css?v=79">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -317,6 +317,15 @@
             <label><input class="person-department" type="checkbox" value="PS"> PS</label>
           </div>
         </fieldset>
+        <fieldset class="onboarding-editor" id="onboardingEditor">
+          <legend>Nástupní úkoly</legend>
+          <p>Každý úkol se eviduje samostatně. Zaškolení odebere označení nováčka, ostatní připomínky zůstanou aktivní.</p>
+          <div class="onboarding-options">
+            <label><input id="onboardingTraining" type="checkbox"> Úvodní školení</label>
+            <label><input id="onboardingContracts" type="checkbox"> Podpis smluv</label>
+            <label><input id="onboardingTaxes" type="checkbox"> Daně</label>
+          </div>
+        </fieldset>
         <label class="notes-field">
           <span class="notes-label"><span>Poznámka v přehledu <small>zobrazuje se přímo na kartě a v seznamu</small></span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat</button></span>
           <textarea id="notesInput" rows="4" placeholder="Krátká hlavní informace viditelná bez otevření detailu…"></textarea>
@@ -519,6 +528,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=78"></script>
+  <script type="module" src="app.js?v=79"></script>
 </body>
 </html>

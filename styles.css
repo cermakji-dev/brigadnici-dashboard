@@ -676,3 +676,36 @@ textarea { resize: vertical; }
   .loader-mark, .loader-progress span { animation: none; }
   .person-card, .people-table tbody tr { animation: none; }
 }
+.onboarding-editor {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.onboarding-editor > p {
+  margin: 2px 0 12px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.onboarding-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onboarding-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+}
+
+@media (max-width: 680px) {
+  .onboarding-options { grid-template-columns: 1fr; }
+}

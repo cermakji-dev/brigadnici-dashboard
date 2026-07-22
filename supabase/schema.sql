@@ -259,3 +259,5 @@ create index if not exists feedback_worker_created_idx on public.feedback(worker
 create index if not exists worker_audit_worker_changed_idx on public.worker_audit(worker_id, changed_at desc);
 create index if not exists worker_notes_worker_created_idx on public.worker_notes(worker_id, created_at desc);
 create index if not exists app_feedback_created_idx on public.app_feedback(created_at desc);
+
+-- Následně spusťte také 2026-07-22-hardening.sql (onboarding, prodeje a role správců).
