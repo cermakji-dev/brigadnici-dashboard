@@ -641,22 +641,25 @@ async function saveDepartmentTraining() {
   const person = state.people[elements.personId.value];
   if (!person) return;
   const previous = [...(person.departments || [])];
+  const previousStatus = person.status;
   const next = elements.personDepartments.filter(input => input.checked).map(input => input.value);
+  const nextStatus = normalize(person.status) === "novacek" && next.length ? "Aktivní" : person.status;
   previewDepartmentSkills();
   if (JSON.stringify(previous) === JSON.stringify(next)) return;
   const metrics = calculateAutomaticMetrics(person.feedback, next);
   elements.personDepartments.forEach(input => { input.disabled = true; });
   try {
     if (supabaseClient && remoteUser && person.remoteId) {
-      const { error } = await supabaseClient.from("workers").update({ departments: next, skills: metrics.skills }).eq("id", person.remoteId);
+      const { error } = await supabaseClient.from("workers").update({ departments: next, skills: metrics.skills, status: nextStatus }).eq("id", person.remoteId);
       if (error) throw error;
       await refreshWorkerAudit(person);
     }
     person.departments = next;
     person.skills = metrics.skills;
+    person.status = nextStatus;
     saveState();
     render();
-    setMessage("Zaškolení bylo uloženo.", false, () => restoreDepartments(person, previous));
+    setMessage(nextStatus !== previousStatus ? "Zaškolení bylo uloženo a označení nováčka odebráno." : "Zaškolení bylo uloženo.", false, () => restoreDepartments(person, previous, previousStatus));
   } catch (error) {
     elements.personDepartments.forEach(input => { input.checked = previous.includes(input.value); });
     previewDepartmentSkills();
@@ -666,14 +669,15 @@ async function saveDepartmentTraining() {
   }
 }
 
-async function restoreDepartments(person, departments) {
+async function restoreDepartments(person, departments, status = person.status) {
   const metrics = calculateAutomaticMetrics(person.feedback, departments);
   if (supabaseClient && remoteUser && person.remoteId) {
-    const { error } = await supabaseClient.from("workers").update({ departments, skills: metrics.skills }).eq("id", person.remoteId);
+    const { error } = await supabaseClient.from("workers").update({ departments, skills: metrics.skills, status }).eq("id", person.remoteId);
     if (error) throw error;
   }
   person.departments = [...departments];
   person.skills = metrics.skills;
+  person.status = status;
   saveState();
   if (elements.dialog.open && elements.personId.value === person.id) {
     elements.personDepartments.forEach(input => { input.checked = departments.includes(input.value); });
@@ -1351,11 +1355,33 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
   if (existingError) throw new Error(`Kontrola nových brigádníků selhala: ${existingError.message}`);
 
   const existingByName = new Map();
-  (existingWorkers || []).forEach(worker => {
-    [worker.full_name, ...(worker.aliases || [])].filter(Boolean).forEach(candidate => {
-      existingByName.set(slugify(candidate), worker);
+  const identityExternalIds = new Set(WORKER_IDENTITIES.map(identity => identity.externalId));
+  const orderedWorkers = [...(existingWorkers || [])].sort((a, b) => {
+    const aPriority = identityExternalIds.has(a.external_user_id) ? 0 : String(a.external_user_id).startsWith("AUTO_") ? 2 : 1;
+    const bPriority = identityExternalIds.has(b.external_user_id) ? 0 : String(b.external_user_id).startsWith("AUTO_") ? 2 : 1;
+    return aPriority - bPriority;
+  });
+  orderedWorkers.forEach(worker => {
+    const identity = WORKER_IDENTITIES.find(item =>
+      item.externalId === worker.external_user_id ||
+      item.aliases.some(alias => slugify(alias) === slugify(worker.full_name))
+    );
+    const candidates = [worker.full_name, ...(worker.aliases || []), ...(identity ? [identity.name, ...identity.aliases] : [])];
+    candidates.filter(Boolean).forEach(candidate => {
+      const key = slugify(candidate);
+      if (!existingByName.has(key)) existingByName.set(key, worker);
     });
   });
+
+  const duplicateIds = orderedWorkers.filter(worker => {
+    if (!worker.active || !String(worker.external_user_id).startsWith("AUTO_")) return false;
+    const canonical = existingByName.get(slugify(worker.full_name));
+    return canonical && canonical.id !== worker.id && identityExternalIds.has(canonical.external_user_id);
+  }).map(worker => worker.id);
+  if (duplicateIds.length) {
+    const { error } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).in("id", duplicateIds);
+    if (error) throw new Error(`Oprava duplicitních karet selhala: ${error.message}`);
+  }
 
   const newcomers = [];
   const inactiveIds = [];
@@ -1393,7 +1419,7 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
     const { error } = await supabaseClient.from("workers").insert(inserts);
     if (error) throw new Error(`Vytvoření karet nováčků selhalo: ${error.message}`);
   }
-  if (newcomers.length) await loadRemoteState();
+  if (newcomers.length || duplicateIds.length) await loadRemoteState();
   return newcomers;
 }
 
