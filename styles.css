@@ -373,6 +373,8 @@ select::-ms-expand { display: none; }
 .department-badges { display: flex; min-height: 24px; flex-wrap: wrap; gap: 6px; margin-bottom: 13px; }
 .department-badge { padding: 4px 8px; background: var(--brand-soft); border-radius: 999px; font-size: 0.74rem; font-weight: 650; }
 .department-badge.empty { color: var(--muted); font-weight: 500; }
+.department-badge.newcomer-badge { background: color-mix(in srgb, var(--brand-purple) 20%, var(--surface)); color: color-mix(in srgb, var(--brand-purple) 72%, var(--text)); border: 1px solid color-mix(in srgb, var(--brand-purple) 38%, transparent); }
+.alert-reason.onboarding { background: color-mix(in srgb, var(--brand-purple) 16%, transparent); color: color-mix(in srgb, var(--brand-purple) 72%, var(--text)); }
 .metric { margin-top: 13px; }
 .metric > div:first-child { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 7px; font-size: 0.82rem; }
 .bar { height: 6px; overflow: hidden; background: var(--brand-soft); border-radius: 999px; }
