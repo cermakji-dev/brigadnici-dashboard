@@ -1285,6 +1285,8 @@ async function importRows(rows, sourceName) {
   const emailColumn = findColumn(columns, ["email", "e-mail"], false);
   if (!nameColumn || !hoursColumn) throw new Error("Chybí sloupec Jméno nebo Hodiny.");
 
+  const createdNewcomers = await ensureImportedWorkers(rows, nameColumn, emailColumn);
+
   const totals = new Map();
   const unmatchedNames = new Set();
   rows.forEach(row => {
@@ -1322,10 +1324,86 @@ async function importRows(rows, sourceName) {
   saveState();
   render();
   setImportCollapsed(true);
+  const newcomerText = createdNewcomers.length
+    ? ` Nově vytvořené karty: ${createdNewcomers.join(", ")}.`
+    : "";
   const unmatchedText = unmatchedNames.size
     ? ` Nepřiřazená jména: ${[...unmatchedNames].join(", ")}. Jejich existující hodiny nebyly přepsány.`
     : " Všechna jména byla úspěšně spárována.";
-  setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.${unmatchedText}`, unmatchedNames.size > 0);
+  setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.${newcomerText}${unmatchedText}`, unmatchedNames.size > 0);
+}
+
+async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
+  if (!supabaseClient || !remoteUser) return [];
+  const imported = new Map();
+  rows.forEach(row => {
+    const name = String(row[nameColumn] || "").trim();
+    if (!name) return;
+    const key = slugify(name);
+    if (!key || imported.has(key)) return;
+    imported.set(key, { name, email: emailColumn && row[emailColumn] ? String(row[emailColumn]).trim() : null });
+  });
+  if (!imported.size) return [];
+
+  const { data: existingWorkers, error: existingError } = await supabaseClient
+    .from("workers")
+    .select("id, external_user_id, full_name, aliases, active");
+  if (existingError) throw new Error(`Kontrola nových brigádníků selhala: ${existingError.message}`);
+
+  const existingByName = new Map();
+  (existingWorkers || []).forEach(worker => {
+    [worker.full_name, ...(worker.aliases || [])].filter(Boolean).forEach(candidate => {
+      existingByName.set(slugify(candidate), worker);
+    });
+  });
+
+  const newcomers = [];
+  const inactiveIds = [];
+  const inserts = [];
+  imported.forEach((worker, key) => {
+    const existing = existingByName.get(key);
+    if (existing) {
+      if (!existing.active) {
+        inactiveIds.push(existing.id);
+        newcomers.push(worker.name);
+      }
+      return;
+    }
+    inserts.push({
+      external_user_id: automaticWorkerId(key),
+      full_name: worker.name,
+      email: worker.email,
+      role: "Sales Support",
+      status: "Nováček",
+      active: true,
+      skills: 0,
+      reliability: 100,
+      departments: [],
+      aliases: [],
+      notes: ""
+    });
+    newcomers.push(worker.name);
+  });
+
+  if (inactiveIds.length) {
+    const { error } = await supabaseClient.from("workers").update({ active: true, status: "Nováček" }).in("id", inactiveIds);
+    if (error) throw new Error(`Obnovení nových brigádníků selhalo: ${error.message}`);
+  }
+  if (inserts.length) {
+    const { error } = await supabaseClient.from("workers").insert(inserts);
+    if (error) throw new Error(`Vytvoření karet nováčků selhalo: ${error.message}`);
+  }
+  if (newcomers.length) await loadRemoteState();
+  return newcomers;
+}
+
+function automaticWorkerId(key) {
+  let hash = 2166136261;
+  for (const character of key) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `AUTO_${key.toUpperCase().replace(/-/g, "_")}_${(hash >>> 0).toString(36).toUpperCase()}`;
 }
 
 async function saveAttendanceRemote(totals, sourceName) {
@@ -1528,6 +1606,11 @@ function renderAlerts() {
 
   people.forEach(person => {
     const reasons = [];
+    if (normalize(person.status) === "novacek") {
+      reasons.push({ type: "onboarding", text: "Splnit úvodní školení" });
+      reasons.push({ type: "onboarding", text: "Zajistit podpis smluv" });
+      reasons.push({ type: "onboarding", text: "Vyřešit daně" });
+    }
     const previousReliability = previousAuditValue(person, "reliability");
     if (previousReliability !== null && Number(person.reliability) < Number(previousReliability)) {
       reasons.push({ type: "attendance", text: `Docházka klesla z ${previousReliability} na ${person.reliability} %` });
@@ -1816,7 +1899,14 @@ function createCard(person, index = 0) {
   else avatar.textContent = initials(person.name);
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
   card.querySelector(".hours-60-value").textContent = `${formatNumber(person.hours60 || 0)} h`;
-  renderDepartmentBadges(card.querySelector(".department-badges"), person.departments);
+  const departmentBadges = card.querySelector(".department-badges");
+  renderDepartmentBadges(departmentBadges, person.departments);
+  if (normalize(person.status) === "novacek") {
+    const newcomerBadge = document.createElement("span");
+    newcomerBadge.className = "department-badge newcomer-badge";
+    newcomerBadge.textContent = "Nováček";
+    departmentBadges.prepend(newcomerBadge);
+  }
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
   setupInlineNote(card.querySelector(".inline-note"), person);
