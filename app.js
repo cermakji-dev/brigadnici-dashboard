@@ -1435,18 +1435,13 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
   if (existingError) throw new Error(`Kontrola nových brigádníků selhala: ${existingError.message}`);
 
   const existingByName = new Map();
-  const identityExternalIds = new Set(WORKER_IDENTITIES.map(identity => identity.externalId));
   const orderedWorkers = [...(existingWorkers || [])].sort((a, b) => {
-    const aPriority = identityExternalIds.has(a.external_user_id) ? 0 : String(a.external_user_id).startsWith("AUTO_") ? 2 : 1;
-    const bPriority = identityExternalIds.has(b.external_user_id) ? 0 : String(b.external_user_id).startsWith("AUTO_") ? 2 : 1;
+    const aPriority = String(a.external_user_id).startsWith("AUTO_") ? 1 : 0;
+    const bPriority = String(b.external_user_id).startsWith("AUTO_") ? 1 : 0;
     return aPriority - bPriority;
   });
   orderedWorkers.forEach(worker => {
-    const identity = WORKER_IDENTITIES.find(item =>
-      item.externalId === worker.external_user_id ||
-      item.aliases.some(alias => slugify(alias) === slugify(worker.full_name))
-    );
-    const candidates = [worker.full_name, ...(worker.aliases || []), ...(identity ? [identity.name, ...identity.aliases] : [])];
+    const candidates = [worker.full_name, ...(worker.aliases || [])];
     candidates.filter(Boolean).forEach(candidate => {
       const key = slugify(candidate);
       if (!existingByName.has(key)) existingByName.set(key, worker);
@@ -1456,7 +1451,7 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
   const duplicateIds = orderedWorkers.filter(worker => {
     if (!worker.active || !String(worker.external_user_id).startsWith("AUTO_")) return false;
     const canonical = existingByName.get(slugify(worker.full_name));
-    return canonical && canonical.id !== worker.id && identityExternalIds.has(canonical.external_user_id);
+    return canonical && canonical.id !== worker.id && !String(canonical.external_user_id).startsWith("AUTO_");
   }).map(worker => worker.id);
   const ignoredLabelIds = orderedWorkers
     .filter(worker => worker.active && String(worker.external_user_id).startsWith("AUTO_") && isIgnoredShiftLabel(worker.full_name))
