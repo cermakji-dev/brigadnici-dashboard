@@ -89,6 +89,11 @@ const elements = {
   alertsSummary: document.querySelector("#alertsSummary"),
   alertsEmpty: document.querySelector("#alertsEmpty"),
   searchInput: document.querySelector("#searchInput"),
+  clearSearchButton: document.querySelector("#clearSearchButton"),
+  visiblePeopleKpi: document.querySelector("#visiblePeopleKpi"),
+  averageSkillsKpi: document.querySelector("#averageSkillsKpi"),
+  averageReliabilityKpi: document.querySelector("#averageReliabilityKpi"),
+  missingNotesKpi: document.querySelector("#missingNotesKpi"),
   sortSelect: document.querySelector("#sortSelect"),
   tableSortButtons: [...document.querySelectorAll(".people-table .table-sort")],
   salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
@@ -198,7 +203,16 @@ elements.salesPeriodFilter.addEventListener("change", renderSalesDashboard);
 elements.salesStatusFilter.addEventListener("change", renderSalesDashboard);
 elements.profileTabs.forEach(button => button.addEventListener("click", () => activateProfileTab(button.dataset.profileTab)));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
-elements.searchInput.addEventListener("input", scheduleTeamRender);
+elements.searchInput.addEventListener("input", () => {
+  elements.clearSearchButton.hidden = !elements.searchInput.value;
+  scheduleTeamRender();
+});
+elements.clearSearchButton.addEventListener("click", () => {
+  elements.searchInput.value = "";
+  elements.clearSearchButton.hidden = true;
+  elements.searchInput.focus();
+  renderTeam();
+});
 elements.sortSelect.addEventListener("change", () => {
   currentSort = {
     name: { key: "name", direction: "asc" },
@@ -248,6 +262,16 @@ elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
 elements.alertsClear.addEventListener("click", clearCurrentAlerts);
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && elements.alertsPanel.classList.contains("is-open")) setAlertsOpen(false);
+  const typing = event.target.matches?.("input, textarea, select, [contenteditable='true']");
+  if (event.key === "/" && !typing) {
+    event.preventDefault();
+    elements.searchInput.focus();
+  }
+  if (event.key === "Escape" && document.activeElement === elements.searchInput && elements.searchInput.value) {
+    elements.searchInput.value = "";
+    elements.clearSearchButton.hidden = true;
+    renderTeam();
+  }
 });
 document.addEventListener("click", event => {
   if (!elements.alertsPanel.classList.contains("is-open")) return;
@@ -1619,8 +1643,8 @@ function scheduleTeamRender() {
 function renderTeam() {
   const query = normalize(elements.searchInput.value);
   const selectedDepartments = elements.departmentFilters.filter(input => input.checked).map(input => input.value);
-  const people = Object.values(state.people).filter(person => {
-    if (!isPersonInSelectedMonth(person)) return false;
+  const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
+  const people = allPeople.filter(person => {
     if (!normalize(person.name).includes(query)) return false;
     if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
     if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
@@ -1645,9 +1669,13 @@ function renderTeam() {
   elements.peopleTableWrap.hidden = people.length === 0 || currentView !== "table";
   elements.cardViewButton.classList.toggle("is-active", currentView === "cards");
   elements.tableViewButton.classList.toggle("is-active", currentView === "table");
-  const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
   elements.attendancePeople.textContent = allPeople.length;
   elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
+  elements.visiblePeopleKpi.textContent = `${people.length} / ${allPeople.length}`;
+  elements.averageSkillsKpi.textContent = `${averageMetric(people, "skills")} %`;
+  elements.averageReliabilityKpi.textContent = `${averageMetric(people, "reliability")} %`;
+  elements.missingNotesKpi.textContent = people.filter(person => !String(person.notes || "").trim()).length;
+  updateQuickFilterCounts(allPeople);
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
     elements.emptyStateText.textContent = query
@@ -1656,8 +1684,27 @@ function renderTeam() {
   }
 }
 
+function averageMetric(people, key) {
+  if (!people.length) return 0;
+  return Math.round(people.reduce((sum, person) => sum + Number(person[key] || 0), 0) / people.length);
+}
+
+function updateQuickFilterCounts(people) {
+  const counts = {
+    "no-training": people.filter(person => !(person.departments || []).length).length,
+    "no-note": people.filter(person => !String(person.notes || "").trim()).length,
+    negative: people.filter(person => feedbackCount(person, "negative") > 0).length,
+    "zero-hours": people.filter(person => Number(person.hours || 0) === 0).length
+  };
+  elements.quickFilters.forEach(button => {
+    const badge = button.querySelector("span");
+    if (badge) badge.textContent = counts[button.dataset.quickFilter] ?? 0;
+  });
+}
+
 function resetAllFilters() {
   elements.searchInput.value = "";
+  elements.clearSearchButton.hidden = true;
   activeQuickFilters.clear();
   elements.quickFilters.forEach(button => button.classList.remove("is-active"));
   elements.clearQuickFilters.hidden = true;
@@ -1958,6 +2005,7 @@ function syncSalesMonthOptions() {
   );
   elements.salesPeriodFilter.value = selected;
   elements.salesPeriodFilter.dataset.ready = "true";
+  elements.salesPeriodFilter.syncCustomSelect?.();
 }
 
 function compareSalesDays(a, b, key) {
@@ -2624,4 +2672,88 @@ function periodFromSheetName(sheetName) {
   return `${year}-${String(months.indexOf(match[1]) + 1).padStart(2, "0")}-01`;
 }
 
+function initializeCustomSelects() {
+  [
+    [elements.sortSelect, false],
+    [elements.departmentMatchMode, false],
+    [elements.salesPeriodFilter, true],
+    [elements.salesStatusFilter, false]
+  ].forEach(([select, monthGrid]) => enhanceSelect(select, monthGrid));
+
+  document.addEventListener("click", event => {
+    document.querySelectorAll(".custom-select.is-open").forEach(wrapper => {
+      if (!wrapper.contains(event.target)) closeCustomSelect(wrapper);
+    });
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") document.querySelectorAll(".custom-select.is-open").forEach(closeCustomSelect);
+  });
+}
+
+function enhanceSelect(select, monthGrid = false) {
+  if (!select || select.dataset.enhanced === "true") return;
+  select.dataset.enhanced = "true";
+  select.classList.add("custom-select-native");
+  const wrapper = document.createElement("div");
+  wrapper.className = `custom-select${monthGrid ? " custom-select-months" : ""}`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "custom-select-button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  const value = document.createElement("span");
+  const chevron = document.createElement("i");
+  chevron.setAttribute("aria-hidden", "true");
+  button.append(value, chevron);
+  const menu = document.createElement("div");
+  menu.className = "custom-select-menu";
+  menu.setAttribute("role", "listbox");
+  menu.hidden = true;
+  select.before(wrapper);
+  wrapper.append(select, button, menu);
+
+  const sync = () => {
+    const selected = select.options[select.selectedIndex];
+    value.textContent = selected?.textContent || "Vyberte…";
+    menu.replaceChildren(...[...select.options].map(option => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "custom-select-option";
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(option.value === select.value));
+      item.textContent = option.textContent;
+      if (option.value === select.value) item.classList.add("is-selected");
+      item.addEventListener("click", event => {
+        event.stopPropagation();
+        select.value = option.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        sync();
+        closeCustomSelect(wrapper);
+      });
+      return item;
+    }));
+  };
+  select.syncCustomSelect = sync;
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    const opening = !wrapper.classList.contains("is-open");
+    document.querySelectorAll(".custom-select.is-open").forEach(closeCustomSelect);
+    if (opening) {
+      wrapper.classList.add("is-open");
+      menu.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+    }
+  });
+  sync();
+}
+
+function closeCustomSelect(wrapper) {
+  wrapper.classList.remove("is-open");
+  const menu = wrapper.querySelector(".custom-select-menu");
+  const button = wrapper.querySelector(".custom-select-button");
+  if (menu) menu.hidden = true;
+  button?.setAttribute("aria-expanded", "false");
+}
+
+initializeCustomSelects();
 void initializeApp();

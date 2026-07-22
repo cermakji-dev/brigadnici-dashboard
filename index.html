@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=81">
+    <link rel="stylesheet" href="styles.css?v=82">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -148,6 +148,7 @@
       <div class="section-heading">
         <div>
           <h2 id="overviewHeading">Přehled týmu</h2>
+          <p class="section-subtitle">Aktuální sestava podle vybraného měsíce</p>
         </div>
         <div class="overview-actions">
           <details class="team-management">
@@ -160,11 +161,20 @@
         </div>
       </div>
 
+      <div class="team-insights" aria-label="Souhrn aktuálního výběru">
+        <article><span>Zobrazeno</span><strong id="visiblePeopleKpi">0</strong><small>z aktuálního týmu</small></article>
+        <article><span>Průměr schopností</span><strong id="averageSkillsKpi">0 %</strong><small>podle zaškolení</small></article>
+        <article><span>Průměr docházky</span><strong id="averageReliabilityKpi">0 %</strong><small>aktuální výběr</small></article>
+        <article><span>Chybí poznámka</span><strong id="missingNotesKpi">0</strong><small>v aktuálním výběru</small></article>
+      </div>
+
       <div class="team-controls">
       <div class="toolbar">
         <label class="search-field">
           <span class="visually-hidden">Hledat brigádníka</span>
           <input id="searchInput" type="search" placeholder="Hledat podle jména…">
+          <kbd aria-hidden="true">/</kbd>
+          <button id="clearSearchButton" type="button" aria-label="Vymazat hledání" hidden>×</button>
         </label>
         <select id="sortSelect" aria-label="Řazení brigádníků">
           <option value="name">Podle jména</option>
@@ -178,10 +188,10 @@
       </div>
 
       <div class="quick-filters" aria-label="Rychlé filtry">
-        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
-        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky v přehledu</button>
-        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
-        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
+        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny <span>0</span></button>
         <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
       </div>
 
@@ -529,6 +539,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=81"></script>
+  <script type="module" src="app.js?v=82"></script>
 </body>
 </html>
