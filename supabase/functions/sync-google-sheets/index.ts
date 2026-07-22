@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-import * as XLSX from "xlsx";
+import { createClient } from "npm:@supabase/supabase-js@2.53.0";
+import * as XLSX from "npm:xlsx@0.18.5";
 
 const SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const EXPORT_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
