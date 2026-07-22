@@ -1032,7 +1032,7 @@ async function syncGoogleSheets() {
   } catch (error) {
     elements.syncStatusTitle.textContent = "Synchronizace se nezdařila";
     elements.syncStatusMeta.textContent = "Kliknutím na ikonu ji můžete zopakovat";
-    setMessage(`${automatic ? "Automatická synchronizace: " : ""}${error.message || "Google tabulku se nepodařilo načíst."}`, true);
+    setMessage(error.message || "Google tabulku se nepodařilo načíst.", true);
   } finally {
     button.disabled = false;
     elements.syncRefreshButton.disabled = false;
