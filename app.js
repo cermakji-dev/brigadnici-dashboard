@@ -4,6 +4,7 @@ const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG", "PS"];
 const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
+const SALES_ASR_TARGET = 6500;
 const WORKER_IDENTITIES = [
   { externalId: "USER92212", name: "Frey Jakub", aliases: ["Frey Jakub", "Frey Golobov Jakub", "Jakub Frey"] },
   { externalId: "USER98794", name: "Bui Martin", aliases: ["Bui Martin", "Bui Anh Duc", "Martin Bui", "Martin Buy", "Buy Martin"] },
@@ -19,6 +20,8 @@ let loaderHideTimer = null;
 let sessionLoadPromise = null;
 let hasAutoSynced = false;
 let workerNotesTableAvailable = true;
+let salesDaysTableAvailable = true;
+let salesDays = [];
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
 const activeQuickFilters = new Set();
@@ -80,6 +83,10 @@ const elements = {
   sortSelect: document.querySelector("#sortSelect"),
   tableSortButtons: [...document.querySelectorAll(".table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
+  teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
+  teamViewSections: [...document.querySelectorAll(".team-view-section")], salesDashboard: document.querySelector("#salesDashboard"),
+  salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
+  salesPeriodFilter: document.querySelector("#salesPeriodFilter"), salesStatusFilter: document.querySelector("#salesStatusFilter"), salesTableBody: document.querySelector("#salesTableBody"), salesEmpty: document.querySelector("#salesEmpty"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
   clearDepartmentFilters: document.querySelector("#clearDepartmentFilters"),
@@ -108,6 +115,7 @@ const elements = {
   feedbackHistory: document.querySelector("#feedbackHistory"),
   feedbackBreakdown: document.querySelector("#feedbackBreakdown"),
   auditHistory: document.querySelector("#auditHistory"),
+  profileSalesSummary: document.querySelector("#profileSalesSummary"), profileSalesHistory: document.querySelector("#profileSalesHistory"),
   profileTabs: [...document.querySelectorAll("[data-profile-tab]")],
   profilePanels: [...document.querySelectorAll("[data-profile-panel]")],
   feedbackDialog: document.querySelector("#feedbackDialog"),
@@ -121,6 +129,7 @@ const elements = {
   cancelFeedbackButton: document.querySelector("#cancelFeedbackButton"),
   cancelFeedbackAction: document.querySelector("#cancelFeedbackAction"),
   appFeedbackButton: document.querySelector("#appFeedbackButton"),
+  salesReportDialog: document.querySelector("#salesReportDialog"), salesReportForm: document.querySelector("#salesReportForm"), salesReportTitle: document.querySelector("#salesReportTitle"), salesReportDate: document.querySelector("#salesReportDate"), salesReportId: document.querySelector("#salesReportId"), salesReportHours: document.querySelector("#salesReportHours"), salesReportHardware: document.querySelector("#salesReportHardware"), salesReportServices: document.querySelector("#salesReportServices"), salesReportNote: document.querySelector("#salesReportNote"), salesReportPreview: document.querySelector("#salesReportPreview"), salesReportStatus: document.querySelector("#salesReportStatus"), closeSalesReport: document.querySelector("#closeSalesReport"), markNotSalesButton: document.querySelector("#markNotSalesButton"),
   appFeedbackDialog: document.querySelector("#appFeedbackDialog"),
   appFeedbackForm: document.querySelector("#appFeedbackForm"),
   appFeedbackCategory: document.querySelector("#appFeedbackCategory"),
@@ -173,6 +182,10 @@ elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets(fals
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
 elements.cardViewButton.addEventListener("click", () => setViewMode("cards"));
 elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
+elements.teamViewButton.addEventListener("click", () => setMainView("team"));
+elements.salesViewButton.addEventListener("click", () => setMainView("sales"));
+elements.salesPeriodFilter.addEventListener("change", renderSalesDashboard);
+elements.salesStatusFilter.addEventListener("change", renderSalesDashboard);
 elements.profileTabs.forEach(button => button.addEventListener("click", () => activateProfileTab(button.dataset.profileTab)));
 elements.attendanceInput.addEventListener("change", (event) => importAttendance(event.target.files[0]));
 elements.searchInput.addEventListener("input", render);
@@ -212,6 +225,10 @@ elements.clearNotesButton.addEventListener("click", () => {
   void saveDetailNotes();
 });
 elements.addWorkerNoteButton.addEventListener("click", addWorkerNote);
+elements.closeSalesReport.addEventListener("click", () => elements.salesReportDialog.close());
+elements.salesReportForm.addEventListener("submit", saveSalesReport);
+elements.markNotSalesButton.addEventListener("click", markSalesDayNotSales);
+[elements.salesReportHours, elements.salesReportHardware, elements.salesReportServices].forEach(input => input.addEventListener("input", updateSalesReportPreview));
 elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
 elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
 elements.alertsClear.addEventListener("click", clearCurrentAlerts);
@@ -825,16 +842,19 @@ function showAuthMessage(text, error = false) {
 }
 
 async function loadRemoteState() {
-  const [workersResult, attendanceResult, feedbackResult, auditResult, workerNotesResult] = await Promise.all([
+  const [workersResult, attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult] = await Promise.all([
     supabaseClient.from("workers").select("*").eq("active", true).order("full_name"),
     supabaseClient.from("attendance_totals").select("worker_id, period, hours"),
     supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_at").order("created_at"),
     supabaseClient.from("worker_audit").select("*").order("changed_at", { ascending: false }).limit(500),
-    supabaseClient.from("worker_notes").select("id, worker_id, body, created_by, created_by_email, created_at").order("created_at", { ascending: false })
+    supabaseClient.from("worker_notes").select("id, worker_id, body, created_by, created_by_email, created_at").order("created_at", { ascending: false }),
+    supabaseClient.from("sales_days").select("*").order("shift_date", { ascending: false })
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
   workerNotesTableAvailable = !workerNotesResult.error;
+  salesDaysTableAvailable = !salesDaysResult.error;
+  salesDays = (salesDaysResult.data || []).map(mapSalesDay);
 
   const latestPeriod = firstDayOfMonth(new Date());
   const hoursByWorker = new Map(attendanceResult.data
@@ -993,8 +1013,49 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   elements.sheetSelectWrap.hidden = false;
   const imported = await importWorkbookSheet(elements.sheetSelect.value);
   if (requireCurrentMonth && !imported) throw new Error("Aktuální list se nepodařilo načíst.");
-  if (imported) applyRolling60Hours(pendingWorkbook);
+  if (imported) {
+    applyRolling60Hours(pendingWorkbook);
+    await syncSalesExpectations(pendingWorkbook);
+  }
 }
+
+function mapSalesDay(row) {
+  return { id: row.id, workerId: row.worker_id, date: row.shift_date, plannedHours: Number(row.planned_hours || 0), salesHours: Number(row.sales_hours || 0), hardware: Number(row.hardware_revenue || 0), services: Number(row.services_revenue || 0), status: row.status, note: row.note || "", updatedByEmail: row.updated_by_email || "", updatedAt: row.updated_at };
+}
+
+async function syncSalesExpectations(workbook) {
+  if (!salesDaysTableAvailable || !supabaseClient || !remoteUser) return;
+  const totals = new Map();
+  workbook.SheetNames.forEach(sheetName => {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
+      if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
+      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
+      if (!date || date > startOfDay(new Date())) continue;
+      const assignments = matrix[rowIndex + 1].slice(1, 7).map(normalize);
+      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
+        const row = matrix[shiftRow];
+        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
+        if (!/^\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*h?$/.test(normalize(row[0]))) continue;
+        row.slice(1, 7).forEach((cell, column) => {
+          if (!["prodej", "vydej / prodej", "vydej/prodej"].includes(assignments[column])) return;
+          const worker = findActiveWorker(String(cell || "").trim());
+          if (!worker?.remoteId) return;
+          const key = `${worker.remoteId}|${dateKey(date)}`;
+          totals.set(key, { worker_id: worker.remoteId, shift_date: dateKey(date), planned_hours: (totals.get(key)?.planned_hours || 0) + 1 });
+        });
+      }
+    }
+  });
+  if (!totals.size) return;
+  const { error } = await supabaseClient.from("sales_days").upsert([...totals.values()], { onConflict: "worker_id,shift_date" });
+  if (error) { setMessage(`Prodejní směny se nepodařilo synchronizovat: ${error.message}`, true); return; }
+  const { data } = await supabaseClient.from("sales_days").select("*").order("shift_date", { ascending: false });
+  if (data) salesDays = data.map(mapSalesDay);
+  renderSalesDashboard(); renderAlerts();
+}
+
+function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 
 function renderMonthPicker(months) {
   elements.monthPickerValue.textContent = elements.sheetSelect.value || "Vyberte měsíc";
@@ -1291,6 +1352,7 @@ function render() {
       : "Aktivní filtry neodpovídají žádnému brigádníkovi.";
   }
   renderSyncStatus();
+  renderSalesDashboard();
   renderAlerts();
 }
 
@@ -1382,6 +1444,8 @@ function renderAlerts() {
     if (negative >= 2 && negative > positive) {
       reasons.push({ type: "feedback", text: `Převažují palce dolů (${negative} 👎 / ${positive} 👍)` });
     }
+    const pendingSales = salesDays.filter(day => day.workerId === person.remoteId && day.status === "pending" && day.date < dateKey(new Date()));
+    if (pendingSales.length) reasons.push({ type: "sales", text: `Chybí ${pendingSales.length} prodejní report${pendingSales.length > 1 ? "y" : ""}`, salesDayId: pendingSales[0].id });
     if (reasons.length) alerts.push({ person, reasons });
   });
 
@@ -1420,7 +1484,9 @@ function renderAlerts() {
     button.append(title, badges);
     button.addEventListener("click", () => {
       setAlertsOpen(false);
-      openPerson(person.id);
+      const salesReason = reasons.find(reason => reason.salesDayId);
+      if (salesReason) openSalesReport(salesDays.find(day => day.id === salesReason.salesDayId));
+      else openPerson(person.id);
     });
     return button;
   }));
@@ -1465,6 +1531,112 @@ function previousAuditValue(person, field) {
   return change ? change.before[field] : null;
 }
 
+function setMainView(view) {
+  const sales = view === "sales";
+  elements.teamViewSections.forEach(section => { section.hidden = sales; });
+  elements.salesDashboard.hidden = !sales;
+  elements.teamViewButton.classList.toggle("is-active", !sales);
+  elements.salesViewButton.classList.toggle("is-active", sales);
+  if (sales) {
+    renderSalesDashboard();
+    if (!salesDaysTableAvailable) setMessage("Prodejní výkon vyžaduje spuštění migrace sales-performance-migration.sql v Supabase.", true);
+  }
+}
+
+function personByRemoteId(id) { return Object.values(state.people).find(person => person.remoteId === id); }
+function salesRevenue(day) { return Number(day.hardware || 0) + Number(day.services || 0); }
+function salesAsr(day) { return day.salesHours > 0 ? salesRevenue(day) / day.salesHours : 0; }
+function salesTargetPercent(day) { return day.salesHours > 0 ? salesAsr(day) / SALES_ASR_TARGET * 100 : 0; }
+function formatCurrency(value) { return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(Number(value || 0)) + " Kč"; }
+function salesPerformanceClass(percent) { return percent >= 120 ? "excellent" : percent >= 100 ? "met" : percent >= 80 ? "near" : "below"; }
+
+function renderSalesDashboard() {
+  const now = new Date();
+  const days = elements.salesPeriodFilter.value === "all" ? null : Number(elements.salesPeriodFilter.value);
+  const cutoff = days ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1) : null;
+  let rows = salesDays.filter(day => !cutoff || new Date(`${day.date}T00:00:00`) >= cutoff);
+  const status = elements.salesStatusFilter.value;
+  if (status === "pending") rows = rows.filter(day => day.status === "pending");
+  if (status === "not_sales") rows = rows.filter(day => day.status === "not_sales");
+  if (status === "below") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) < 100);
+  if (status === "met") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) >= 100);
+  const reported = rows.filter(day => day.status === "reported");
+  const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
+  const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
+  const asr = hours ? revenue / hours : 0;
+  const missing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
+  elements.salesRevenueKpi.textContent = formatCurrency(revenue);
+  elements.salesHoursKpi.textContent = `${formatNumber(hours)} h`;
+  elements.salesAsrKpi.textContent = `${formatCurrency(asr)}/h`;
+  elements.salesTargetKpi.textContent = `${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %`;
+  elements.salesMissingKpi.textContent = missing;
+  elements.salesPendingBadge.hidden = missing === 0;
+  elements.salesPendingBadge.textContent = missing;
+  elements.salesEmpty.hidden = rows.length > 0;
+  elements.salesTableBody.replaceChildren(...rows.map(day => {
+    const person = personByRemoteId(day.workerId);
+    const row = document.createElement("tr");
+    const percent = salesTargetPercent(day);
+    const stateLabel = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
+    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td>${day.updatedByEmail || ""}</td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
+    row.querySelector("strong").textContent = person?.name || "Neznámý brigádník";
+    row.querySelector("button").addEventListener("click", () => openSalesReport(day));
+    return row;
+  }));
+}
+
+function openSalesForPerson(person) {
+  openPerson(person.id); activateProfileTab("sales"); renderProfileSales(person);
+}
+
+function renderProfileSales(person) {
+  const rows = salesDays.filter(day => day.workerId === person.remoteId);
+  const reported = rows.filter(day => day.status === "reported");
+  const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
+  const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
+  const asr = hours ? revenue / hours : 0;
+  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>Plnění TGT</span><strong>${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %</strong></article>`;
+  if (!rows.length) { elements.profileSalesHistory.innerHTML = '<p class="no-feedback">Zatím bez prodejních směn.</p>'; return; }
+  elements.profileSalesHistory.replaceChildren(...rows.map(day => {
+    const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
+    const percent = salesTargetPercent(day);
+    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))}` : day.status === "pending" ? "Chybí report" : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
+    item.addEventListener("click", () => openSalesReport(day)); return item;
+  }));
+}
+
+function openSalesReport(day) {
+  if (!day) return;
+  const person = personByRemoteId(day.workerId);
+  elements.salesReportId.value = day.id;
+  elements.salesReportTitle.textContent = person?.name || "Report prodejů";
+  elements.salesReportDate.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "full" }).format(new Date(`${day.date}T00:00:00`));
+  elements.salesReportHours.value = day.salesHours || day.plannedHours || "";
+  elements.salesReportHardware.value = day.hardware || ""; elements.salesReportServices.value = day.services || ""; elements.salesReportNote.value = day.note || "";
+  elements.salesReportStatus.textContent = ""; updateSalesReportPreview(); elements.salesReportDialog.showModal();
+}
+
+function updateSalesReportPreview() {
+  const hours = Number(elements.salesReportHours.value || 0), revenue = Number(elements.salesReportHardware.value || 0) + Number(elements.salesReportServices.value || 0);
+  const asr = hours ? revenue / hours : 0, percent = asr / SALES_ASR_TARGET * 100;
+  elements.salesReportPreview.innerHTML = `<span>Celkem <strong>${formatCurrency(revenue)}</strong></span><span>ASR <strong>${formatCurrency(asr)}/h</strong></span><span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent || 0)} % TGT</span>`;
+}
+
+async function saveSalesReport(event) {
+  event.preventDefault(); const day = salesDays.find(item => item.id === elements.salesReportId.value); if (!day) return;
+  const payload = { sales_hours: Number(elements.salesReportHours.value), hardware_revenue: Number(elements.salesReportHardware.value), services_revenue: Number(elements.salesReportServices.value), status: "reported", note: elements.salesReportNote.value.trim(), updated_by: remoteUser.id, updated_by_email: remoteUser.email.toLowerCase() };
+  const { data, error } = await supabaseClient.from("sales_days").update(payload).eq("id", day.id).select("*").single();
+  if (error) { elements.salesReportStatus.textContent = error.message; elements.salesReportStatus.classList.add("error"); return; }
+  Object.assign(day, mapSalesDay(data)); elements.salesReportDialog.close(); renderSalesDashboard(); renderAlerts(); const person = personByRemoteId(day.workerId); if (person) renderProfileSales(person); setMessage("Prodejní report byl uložen.");
+}
+
+async function markSalesDayNotSales() {
+  const day = salesDays.find(item => item.id === elements.salesReportId.value); if (!day) return;
+  const { data, error } = await supabaseClient.from("sales_days").update({ status: "not_sales", sales_hours: null, hardware_revenue: null, services_revenue: null, updated_by: remoteUser.id, updated_by_email: remoteUser.email.toLowerCase() }).eq("id", day.id).select("*").single();
+  if (error) { elements.salesReportStatus.textContent = error.message; return; }
+  Object.assign(day, mapSalesDay(data)); elements.salesReportDialog.close(); renderSalesDashboard(); renderAlerts(); setMessage("Směna byla označena jako Nebyl na prodeji.");
+}
+
 function createCard(person, index = 0) {
   const card = elements.cardTemplate.content.firstElementChild.cloneNode(true);
   card.style.setProperty("--item-index", index);
@@ -1482,6 +1654,16 @@ function createCard(person, index = 0) {
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
   setupInlineNote(card.querySelector(".inline-note"), person);
+  const personSales = salesDays.filter(day => day.workerId === person.remoteId);
+  const pendingSales = personSales.filter(day => day.status === "pending" && day.date < dateKey(new Date())).length;
+  const reportedSales = personSales.filter(day => day.status === "reported");
+  const totalSalesHours = reportedSales.reduce((sum, day) => sum + day.salesHours, 0);
+  const totalSalesRevenue = reportedSales.reduce((sum, day) => sum + day.hardware + day.services, 0);
+  const asr = totalSalesHours ? totalSalesRevenue / totalSalesHours : 0;
+  const salesStatus = card.querySelector(".sales-card-status");
+  salesStatus.textContent = pendingSales ? `Chybí ${pendingSales} report${pendingSales > 1 ? "y" : ""}` : (asr ? `ASR ${formatCurrency(asr)}/h` : "Bez prodejních dat");
+  salesStatus.classList.toggle("pending", pendingSales > 0);
+  card.querySelector(".sales-card-button").addEventListener("click", event => { event.stopPropagation(); openSalesForPerson(person); });
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
@@ -1631,6 +1813,7 @@ function openPerson(id) {
   elements.workerNoteInput.value = "";
   elements.workerNotesStatus.textContent = "";
   renderWorkerNotes(person);
+  renderProfileSales(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
   elements.dialog.showModal();
