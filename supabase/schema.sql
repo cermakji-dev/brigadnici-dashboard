@@ -79,6 +79,15 @@ create table if not exists public.worker_audit (
   after_data jsonb
 );
 
+create table if not exists public.worker_notes (
+  id uuid primary key default gen_random_uuid(),
+  worker_id uuid not null references public.workers(id) on delete cascade,
+  body text not null check (char_length(trim(body)) between 1 and 2000),
+  created_by uuid not null references auth.users(id),
+  created_by_email text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.app_feedback (
   id bigint generated always as identity primary key,
   category text not null check (category in ('suggestion', 'bug', 'other')),
@@ -152,6 +161,7 @@ alter table public.workers enable row level security;
 alter table public.attendance_totals enable row level security;
 alter table public.feedback enable row level security;
 alter table public.worker_audit enable row level security;
+alter table public.worker_notes enable row level security;
 alter table public.app_feedback enable row level security;
 
 revoke all on public.app_members from anon;
@@ -159,6 +169,7 @@ revoke all on public.workers from anon;
 revoke all on public.attendance_totals from anon;
 revoke all on public.feedback from anon;
 revoke all on public.worker_audit from anon;
+revoke all on public.worker_notes from anon;
 revoke all on public.app_feedback from anon;
 
 grant select on public.app_members to authenticated;
@@ -166,6 +177,7 @@ grant select, insert, update on public.workers to authenticated;
 grant select, insert, update on public.attendance_totals to authenticated;
 grant select, insert, delete on public.feedback to authenticated;
 grant select on public.worker_audit to authenticated;
+grant select, insert, delete on public.worker_notes to authenticated;
 grant insert on public.app_feedback to authenticated;
 
 grant execute on function public.is_app_member() to authenticated;
@@ -215,6 +227,23 @@ drop policy if exists "authenticated read audit" on public.worker_audit;
 create policy "authenticated read audit" on public.worker_audit
 for select to authenticated using (public.is_app_member());
 
+drop policy if exists "authenticated read worker notes" on public.worker_notes;
+create policy "authenticated read worker notes" on public.worker_notes
+for select to authenticated using (public.is_app_member());
+
+drop policy if exists "authenticated insert worker notes" on public.worker_notes;
+create policy "authenticated insert worker notes" on public.worker_notes
+for insert to authenticated
+with check (
+  public.is_app_member()
+  and created_by = auth.uid()
+  and created_by_email = lower(auth.jwt() ->> 'email')
+);
+
+drop policy if exists "authenticated delete worker notes" on public.worker_notes;
+create policy "authenticated delete worker notes" on public.worker_notes
+for delete to authenticated using (public.is_app_member());
+
 drop policy if exists "members insert app feedback" on public.app_feedback;
 create policy "members insert app feedback" on public.app_feedback
 for insert to authenticated
@@ -228,4 +257,5 @@ create index if not exists workers_active_idx on public.workers(active);
 create index if not exists attendance_period_idx on public.attendance_totals(period);
 create index if not exists feedback_worker_created_idx on public.feedback(worker_id, created_at desc);
 create index if not exists worker_audit_worker_changed_idx on public.worker_audit(worker_id, changed_at desc);
+create index if not exists worker_notes_worker_created_idx on public.worker_notes(worker_id, created_at desc);
 create index if not exists app_feedback_created_idx on public.app_feedback(created_at desc);
