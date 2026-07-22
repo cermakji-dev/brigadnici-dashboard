@@ -1652,9 +1652,10 @@ function salesPerformanceClass(percent) { return percent >= 120 ? "excellent" : 
 
 function renderSalesDashboard() {
   const now = new Date();
-  const days = elements.salesPeriodFilter.value === "all" ? null : Number(elements.salesPeriodFilter.value);
-  const cutoff = days ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1) : null;
-  let rows = salesDays.filter(day => !cutoff || new Date(`${day.date}T00:00:00`) >= cutoff);
+  syncSalesMonthOptions();
+  const selectedMonth = elements.salesPeriodFilter.value;
+  const periodRows = salesDays.filter(day => selectedMonth === "all" || String(day.date).startsWith(`${selectedMonth}-`));
+  let rows = [...periodRows];
   const status = elements.salesStatusFilter.value;
   if (status === "pending") rows = rows.filter(day => day.status === "pending");
   if (status === "not_sales") rows = rows.filter(day => day.status === "not_sales");
@@ -1673,15 +1674,16 @@ function renderSalesDashboard() {
   const services = reported.reduce((sum, day) => sum + day.services, 0);
   const asr = hours ? revenue / hours : 0;
   const aros = hardware > 0 ? services / hardware * 100 : null;
-  const missing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
+  const missing = periodRows.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
+  const globalMissing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   elements.salesRevenueKpi.textContent = formatCurrency(revenue);
   elements.salesHoursKpi.textContent = `${formatNumber(hours)} h`;
   elements.salesAsrKpi.textContent = `${formatCurrency(asr)}/h`;
   elements.salesArosKpi.textContent = formatAros(aros);
   elements.salesTargetKpi.textContent = `${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %`;
   elements.salesMissingKpi.textContent = missing;
-  elements.salesPendingBadge.hidden = missing === 0;
-  elements.salesPendingBadge.textContent = missing;
+  elements.salesPendingBadge.hidden = globalMissing === 0;
+  elements.salesPendingBadge.textContent = globalMissing;
   elements.salesEmpty.hidden = rows.length > 0;
   elements.salesTableBody.replaceChildren(...rows.map(day => {
     const person = personByRemoteId(day.workerId);
@@ -1693,6 +1695,29 @@ function renderSalesDashboard() {
     row.querySelector("button").addEventListener("click", () => openSalesReport(day));
     return row;
   }));
+}
+
+function syncSalesMonthOptions() {
+  const months = [...new Set(salesDays.map(day => String(day.date || "").slice(0, 7)).filter(month => /^\d{4}-\d{2}$/.test(month)))]
+    .sort((a, b) => b.localeCompare(a));
+  if (!months.length) return;
+
+  const previous = elements.salesPeriodFilter.value;
+  const currentMonth = dateKey(new Date()).slice(0, 7);
+  const keepPrevious = elements.salesPeriodFilter.dataset.ready === "true"
+    && (previous === "all" || months.includes(previous));
+  const selected = keepPrevious ? previous : (months.includes(currentMonth) ? currentMonth : months[0]);
+  const monthFormatter = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" });
+  elements.salesPeriodFilter.replaceChildren(
+    new Option("Všechny měsíce", "all"),
+    ...months.map(month => {
+      const [year, monthNumber] = month.split("-").map(Number);
+      const label = monthFormatter.format(new Date(year, monthNumber - 1, 1));
+      return new Option(label.charAt(0).toLocaleUpperCase("cs") + label.slice(1), month);
+    })
+  );
+  elements.salesPeriodFilter.value = selected;
+  elements.salesPeriodFilter.dataset.ready = "true";
 }
 
 function compareSalesDays(a, b, key) {
