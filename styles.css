@@ -313,7 +313,7 @@ main {
 .team-management-menu button { padding: 9px 10px; background: transparent; color: var(--text); border: 0; border-radius: 8px; cursor: pointer; text-align: left; font: inherit; font-size: .82rem; font-weight: 620; }
 .team-management-menu button:hover { background: var(--brand-soft); }
 
-.team-controls { position: sticky; z-index: 11; top: 76px; margin-bottom: 22px; overflow: visible; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--border); border-radius: 15px; box-shadow: var(--shadow); backdrop-filter: blur(16px); }
+.team-controls { position: relative; margin-bottom: 22px; overflow: visible; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--border); border-radius: 15px; box-shadow: var(--shadow); backdrop-filter: blur(16px); }
 .toolbar { justify-content: space-between; margin: 0; padding: 12px; }
 .search-field { position: relative; flex: 1; }
 .search-field input { padding-right: 72px; }
