@@ -22,6 +22,7 @@ let hasAutoSynced = false;
 let workerNotesTableAvailable = true;
 let salesDaysTableAvailable = true;
 let salesDays = [];
+const nextShiftsByPerson = new Map();
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
 const activeQuickFilters = new Set();
@@ -1015,6 +1016,7 @@ async function prepareWorkbook(file, requireCurrentMonth = false) {
   if (requireCurrentMonth && !imported) throw new Error("Aktuální list se nepodařilo načíst.");
   if (imported) {
     applyRolling60Hours(pendingWorkbook);
+    applyNextShifts(pendingWorkbook);
     await syncSalesExpectations(pendingWorkbook);
   }
 }
@@ -1119,6 +1121,74 @@ function applyRolling60Hours(workbook) {
   Object.values(state.people).forEach(person => { person.hours60 = totals.get(person.id) || 0; });
   saveState();
   render();
+}
+
+function applyNextShifts(workbook) {
+  const today = startOfDay(new Date());
+  const shifts = new Map();
+
+  workbook.SheetNames.forEach(sheetName => {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
+      if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
+      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
+      if (!date || date < today) continue;
+      const assignments = matrix[rowIndex + 1].slice(1, 7).map(formatShiftDepartment);
+
+      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
+        const row = matrix[shiftRow];
+        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
+        const slot = parseShiftSlot(row[0]);
+        if (!slot) continue;
+        row.slice(1, 7).forEach((cell, column) => {
+          const rawName = String(cell || "").trim();
+          const worker = findActiveWorker(rawName)
+            || findActiveWorker(rawName.replace(/\s+\d{1,2}:\d{2}\s*$/, ""));
+          if (!worker) return;
+          const department = assignments[column] || "Oddělení neuvedeno";
+          const key = `${worker.id}|${dateKey(date)}|${department}`;
+          const existing = shifts.get(key);
+          if (existing) {
+            if (slot.startMinutes < existing.startMinutes) {
+              existing.startMinutes = slot.startMinutes;
+              existing.start = slot.start;
+            }
+            if (slot.endMinutes > existing.endMinutes) {
+              existing.endMinutes = slot.endMinutes;
+              existing.end = slot.end;
+            }
+          } else {
+            shifts.set(key, { personId: worker.id, date, department, ...slot });
+          }
+        });
+      }
+    }
+  });
+
+  nextShiftsByPerson.clear();
+  [...shifts.values()]
+    .sort((a, b) => a.date - b.date || a.startMinutes - b.startMinutes)
+    .forEach(shift => {
+      if (!nextShiftsByPerson.has(shift.personId)) nextShiftsByPerson.set(shift.personId, shift);
+    });
+  render();
+}
+
+function parseShiftSlot(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*-\s*(\d{1,2})(?::(\d{2}))?\s*h?$/i);
+  if (!match) return null;
+  const startMinutes = Number(match[1]) * 60 + Number(match[2] || 0);
+  const endMinutes = Number(match[3]) * 60 + Number(match[4] || 0);
+  const clock = minutes => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+  return { startMinutes, endMinutes, start: clock(startMinutes), end: clock(endMinutes) };
+}
+
+function formatShiftDepartment(value) {
+  return String(value || "")
+    .replace(/[\u2190-\u21ff\u25b2-\u25ff]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/(^|\s)\S/g, letter => letter.toUpperCase());
 }
 
 function excelCellDate(cells) {
@@ -1402,7 +1472,9 @@ function renderPeopleTable(people) {
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
     row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Poznámka viditelná v přehledu…" aria-label="Poznámka v přehledu"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
-    row.querySelector("strong").textContent = person.name;
+    const name = row.querySelector("strong");
+    name.textContent = person.name;
+    setupNextShiftTooltip(name, person);
     row.querySelector("small").textContent = person.email || "";
     row.querySelector(".table-departments").textContent = departments;
     setupInlineNote(row.querySelector(".inline-note"), person);
@@ -1648,7 +1720,9 @@ function createCard(person, index = 0) {
   card.style.setProperty("--item-index", index);
   card.tabIndex = 0;
   card.setAttribute("aria-label", `Zobrazit detail: ${person.name}`);
-  card.querySelector("h3").textContent = person.name;
+  const name = card.querySelector("h3");
+  name.textContent = person.name;
+  setupNextShiftTooltip(name, person);
   const email = card.querySelector(".email");
   email.textContent = person.email || "";
   const avatar = card.querySelector(".avatar");
@@ -1690,6 +1764,35 @@ function createCard(person, index = 0) {
   scoreElement.classList.toggle("positive-score", currentScore > 0);
   scoreElement.classList.toggle("negative-score", currentScore < 0);
   return card;
+}
+
+function setupNextShiftTooltip(nameElement, person) {
+  const shift = nextShiftsByPerson.get(person.id);
+  nameElement.classList.add("shift-name-anchor");
+  nameElement.tabIndex = 0;
+  nameElement.setAttribute("aria-label", shift ? `${person.name}, zobrazit další směnu` : `${person.name}, další směna není naplánována`);
+
+  const tooltip = document.createElement("span");
+  tooltip.className = "next-shift-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  if (!shift) {
+    tooltip.innerHTML = '<span class="next-shift-label">Další směna</span><strong>Zatím není naplánována</strong>';
+  } else {
+    const date = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long" }).format(shift.date);
+    tooltip.innerHTML = '<span class="next-shift-label">Další směna</span><strong class="next-shift-date"></strong><span class="next-shift-detail"><b class="next-shift-time"></b><i class="next-shift-department"></i></span>';
+    tooltip.querySelector(".next-shift-date").textContent = date;
+    tooltip.querySelector(".next-shift-time").textContent = `${shift.start}–${shift.end}`;
+    tooltip.querySelector(".next-shift-department").textContent = shift.department;
+  }
+  nameElement.append(tooltip);
+  nameElement.addEventListener("click", event => {
+    event.stopPropagation();
+    nameElement.classList.toggle("is-tooltip-open");
+  });
+  nameElement.addEventListener("keydown", event => {
+    if (event.key === "Escape") nameElement.classList.remove("is-tooltip-open");
+  });
+  nameElement.addEventListener("blur", () => nameElement.classList.remove("is-tooltip-open"));
 }
 
 function setupInlineNote(input, person) {
