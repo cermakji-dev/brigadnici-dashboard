@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=84">
+    <link rel="stylesheet" href="styles.css?v=85">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -164,8 +164,8 @@
       <div class="team-insights" aria-label="Souhrn aktuálního výběru">
         <article><span>Zobrazeno</span><strong id="visiblePeopleKpi">0</strong><small>z aktuálního týmu</small></article>
         <article><span>Průměr schopností</span><strong id="averageSkillsKpi">0 %</strong><small>podle zaškolení</small></article>
-        <article><span>Průměr docházky</span><strong id="averageReliabilityKpi">0 %</strong><small>aktuální výběr</small></article>
-        <article><span>Chybí poznámka</span><strong id="missingNotesKpi">0</strong><small>v aktuálním výběru</small></article>
+        <article><span>Plánované hodiny</span><strong id="plannedHoursKpi">0 h</strong><small>celkem v měsíci</small></article>
+        <article class="free-hours-insight"><span>Volné hodiny</span><strong id="freeHoursKpi">0 h</strong><small id="freeHoursShareKpi">0 % není obsazeno</small></article>
       </div>
 
       <div class="team-controls">
@@ -283,7 +283,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v84</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v85</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -543,6 +543,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=84"></script>
+  <script type="module" src="app.js?v=85"></script>
 </body>
 </html>

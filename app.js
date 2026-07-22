@@ -92,8 +92,9 @@ const elements = {
   clearSearchButton: document.querySelector("#clearSearchButton"),
   visiblePeopleKpi: document.querySelector("#visiblePeopleKpi"),
   averageSkillsKpi: document.querySelector("#averageSkillsKpi"),
-  averageReliabilityKpi: document.querySelector("#averageReliabilityKpi"),
-  missingNotesKpi: document.querySelector("#missingNotesKpi"),
+  plannedHoursKpi: document.querySelector("#plannedHoursKpi"),
+  freeHoursKpi: document.querySelector("#freeHoursKpi"),
+  freeHoursShareKpi: document.querySelector("#freeHoursShareKpi"),
   sortSelect: document.querySelector("#sortSelect"),
   tableSortButtons: [...document.querySelectorAll(".people-table .table-sort")],
   salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
@@ -557,15 +558,20 @@ function setDialogStatus(element, text, error = false) {
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return { people: {}, lastImport: parsed?.lastImport || null, plannedHours: Number.isFinite(parsed?.plannedHours) ? parsed.plannedHours : null };
+    return {
+      people: {},
+      lastImport: parsed?.lastImport || null,
+      plannedHours: Number.isFinite(parsed?.plannedHours) ? parsed.plannedHours : null,
+      freeHours: Number.isFinite(parsed?.freeHours) ? parsed.freeHours : null
+    };
   } catch {
-    return { people: {}, lastImport: null, plannedHours: null };
+    return { people: {}, lastImport: null, plannedHours: null, freeHours: null };
   }
 }
 
 function saveState() {
   // Osobní údaje patří pouze do Supabase. V prohlížeči zůstává jen neosobní stav synchronizace.
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ lastImport: state.lastImport, plannedHours: state.plannedHours }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ lastImport: state.lastImport, plannedHours: state.plannedHours, freeHours: state.freeHours }));
 }
 
 async function initializeApp() {
@@ -1288,6 +1294,25 @@ function parseShiftSlot(value) {
   return { startMinutes, endMinutes, start: clock(startMinutes), end: clock(endMinutes) };
 }
 
+function calculateFreeShiftHours(sheet) {
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+  let freeHours = 0;
+  for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
+    if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
+    for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
+      const row = matrix[shiftRow];
+      if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
+      const slot = parseShiftSlot(row[0]);
+      if (!slot) continue;
+      const duration = Math.max(0, slot.endMinutes - slot.startMinutes) / 60;
+      row.slice(1, 7).forEach(cell => {
+        if (normalize(cell).includes("volna smena")) freeHours += duration;
+      });
+    }
+  }
+  return Math.round(freeHours * 100) / 100;
+}
+
 function formatShiftDepartment(value) {
   return String(value || "")
     .replace(/[\u2190-\u21ff\u25b2-\u25ff]/g, "")
@@ -1343,6 +1368,7 @@ async function importWorkbookSheet(sheetName) {
       rows.push({ Jméno: name, Hodiny: hours });
     }
     state.plannedHours = findWorkbookSummaryValue(match.matrix, ["plánované hodiny", "planovane hodiny"]);
+    state.freeHours = calculateFreeShiftHours(sheet);
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
     await importRows(rows, `${pendingWorkbookName} — ${sheetName}`, shiftNewcomers);
     return true;
@@ -1673,8 +1699,14 @@ function renderTeam() {
   elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   elements.visiblePeopleKpi.textContent = `${people.length} / ${allPeople.length}`;
   elements.averageSkillsKpi.textContent = `${averageMetric(people, "skills")} %`;
-  elements.averageReliabilityKpi.textContent = `${averageMetric(people, "reliability")} %`;
-  elements.missingNotesKpi.textContent = people.filter(person => !String(person.notes || "").trim()).length;
+  elements.plannedHoursKpi.textContent = Number.isFinite(state.plannedHours) ? `${formatNumber(state.plannedHours)} h` : "—";
+  elements.freeHoursKpi.textContent = Number.isFinite(state.freeHours) ? `${formatNumber(state.freeHours)} h` : "—";
+  const freeShare = Number.isFinite(state.freeHours) && Number(state.plannedHours) > 0
+    ? state.freeHours / state.plannedHours * 100
+    : null;
+  elements.freeHoursShareKpi.textContent = Number.isFinite(freeShare)
+    ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(freeShare)} % není obsazeno`
+    : "Podíl zatím není dostupný";
   updateQuickFilterCounts(allPeople);
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
