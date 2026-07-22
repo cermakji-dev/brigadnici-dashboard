@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=72">
+  <link rel="stylesheet" href="styles.css?v=73">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -250,7 +250,7 @@
         <article class="attention"><span>Chybí report</span><strong id="salesMissingKpi">0</strong></article>
       </div>
       <div class="sales-toolbar">
-        <select id="salesPeriodFilter" aria-label="Období prodejních výsledků"><option value="30">Posledních 30 dní</option><option value="60">Posledních 60 dní</option><option value="all">Všechny záznamy</option></select>
+        <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
       </div>
       <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
@@ -519,6 +519,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=72"></script>
+  <script src="app.js?v=73"></script>
 </body>
 </html>
