@@ -255,6 +255,8 @@ main {
 .toast > button:hover { background: rgba(255,255,255,.2); }
 .toast.error { background: #4a2026; color: #ffe5e7; border-color: rgba(255, 123, 123, 0.4); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.app-signature { position: fixed; z-index: 6; right: 16px; bottom: 12px; display: flex; align-items: center; gap: 6px; padding: 6px 9px; background: color-mix(in srgb, var(--surface-elevated) 80%, transparent); color: var(--muted); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 999px; box-shadow: 0 8px 24px rgba(3, 7, 18, .08); font-size: .67rem; font-weight: 650; letter-spacing: .01em; pointer-events: none; backdrop-filter: blur(12px); }
+.app-signature span:first-child { color: var(--brand); font-variant-numeric: tabular-nums; }
 
 .alerts-drawer { position: fixed; z-index: 30; top: 92px; left: 0; display: flex; align-items: center; transform: translateX(-420px); transition: transform 190ms ease; }
 .alerts-drawer.is-open { transform: translateX(0); }
