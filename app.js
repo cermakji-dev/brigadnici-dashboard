@@ -18,6 +18,7 @@ let messageTimer = null;
 let loaderHideTimer = null;
 let sessionLoadPromise = null;
 let hasAutoSynced = false;
+let workerNotesTableAvailable = true;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = { key: "name", direction: "asc" };
 const activeQuickFilters = new Set();
@@ -96,6 +97,10 @@ const elements = {
   reliabilityOutput: document.querySelector("#reliabilityOutput"),
   notesInput: document.querySelector("#notesInput"),
   clearNotesButton: document.querySelector("#clearNotesButton"),
+  workerNoteInput: document.querySelector("#workerNoteInput"),
+  addWorkerNoteButton: document.querySelector("#addWorkerNoteButton"),
+  workerNotesStatus: document.querySelector("#workerNotesStatus"),
+  workerNotesList: document.querySelector("#workerNotesList"),
   profileUserId: document.querySelector("#profileUserId"),
   profileRole: document.querySelector("#profileRole"),
   profileEmail: document.querySelector("#profileEmail"),
@@ -206,6 +211,7 @@ elements.clearNotesButton.addEventListener("click", () => {
   elements.notesInput.value = "";
   void saveDetailNotes();
 });
+elements.addWorkerNoteButton.addEventListener("click", addWorkerNote);
 elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
 elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
 elements.alertsClear.addEventListener("click", clearCurrentAlerts);
@@ -819,14 +825,16 @@ function showAuthMessage(text, error = false) {
 }
 
 async function loadRemoteState() {
-  const [workersResult, attendanceResult, feedbackResult, auditResult] = await Promise.all([
+  const [workersResult, attendanceResult, feedbackResult, auditResult, workerNotesResult] = await Promise.all([
     supabaseClient.from("workers").select("*").eq("active", true).order("full_name"),
     supabaseClient.from("attendance_totals").select("worker_id, period, hours"),
     supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_at").order("created_at"),
-    supabaseClient.from("worker_audit").select("*").order("changed_at", { ascending: false }).limit(500)
+    supabaseClient.from("worker_audit").select("*").order("changed_at", { ascending: false }).limit(500),
+    supabaseClient.from("worker_notes").select("id, worker_id, body, created_by, created_by_email, created_at").order("created_at", { ascending: false })
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
+  workerNotesTableAvailable = !workerNotesResult.error;
 
   const latestPeriod = firstDayOfMonth(new Date());
   const hoursByWorker = new Map(attendanceResult.data
@@ -855,6 +863,17 @@ async function loadRemoteState() {
       after: item.after_data
     });
   });
+  const notesByWorker = new Map();
+  (workerNotesResult.data || []).forEach(item => {
+    if (!notesByWorker.has(item.worker_id)) notesByWorker.set(item.worker_id, []);
+    notesByWorker.get(item.worker_id).push({
+      id: item.id,
+      body: item.body,
+      createdBy: item.created_by,
+      createdByEmail: item.created_by_email,
+      createdAt: item.created_at
+    });
+  });
 
   const remotePeople = {};
   workersResult.data.forEach(worker => {
@@ -880,6 +899,7 @@ async function loadRemoteState() {
       positive: 0,
       negative: 0,
       feedback: workerFeedback,
+      workerNotes: notesByWorker.get(worker.id) || [],
       audit: auditByWorker.get(worker.id) || [],
       aliases: identity.aliases
     };
@@ -1313,7 +1333,7 @@ function renderPeopleTable(people) {
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
     const rating = score(person);
-    row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Přidat poznámku…" aria-label="Obecná poznámka"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
+    row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Poznámka viditelná v přehledu…" aria-label="Poznámka v přehledu"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
     row.querySelector("strong").textContent = person.name;
     row.querySelector("small").textContent = person.email || "";
     row.querySelector(".table-departments").textContent = departments;
@@ -1608,10 +1628,117 @@ function openPerson(id) {
   elements.personDepartments.forEach(input => { input.checked = trained.includes(input.value); });
   elements.notesInput.value = person.notes || "";
   elements.clearNotesButton.hidden = !person.notes;
+  elements.workerNoteInput.value = "";
+  elements.workerNotesStatus.textContent = "";
+  renderWorkerNotes(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
   elements.dialog.showModal();
   elements.dialog.querySelector('[data-profile-tab="overview"]').focus({ preventScroll: true });
+}
+
+async function addWorkerNote() {
+  const person = state.people[elements.personId.value];
+  const body = elements.workerNoteInput.value.trim();
+  if (!person || !body) {
+    elements.workerNoteInput.focus();
+    return;
+  }
+  if (!workerNotesTableAvailable) {
+    elements.workerNotesStatus.textContent = "Nejprve spusťte v Supabase migraci worker-notes-migration.sql.";
+    elements.workerNotesStatus.classList.add("error");
+    return;
+  }
+  elements.addWorkerNoteButton.disabled = true;
+  elements.workerNotesStatus.textContent = "Ukládám…";
+  elements.workerNotesStatus.classList.remove("error");
+  const note = {
+    id: crypto.randomUUID(),
+    body,
+    createdBy: remoteUser?.id || "local",
+    createdByEmail: remoteUser?.email || "",
+    createdAt: new Date().toISOString()
+  };
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { data, error } = await supabaseClient.from("worker_notes").insert({
+      worker_id: person.remoteId,
+      body,
+      created_by: remoteUser.id,
+      created_by_email: remoteUser.email.toLowerCase()
+    }).select("id, body, created_by, created_by_email, created_at").single();
+    if (error) {
+      elements.addWorkerNoteButton.disabled = false;
+      elements.workerNotesStatus.textContent = `Poznámku se nepodařilo uložit: ${error.message}`;
+      elements.workerNotesStatus.classList.add("error");
+      return;
+    }
+    Object.assign(note, {
+      id: data.id,
+      body: data.body,
+      createdBy: data.created_by,
+      createdByEmail: data.created_by_email,
+      createdAt: data.created_at
+    });
+  }
+  if (!Array.isArray(person.workerNotes)) person.workerNotes = [];
+  person.workerNotes.unshift(note);
+  elements.workerNoteInput.value = "";
+  elements.workerNotesStatus.textContent = "Poznámka byla přidána.";
+  elements.addWorkerNoteButton.disabled = false;
+  saveState();
+  renderWorkerNotes(person);
+}
+
+function renderWorkerNotes(person) {
+  const notes = Array.isArray(person.workerNotes) ? person.workerNotes : [];
+  if (!workerNotesTableAvailable) {
+    elements.workerNotesList.innerHTML = '<p class="no-feedback">Pro více poznámek je potřeba spustit databázovou migraci.</p>';
+    return;
+  }
+  if (!notes.length) {
+    elements.workerNotesList.innerHTML = '<p class="no-feedback">Zatím nebyla přidána žádná další poznámka.</p>';
+    return;
+  }
+  elements.workerNotesList.replaceChildren(...notes.map(note => {
+    const article = document.createElement("article");
+    article.className = "worker-note-entry";
+    const meta = document.createElement("div");
+    meta.className = "worker-note-meta";
+    const author = document.createElement("strong");
+    author.textContent = note.createdByEmail || "Uživatel";
+    const time = document.createElement("time");
+    time.dateTime = note.createdAt;
+    time.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(note.createdAt));
+    const body = document.createElement("p");
+    body.textContent = note.body;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "feedback-delete";
+    remove.textContent = "Smazat";
+    remove.addEventListener("click", () => deleteWorkerNote(person, note, remove));
+    meta.append(author, time, remove);
+    article.append(meta, body);
+    return article;
+  }));
+}
+
+async function deleteWorkerNote(person, note, button) {
+  if (!confirm("Opravdu chcete tuto poznámku smazat?")) return;
+  button.disabled = true;
+  if (supabaseClient && remoteUser && person.remoteId) {
+    const { error } = await supabaseClient.from("worker_notes").delete().eq("id", note.id).eq("worker_id", person.remoteId);
+    if (error) {
+      button.disabled = false;
+      elements.workerNotesStatus.textContent = `Poznámku se nepodařilo smazat: ${error.message}`;
+      elements.workerNotesStatus.classList.add("error");
+      return;
+    }
+  }
+  person.workerNotes = (person.workerNotes || []).filter(item => item.id !== note.id);
+  saveState();
+  renderWorkerNotes(person);
+  elements.workerNotesStatus.textContent = "Poznámka byla smazána.";
+  elements.workerNotesStatus.classList.remove("error");
 }
 
 function renderFeedbackHistory(person) {
