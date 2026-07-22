@@ -1249,8 +1249,10 @@ function findWorkbookHeader(sheet) {
 async function importWorkbookSheet(sheetName) {
   if (!pendingWorkbook || !sheetName) return false;
   try {
-    const match = findWorkbookHeader(pendingWorkbook.Sheets[sheetName]);
+    const sheet = pendingWorkbook.Sheets[sheetName];
+    const match = findWorkbookHeader(sheet);
     if (!match) throw new Error("Vybraný list nemá očekávaný souhrn hodin.");
+    const shiftNewcomers = await ensureWorkersFromShiftSheet(sheet);
     const rows = [];
     for (let index = match.rowIndex + 1; index < match.matrix.length; index += 1) {
       const name = String(match.matrix[index][match.nameIndex] || "").trim();
@@ -1261,7 +1263,7 @@ async function importWorkbookSheet(sheetName) {
     }
     state.plannedHours = findWorkbookSummaryValue(match.matrix, ["plánované hodiny", "planovane hodiny"]);
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
-    await importRows(rows, `${pendingWorkbookName} — ${sheetName}`);
+    await importRows(rows, `${pendingWorkbookName} — ${sheetName}`, shiftNewcomers);
     return true;
   } catch (error) {
     setMessage(error.message || "List se nepodařilo načíst.", true);
@@ -1280,7 +1282,7 @@ function findWorkbookSummaryValue(matrix, labels) {
   return null;
 }
 
-async function importRows(rows, sourceName) {
+async function importRows(rows, sourceName, precreatedNewcomers = []) {
   if (!rows.length) throw new Error("Soubor neobsahuje žádné datové řádky.");
   const columns = Object.keys(rows[0]);
   const nameColumn = findColumn(columns, ["jméno", "jmeno", "brigádník", "brigadnik", "name"]);
@@ -1289,7 +1291,7 @@ async function importRows(rows, sourceName) {
   const emailColumn = findColumn(columns, ["email", "e-mail"], false);
   if (!nameColumn || !hoursColumn) throw new Error("Chybí sloupec Jméno nebo Hodiny.");
 
-  const createdNewcomers = await ensureImportedWorkers(rows, nameColumn, emailColumn);
+  const createdNewcomers = [...new Set([...precreatedNewcomers, ...await ensureImportedWorkers(rows, nameColumn, emailColumn)])];
 
   const totals = new Map();
   const unmatchedNames = new Set();
@@ -1335,6 +1337,30 @@ async function importRows(rows, sourceName) {
     ? ` Nepřiřazená jména: ${[...unmatchedNames].join(", ")}. Jejich existující hodiny nebyly přepsány.`
     : " Všechna jména byla úspěšně spárována.";
   setMessage(`Načteno ${totals.size} brigádníků ze zdroje ${sourceName}.${newcomerText}${unmatchedText}`, unmatchedNames.size > 0);
+}
+
+async function ensureWorkersFromShiftSheet(sheet) {
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
+    if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
+    for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
+      const row = matrix[shiftRow];
+      if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
+      if (!parseShiftSlot(row[0])) continue;
+      row.slice(1, 7).forEach(cell => {
+        String(cell || "").split(/[\n,;]+/).forEach(value => {
+          const name = value.trim().replace(/\s+\d{1,2}:\d{2}\s*$/, "").trim();
+          if (isLikelyWorkerName(name)) rows.push({ Jméno: name });
+        });
+      });
+    }
+  }
+  return ensureImportedWorkers(rows, "Jméno", null);
+}
+
+function isLikelyWorkerName(value) {
+  return /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(String(value || "").trim());
 }
 
 async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
