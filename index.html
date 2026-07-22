@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=66">
+  <link rel="stylesheet" href="styles.css?v=67">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -174,7 +174,7 @@
 
       <div class="quick-filters" aria-label="Rychlé filtry">
         <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení</button>
-        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky</button>
+        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky v přehledu</button>
         <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů</button>
         <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny</button>
         <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
@@ -225,7 +225,7 @@
             <th><button class="table-sort" type="button" data-sort-key="skills">Schopnosti <span>↕</span></button></th>
             <th><button class="table-sort" type="button" data-sort-key="reliability">Docházka <span>↕</span></button></th>
             <th><button class="table-sort" type="button" data-sort-key="departments">Zaškolení <span>↕</span></button></th>
-            <th><button class="table-sort" type="button" data-sort-key="notes">Obecná poznámka <span>↕</span></button></th>
+            <th><button class="table-sort" type="button" data-sort-key="notes">Poznámka v přehledu <span>↕</span></button></th>
             <th><button class="table-sort" type="button" data-sort-key="rating">Hodnocení <span>↕</span></button></th>
           </tr></thead>
           <tbody id="peopleTableBody"></tbody>
@@ -255,6 +255,7 @@
       </dl>
       <nav class="profile-tabs" aria-label="Sekce profilu">
         <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
+        <button class="profile-tab" type="button" data-profile-tab="notes">Poznámky</button>
         <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
         <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
       </nav>
@@ -281,9 +282,22 @@
           </div>
         </fieldset>
         <label class="notes-field">
-          <span class="notes-label"><span>Poznámky</span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat poznámku</button></span>
-          <textarea id="notesInput" rows="4" placeholder="Silné stránky, domluvy, důležité informace…"></textarea>
+          <span class="notes-label"><span>Poznámka v přehledu <small>zobrazuje se přímo na kartě a v seznamu</small></span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat</button></span>
+          <textarea id="notesInput" rows="4" placeholder="Krátká hlavní informace viditelná bez otevření detailu…"></textarea>
         </label>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="notes" hidden>
+        <section class="worker-notes" aria-labelledby="workerNotesHeading">
+          <div class="worker-notes-heading">
+            <div><h3 id="workerNotesHeading">Další poznámky</h3><p>Samostatné záznamy s datem a autorem.</p></div>
+          </div>
+          <div class="worker-note-composer">
+            <textarea id="workerNoteInput" rows="3" maxlength="2000" placeholder="Napište novou poznámku…"></textarea>
+            <button id="addWorkerNoteButton" class="button button-primary" type="button">Přidat poznámku</button>
+          </div>
+          <p id="workerNotesStatus" class="message" role="status" aria-live="polite"></p>
+          <div id="workerNotesList" class="worker-notes-list"></div>
+        </section>
       </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" hidden>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
@@ -433,7 +447,7 @@
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
       <div class="card-note">
-        <textarea class="note-preview inline-note" rows="2" placeholder="Klikněte a napište poznámku…" aria-label="Obecná poznámka"></textarea>
+        <textarea class="note-preview inline-note" rows="2" placeholder="Poznámka viditelná v přehledu…" aria-label="Poznámka v přehledu"></textarea>
       </div>
       <div class="feedback-row">
         <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
@@ -446,6 +460,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=63"></script>
+  <script src="app.js?v=67"></script>
 </body>
 </html>
