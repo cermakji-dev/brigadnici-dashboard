@@ -1573,6 +1573,12 @@ function renderPeopleTable(people) {
     const name = row.querySelector("strong");
     name.textContent = person.name;
     setupNextShiftTooltip(name, person);
+    if (normalize(person.status) === "novacek") {
+      const newcomerBadge = document.createElement("span");
+      newcomerBadge.className = "table-newcomer-badge";
+      newcomerBadge.textContent = "Nováček";
+      name.after(newcomerBadge);
+    }
     row.querySelector("small").textContent = person.email || "";
     row.querySelector(".table-departments").textContent = departments;
     setupInlineNote(row.querySelector(".inline-note"), person);
