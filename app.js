@@ -1031,15 +1031,21 @@ async function syncSalesExpectations(workbook) {
     for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
       if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
       const date = excelCellDate(matrix[rowIndex].slice(0, 8));
-      if (!date || date > startOfDay(new Date())) continue;
+      // Upozornění vzniká až po skončení dne. Dnešní směna ještě nemusí být
+      // dokončená a její report tedy nemá být označený jako chybějící.
+      if (!date || date >= startOfDay(new Date())) continue;
       const assignments = matrix[rowIndex + 1].slice(1, 7).map(normalize);
       for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
         const row = matrix[shiftRow];
         if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
         if (!/^\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*h?$/.test(normalize(row[0]))) continue;
         row.slice(1, 7).forEach((cell, column) => {
-          if (!["prodej", "vydej / prodej", "vydej/prodej"].includes(assignments[column])) return;
-          const worker = findActiveWorker(String(cell || "").trim());
+          // Popisky v tabulce obsahují šipky a více variant názvu, například
+          // „↓ Prodej ↓“, „Prodej / Výdej“ nebo „Prodej (Lenovo)“.
+          if (!assignments[column].includes("prodej")) return;
+          const rawWorkerName = String(cell || "").trim();
+          const worker = findActiveWorker(rawWorkerName)
+            || findActiveWorker(rawWorkerName.replace(/\s+\d{1,2}:\d{2}\s*$/, ""));
           if (!worker?.remoteId) return;
           const key = `${worker.remoteId}|${dateKey(date)}`;
           totals.set(key, { worker_id: worker.remoteId, shift_date: dateKey(date), planned_hours: (totals.get(key)?.planned_hours || 0) + 1 });
