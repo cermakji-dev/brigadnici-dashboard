@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=71">
+  <link rel="stylesheet" href="styles.css?v=72">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -253,7 +253,18 @@
         <select id="salesPeriodFilter" aria-label="Období prodejních výsledků"><option value="30">Posledních 30 dní</option><option value="60">Posledních 60 dní</option><option value="all">Všechny záznamy</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
       </div>
-      <div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>Brigádník</th><th>Datum</th><th>Hodiny</th><th>Železo</th><th>Služby</th><th>Celkem</th><th>ASR</th><th>ARoS</th><th>Stav</th><th>Autor</th><th></th></tr></thead><tbody id="salesTableBody"></tbody></table></div>
+      <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
+        <th><button class="table-sort" type="button" data-sales-sort-key="name">Brigádník <span>↕</span></button></th>
+        <th aria-sort="descending"><button class="table-sort is-active" type="button" data-sales-sort-key="date">Datum <span>↓</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="hours">Hodiny <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="hardware">Železo <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="services">Služby <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="revenue">Celkem <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="asr">ASR <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="aros">ARoS <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="status">Stav <span>↕</span></button></th>
+        <th>Autor</th><th></th>
+      </tr></thead><tbody id="salesTableBody"></tbody></table></div>
       <div id="salesEmpty" class="empty-state"><h3>Zatím bez prodejních dat</h3><p>Směny ze sloupců Prodej a Výdej / prodej se načtou z Google Sheets.</p></div>
     </section>
   </main>
@@ -508,6 +519,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=71"></script>
+  <script src="app.js?v=72"></script>
 </body>
 </html>
