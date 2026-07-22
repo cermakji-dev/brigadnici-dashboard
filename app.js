@@ -86,7 +86,7 @@ const elements = {
   addWorkerButton: document.querySelector("#addWorkerButton"),
   teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
   teamViewSections: [...document.querySelectorAll(".team-view-section")], salesDashboard: document.querySelector("#salesDashboard"),
-  salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
+  salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesArosKpi: document.querySelector("#salesArosKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
   salesPeriodFilter: document.querySelector("#salesPeriodFilter"), salesStatusFilter: document.querySelector("#salesStatusFilter"), salesTableBody: document.querySelector("#salesTableBody"), salesEmpty: document.querySelector("#salesEmpty"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
@@ -1624,6 +1624,8 @@ function setMainView(view) {
 function personByRemoteId(id) { return Object.values(state.people).find(person => person.remoteId === id); }
 function salesRevenue(day) { return Number(day.hardware || 0) + Number(day.services || 0); }
 function salesAsr(day) { return day.salesHours > 0 ? salesRevenue(day) / day.salesHours : 0; }
+function salesAros(day) { return day.hardware > 0 ? day.services / day.hardware * 100 : null; }
+function formatAros(value) { return Number.isFinite(value) ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(value)} %` : "—"; }
 function salesTargetPercent(day) { return day.salesHours > 0 ? salesAsr(day) / SALES_ASR_TARGET * 100 : 0; }
 function formatCurrency(value) { return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(Number(value || 0)) + " Kč"; }
 function salesPerformanceClass(percent) { return percent >= 120 ? "excellent" : percent >= 100 ? "met" : percent >= 80 ? "near" : "below"; }
@@ -1641,11 +1643,15 @@ function renderSalesDashboard() {
   const reported = rows.filter(day => day.status === "reported");
   const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
   const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
+  const hardware = reported.reduce((sum, day) => sum + day.hardware, 0);
+  const services = reported.reduce((sum, day) => sum + day.services, 0);
   const asr = hours ? revenue / hours : 0;
+  const aros = hardware > 0 ? services / hardware * 100 : null;
   const missing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   elements.salesRevenueKpi.textContent = formatCurrency(revenue);
   elements.salesHoursKpi.textContent = `${formatNumber(hours)} h`;
   elements.salesAsrKpi.textContent = `${formatCurrency(asr)}/h`;
+  elements.salesArosKpi.textContent = formatAros(aros);
   elements.salesTargetKpi.textContent = `${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %`;
   elements.salesMissingKpi.textContent = missing;
   elements.salesPendingBadge.hidden = missing === 0;
@@ -1656,7 +1662,7 @@ function renderSalesDashboard() {
     const row = document.createElement("tr");
     const percent = salesTargetPercent(day);
     const stateLabel = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
-    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td>${day.updatedByEmail || ""}</td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
+    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td>${day.updatedByEmail || ""}</td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
     row.querySelector("strong").textContent = person?.name || "Neznámý brigádník";
     row.querySelector("button").addEventListener("click", () => openSalesReport(day));
     return row;
@@ -1672,13 +1678,16 @@ function renderProfileSales(person) {
   const reported = rows.filter(day => day.status === "reported");
   const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
   const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
+  const hardware = reported.reduce((sum, day) => sum + day.hardware, 0);
+  const services = reported.reduce((sum, day) => sum + day.services, 0);
   const asr = hours ? revenue / hours : 0;
-  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>Plnění TGT</span><strong>${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %</strong></article>`;
+  const aros = hardware > 0 ? services / hardware * 100 : null;
+  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>ARoS</span><strong>${formatAros(aros)}</strong></article><article><span>Plnění TGT</span><strong>${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %</strong></article>`;
   if (!rows.length) { elements.profileSalesHistory.innerHTML = '<p class="no-feedback">Zatím bez prodejních směn.</p>'; return; }
   elements.profileSalesHistory.replaceChildren(...rows.map(day => {
     const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
     const percent = salesTargetPercent(day);
-    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))}` : day.status === "pending" ? "Chybí report" : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
+    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))} · ARoS ${formatAros(salesAros(day))}` : day.status === "pending" ? "Chybí report" : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
     item.addEventListener("click", () => openSalesReport(day)); return item;
   }));
 }
@@ -1697,7 +1706,9 @@ function openSalesReport(day) {
 function updateSalesReportPreview() {
   const hours = Number(elements.salesReportHours.value || 0), revenue = Number(elements.salesReportHardware.value || 0) + Number(elements.salesReportServices.value || 0);
   const asr = hours ? revenue / hours : 0, percent = asr / SALES_ASR_TARGET * 100;
-  elements.salesReportPreview.innerHTML = `<span>Celkem <strong>${formatCurrency(revenue)}</strong></span><span>ASR <strong>${formatCurrency(asr)}/h</strong></span><span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent || 0)} % TGT</span>`;
+  const hardware = Number(elements.salesReportHardware.value || 0), services = Number(elements.salesReportServices.value || 0);
+  const aros = hardware > 0 ? services / hardware * 100 : null;
+  elements.salesReportPreview.innerHTML = `<span>Celkem <strong>${formatCurrency(revenue)}</strong></span><span>ASR <strong>${formatCurrency(asr)}/h</strong></span><span>ARoS <strong>${formatAros(aros)}</strong></span><span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent || 0)} % TGT</span>`;
 }
 
 async function saveSalesReport(event) {
