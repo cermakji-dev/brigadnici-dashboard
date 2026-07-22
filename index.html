@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=67">
+  <link rel="stylesheet" href="styles.css?v=68">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -57,6 +57,10 @@
       </div>
     </div>
     <div class="header-actions">
+      <div class="app-view-tabs" aria-label="Hlavní sekce">
+        <button id="teamViewButton" class="app-view-tab is-active" type="button">Tým</button>
+        <button id="salesViewButton" class="app-view-tab" type="button">Prodejní výkon <span id="salesPendingBadge" hidden>0</span></button>
+      </div>
       <a class="topbar-action topbar-action-primary" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
         <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16"/></svg> Směnová tabulka <svg class="ui-icon sheet-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
       </a>
@@ -70,7 +74,7 @@
   </header>
 
   <main class="app-content" hidden>
-    <section id="importPanel" class="import-panel is-collapsed" aria-labelledby="importHeading">
+    <section id="importPanel" class="import-panel is-collapsed team-view-section" aria-labelledby="importHeading">
       <div class="import-summary">
         <div class="sync-state">
           <button id="syncRefreshButton" class="sync-refresh" type="button" aria-label="Znovu načíst docházku z Google Sheets" title="Aktualizovat docházku">
@@ -118,7 +122,7 @@
       </div>
     </section>
 
-    <div id="alertsDrawer" class="alerts-drawer">
+    <div id="alertsDrawer" class="alerts-drawer team-view-section">
     <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
       <div class="alerts-heading">
         <div>
@@ -139,7 +143,7 @@
     </button>
     </div>
 
-    <section class="overview" aria-labelledby="overviewHeading">
+    <section class="overview team-view-section" aria-labelledby="overviewHeading">
       <div class="section-heading">
         <div>
           <h2 id="overviewHeading">Přehled týmu</h2>
@@ -232,6 +236,25 @@
         </table>
       </div>
     </section>
+
+    <section id="salesDashboard" class="sales-dashboard" hidden>
+      <div class="sales-dashboard-heading">
+        <div><p class="eyebrow">Výkon na prodejně</p><h2>Prodejní výkon</h2><p>ASR = (železo + služby) ÷ prodejní hodiny · TGT 6 500 Kč/h</p></div>
+      </div>
+      <div class="sales-kpis">
+        <article><span>Celkový obrat</span><strong id="salesRevenueKpi">0 Kč</strong></article>
+        <article><span>Prodejní hodiny</span><strong id="salesHoursKpi">0 h</strong></article>
+        <article><span>Týmové ASR</span><strong id="salesAsrKpi">0 Kč/h</strong></article>
+        <article><span>Plnění TGT</span><strong id="salesTargetKpi">0 %</strong></article>
+        <article class="attention"><span>Chybí report</span><strong id="salesMissingKpi">0</strong></article>
+      </div>
+      <div class="sales-toolbar">
+        <select id="salesPeriodFilter" aria-label="Období prodejních výsledků"><option value="30">Posledních 30 dní</option><option value="60">Posledních 60 dní</option><option value="all">Všechny záznamy</option></select>
+        <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
+      </div>
+      <div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>Brigádník</th><th>Datum</th><th>Hodiny</th><th>Železo</th><th>Služby</th><th>Celkem</th><th>ASR</th><th>Stav</th><th>Autor</th><th></th></tr></thead><tbody id="salesTableBody"></tbody></table></div>
+      <div id="salesEmpty" class="empty-state"><h3>Zatím bez prodejních dat</h3><p>Směny ze sloupců Prodej a Výdej / prodej se načtou z Google Sheets.</p></div>
+    </section>
   </main>
 
   <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
@@ -256,6 +279,7 @@
       <nav class="profile-tabs" aria-label="Sekce profilu">
         <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
         <button class="profile-tab" type="button" data-profile-tab="notes">Poznámky</button>
+        <button class="profile-tab" type="button" data-profile-tab="sales">Prodeje</button>
         <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
         <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
       </nav>
@@ -297,6 +321,12 @@
           </div>
           <p id="workerNotesStatus" class="message" role="status" aria-live="polite"></p>
           <div id="workerNotesList" class="worker-notes-list"></div>
+        </section>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="sales" hidden>
+        <section class="profile-sales">
+          <div id="profileSalesSummary" class="profile-sales-summary"></div>
+          <div id="profileSalesHistory" class="profile-sales-history"></div>
         </section>
       </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" hidden>
@@ -423,6 +453,22 @@
     </form>
   </dialog>
 
+  <dialog id="salesReportDialog" class="simple-dialog sales-report-dialog">
+    <form id="salesReportForm">
+      <div class="dialog-heading"><div><p class="step-label">Denní výsledek</p><h2 id="salesReportTitle">Report prodejů</h2><p id="salesReportDate" class="section-copy"></p></div><button id="closeSalesReport" class="icon-button" type="button" aria-label="Zavřít">×</button></div>
+      <input id="salesReportId" type="hidden">
+      <div class="sales-report-fields">
+        <label>Počet hodin na Prodeji<input id="salesReportHours" type="number" min="0.25" step="0.25" required></label>
+        <label>Obrat železo<input id="salesReportHardware" type="number" min="0" step="1" required></label>
+        <label>Obrat služby<input id="salesReportServices" type="number" min="0" step="1" required></label>
+      </div>
+      <div id="salesReportPreview" class="sales-report-preview"></div>
+      <label>Poznámka <small class="optional-label">nepovinné</small><textarea id="salesReportNote" rows="2"></textarea></label>
+      <p id="salesReportStatus" class="message" role="status"></p>
+      <div class="dialog-actions"><button id="markNotSalesButton" class="button button-secondary" type="button">Nebyl na prodeji</button><button class="button button-primary" type="submit">Uložit report</button></div>
+    </form>
+  </dialog>
+
   <template id="personCardTemplate">
     <article class="person-card">
       <div class="person-card-top">
@@ -449,6 +495,7 @@
       <div class="card-note">
         <textarea class="note-preview inline-note" rows="2" placeholder="Poznámka viditelná v přehledu…" aria-label="Poznámka v přehledu"></textarea>
       </div>
+      <div class="sales-card-row"><span class="sales-card-status"></span><button class="sales-card-button" type="button">Report prodejů</button></div>
       <div class="feedback-row">
         <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
         <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
@@ -460,6 +507,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=67"></script>
+  <script src="app.js?v=68"></script>
 </body>
 </html>
