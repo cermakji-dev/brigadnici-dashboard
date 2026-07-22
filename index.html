@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=70">
+  <link rel="stylesheet" href="styles.css?v=71">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -245,6 +245,7 @@
         <article><span>Celkový obrat</span><strong id="salesRevenueKpi">0 Kč</strong></article>
         <article><span>Prodejní hodiny</span><strong id="salesHoursKpi">0 h</strong></article>
         <article><span>Týmové ASR</span><strong id="salesAsrKpi">0 Kč/h</strong></article>
+        <article><span>Týmové ARoS</span><strong id="salesArosKpi">0 %</strong></article>
         <article><span>Plnění TGT</span><strong id="salesTargetKpi">0 %</strong></article>
         <article class="attention"><span>Chybí report</span><strong id="salesMissingKpi">0</strong></article>
       </div>
@@ -252,7 +253,7 @@
         <select id="salesPeriodFilter" aria-label="Období prodejních výsledků"><option value="30">Posledních 30 dní</option><option value="60">Posledních 60 dní</option><option value="all">Všechny záznamy</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
       </div>
-      <div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>Brigádník</th><th>Datum</th><th>Hodiny</th><th>Železo</th><th>Služby</th><th>Celkem</th><th>ASR</th><th>Stav</th><th>Autor</th><th></th></tr></thead><tbody id="salesTableBody"></tbody></table></div>
+      <div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>Brigádník</th><th>Datum</th><th>Hodiny</th><th>Železo</th><th>Služby</th><th>Celkem</th><th>ASR</th><th>ARoS</th><th>Stav</th><th>Autor</th><th></th></tr></thead><tbody id="salesTableBody"></tbody></table></div>
       <div id="salesEmpty" class="empty-state"><h3>Zatím bez prodejních dat</h3><p>Směny ze sloupců Prodej a Výdej / prodej se načtou z Google Sheets.</p></div>
     </section>
   </main>
@@ -507,6 +508,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=70"></script>
+  <script src="app.js?v=71"></script>
 </body>
 </html>
