@@ -28,6 +28,9 @@ const activeQuickFilters = new Set();
 const dismissedAlertSignatures = new Set(loadDismissedAlerts());
 let visibleAlertSignatures = [];
 let teamRenderFrame = 0;
+let monthRosterKnown = false;
+const monthRosterPersonIds = new Set();
+const monthRosterRemoteIds = new Set();
 
 const state = loadState();
 const elements = {
@@ -83,6 +86,7 @@ const elements = {
   alertsEarCount: document.querySelector("#alertsEarCount"),
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
+  alertsSummary: document.querySelector("#alertsSummary"),
   alertsEmpty: document.querySelector("#alertsEmpty"),
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
@@ -919,8 +923,12 @@ async function loadRemoteState() {
   onboardingTableAvailable = !onboardingResult.error;
   salesDays = (salesDaysResult.data || []).map(mapSalesDay);
 
-  const hoursByWorker = new Map(attendanceResult.data
-    .filter(row => row.period === latestPeriod)
+  const currentAttendance = attendanceResult.data.filter(row => row.period === latestPeriod);
+  monthRosterPersonIds.clear();
+  monthRosterRemoteIds.clear();
+  currentAttendance.forEach(row => monthRosterRemoteIds.add(row.worker_id));
+  monthRosterKnown = true;
+  const hoursByWorker = new Map(currentAttendance
     .map(row => [row.worker_id, Number(row.hours)]));
   const feedbackByWorker = new Map();
   feedbackResult.data.forEach(item => {
@@ -1361,6 +1369,15 @@ async function importRows(rows, sourceName, precreatedNewcomers = []) {
     if (photoColumn && row[photoColumn]) imported.photo = String(row[photoColumn]).trim();
   });
 
+  monthRosterPersonIds.clear();
+  monthRosterRemoteIds.clear();
+  totals.forEach(imported => {
+    monthRosterPersonIds.add(imported.id);
+    const person = state.people[imported.id];
+    if (person?.remoteId) monthRosterRemoteIds.add(person.remoteId);
+  });
+  monthRosterKnown = true;
+
   totals.forEach(imported => {
     if (!state.people[imported.id]) {
       state.people[imported.id] = {
@@ -1603,6 +1620,7 @@ function renderTeam() {
   const query = normalize(elements.searchInput.value);
   const selectedDepartments = elements.departmentFilters.filter(input => input.checked).map(input => input.value);
   const people = Object.values(state.people).filter(person => {
+    if (!isPersonInSelectedMonth(person)) return false;
     if (!normalize(person.name).includes(query)) return false;
     if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
     if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
@@ -1627,7 +1645,7 @@ function renderTeam() {
   elements.peopleTableWrap.hidden = people.length === 0 || currentView !== "table";
   elements.cardViewButton.classList.toggle("is-active", currentView === "cards");
   elements.tableViewButton.classList.toggle("is-active", currentView === "table");
-  const allPeople = Object.values(state.people);
+  const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
   elements.attendancePeople.textContent = allPeople.length;
   elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   elements.emptyState.hidden = people.length > 0;
@@ -1713,7 +1731,7 @@ function metricCell(value, type) {
 }
 
 function renderAlerts() {
-  const people = Object.values(state.people);
+  const people = Object.values(state.people).filter(isPersonInSelectedMonth);
   const workedHours = people.map(person => Number(person.hours || 0)).filter(hours => hours > 0).sort((a, b) => a - b);
   const medianHours = workedHours.length ? workedHours[Math.floor(workedHours.length / 2)] : 0;
   const alerts = [];
@@ -1754,16 +1772,31 @@ function renderAlerts() {
   visibleAlertSignatures = visibleAlerts.map(alert => alert.signature);
   elements.alertsCount.textContent = visibleAlerts.length;
   elements.alertsEarCount.textContent = visibleAlerts.length;
+  elements.alertsSummary.textContent = visibleAlerts.length
+    ? `${visibleAlerts.length} ${visibleAlerts.length === 1 ? "člověk potřebuje" : visibleAlerts.length < 5 ? "lidé potřebují" : "lidí potřebuje"} pozornost.`
+    : "Vše důležité na jednom místě.";
   elements.alertsClear.hidden = visibleAlerts.length === 0;
   elements.alertsToggle.classList.toggle("has-alerts", visibleAlerts.length > 0);
   elements.alertsEmpty.hidden = visibleAlerts.length > 0;
   elements.alertsList.hidden = visibleAlerts.length === 0;
   elements.alertsList.replaceChildren(...visibleAlerts.map(({ person, reasons }) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "alert-item";
+    const item = document.createElement("article");
+    item.className = "alert-item";
+    item.tabIndex = 0;
     const title = document.createElement("strong");
     title.textContent = person.name;
+    const head = document.createElement("span");
+    head.className = "alert-item-head";
+    const action = document.createElement("span");
+    action.className = "alert-item-action";
+    action.textContent = reasons.some(reason => reason.salesDayId) ? "Doplnit report" : "Otevřít detail";
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "alert-dismiss";
+    dismiss.setAttribute("aria-label", `Skrýt upozornění pro ${person.name}`);
+    dismiss.title = "Označit jako přečtené";
+    dismiss.textContent = "×";
+    head.append(title, action, dismiss);
     const badges = document.createElement("span");
     badges.className = "alert-reasons";
     reasons.forEach(reason => {
@@ -1772,14 +1805,22 @@ function renderAlerts() {
       badge.textContent = reason.text;
       badges.append(badge);
     });
-    button.append(title, badges);
-    button.addEventListener("click", () => {
+    item.append(head, badges);
+    const openAlert = () => {
       setAlertsOpen(false);
       const salesReason = reasons.find(reason => reason.salesDayId);
       if (salesReason) openSalesReport(salesDays.find(day => day.id === salesReason.salesDayId));
       else openPerson(person.id);
+    };
+    item.addEventListener("click", event => { if (!event.target.closest(".alert-dismiss")) openAlert(); });
+    item.addEventListener("keydown", event => { if (event.key === "Enter") openAlert(); });
+    dismiss.addEventListener("click", event => {
+      event.stopPropagation();
+      dismissedAlertSignatures.add(alertSignature(person, reasons));
+      saveDismissedAlerts();
+      renderAlerts();
     });
-    return button;
+    return item;
   }));
 }
 
@@ -1814,6 +1855,12 @@ function setAlertsOpen(open) {
   elements.alertsPanel.setAttribute("aria-hidden", String(!open));
   elements.alertsToggle.setAttribute("aria-expanded", String(open));
   elements.alertsHandleIcon.textContent = open ? "‹" : "›";
+  if (open) requestAnimationFrame(() => elements.alertsClose.focus({ preventScroll: true }));
+}
+
+function isPersonInSelectedMonth(person) {
+  if (!monthRosterKnown) return true;
+  return monthRosterPersonIds.has(person.id) || (person.remoteId && monthRosterRemoteIds.has(person.remoteId));
 }
 
 function previousAuditValue(person, field) {

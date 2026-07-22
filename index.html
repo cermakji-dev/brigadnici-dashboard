@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=80">
+    <link rel="stylesheet" href="styles.css?v=81">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -126,8 +126,9 @@
     <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
       <div class="alerts-heading">
         <div>
-          <p class="step-label">Pozornost</p>
-          <h2 id="alertsHeading">Upozornění týmu</h2>
+          <p class="step-label">Centrum úkolů</p>
+          <h2 id="alertsHeading">Co je potřeba vyřešit</h2>
+          <p id="alertsSummary" class="alerts-summary">Vše důležité na jednom místě.</p>
         </div>
         <div class="alerts-heading-actions">
           <button id="alertsClear" class="alerts-clear" type="button">Vyprázdnit</button>
@@ -136,7 +137,7 @@
         </div>
       </div>
       <div id="alertsList" class="alerts-list"></div>
-      <p id="alertsEmpty" class="alerts-empty">Aktuálně není potřeba nic řešit.</p>
+      <p id="alertsEmpty" class="alerts-empty"><strong>Všechno je vyřešené</strong><span>Aktuálně není potřeba nic řešit.</span></p>
     </aside>
     <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
       <span id="alertsHandleIcon" aria-hidden="true">›</span><span class="visually-hidden">Pozornost</span><strong id="alertsEarCount">0</strong>
@@ -528,6 +529,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=80"></script>
+  <script type="module" src="app.js?v=81"></script>
 </body>
 </html>
