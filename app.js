@@ -1360,7 +1360,12 @@ async function ensureWorkersFromShiftSheet(sheet) {
 }
 
 function isLikelyWorkerName(value) {
-  return /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(String(value || "").trim());
+  const name = String(value || "").trim();
+  return !isIgnoredShiftLabel(name) && /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(name);
+}
+
+function isIgnoredShiftLabel(value) {
+  return normalize(value) === "volna smena";
 }
 
 async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
@@ -1404,8 +1409,12 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
     const canonical = existingByName.get(slugify(worker.full_name));
     return canonical && canonical.id !== worker.id && identityExternalIds.has(canonical.external_user_id);
   }).map(worker => worker.id);
-  if (duplicateIds.length) {
-    const { error } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).in("id", duplicateIds);
+  const ignoredLabelIds = orderedWorkers
+    .filter(worker => worker.active && String(worker.external_user_id).startsWith("AUTO_") && isIgnoredShiftLabel(worker.full_name))
+    .map(worker => worker.id);
+  const cleanupIds = [...new Set([...duplicateIds, ...ignoredLabelIds])];
+  if (cleanupIds.length) {
+    const { error } = await supabaseClient.from("workers").update({ active: false, status: "Neaktivní" }).in("id", cleanupIds);
     if (error) throw new Error(`Oprava duplicitních karet selhala: ${error.message}`);
   }
 
@@ -1445,7 +1454,7 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
     const { error } = await supabaseClient.from("workers").insert(inserts);
     if (error) throw new Error(`Vytvoření karet nováčků selhalo: ${error.message}`);
   }
-  if (newcomers.length || duplicateIds.length) await loadRemoteState();
+  if (newcomers.length || cleanupIds.length) await loadRemoteState();
   return newcomers;
 }
 
