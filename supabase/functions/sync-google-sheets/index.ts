@@ -146,7 +146,9 @@ Deno.serve(async request => {
     const workbook = XLSX.read(await response.arrayBuffer(), { type: "array", cellDates: true });
     const sheetName = workbook.SheetNames.find(name => periodFromSheet(name) === period);
     if (!sheetName) throw new Error(`No sheet found for ${period}.`);
-    const { rows: summary, plannedHours } = readSummary(workbook.Sheets[sheetName]);
+    const currentSheet = workbook.Sheets[sheetName];
+    if (!currentSheet) throw new Error(`Sheet ${sheetName} could not be opened.`);
+    const { rows: summary, plannedHours } = readSummary(currentSheet);
 
     const { data: workerRows, error: workerError } = await supabase.from("workers").select("id, external_user_id, full_name, aliases, active");
     if (workerError) throw workerError;
@@ -184,7 +186,7 @@ Deno.serve(async request => {
       if (error) throw error;
     }
 
-    const expectedSales = salesExpectations(workbook.Sheets[sheetName], byName, today);
+    const expectedSales = salesExpectations(currentSheet, byName, today);
     if (expectedSales.length) {
       const { error } = await supabase.from("sales_days").upsert(expectedSales, { onConflict: "worker_id,shift_date" });
       if (error) throw error;
