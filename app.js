@@ -4,8 +4,6 @@ const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
 const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG", "PS"];
-const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
-const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
 const SALES_ASR_TARGET = 6500;
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
@@ -15,7 +13,6 @@ let remoteUser = null;
 let messageTimer = null;
 let loaderHideTimer = null;
 let sessionLoadPromise = null;
-let hasAutoSynced = false;
 let workerNotesTableAvailable = true;
 let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
@@ -821,7 +818,6 @@ async function handleSession(session) {
   if (!session?.user) {
     hideAppLoader();
     remoteUser = null;
-    hasAutoSynced = false;
     elements.authGate.hidden = false;
     elements.appContent.forEach(element => { element.hidden = true; });
     return;
@@ -850,12 +846,6 @@ async function handleSession(session) {
   try {
     updateAppLoader("Načítám profily brigádníků…");
     await loadRemoteState();
-    render();
-    if (!hasAutoSynced) {
-      hasAutoSynced = true;
-      updateAppLoader("Synchronizuji docházku…");
-      await syncGoogleSheets(true);
-    }
     render();
     elements.appContent.forEach(element => { element.hidden = false; });
     updateAppLoader("Přehled je připravený");
@@ -904,13 +894,14 @@ async function loadRemoteState() {
   const salesCutoff = new Date();
   salesCutoff.setMonth(salesCutoff.getMonth() - 12);
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
-  const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult] = await Promise.all([
+  const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult, syncRunResult] = await Promise.all([
     scoped(supabaseClient.from("attendance_totals").select("worker_id, period, hours")).eq("period", latestPeriod),
     scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_at")).order("created_at"),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
     scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", dateKey(salesCutoff)).order("shift_date", { ascending: false }),
-    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed"))
+    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed")),
+    supabaseClient.from("sheets_sync_runs").select("finished_at,planned_hours,total_hours,sheet_name,status").eq("status", "success").order("finished_at", { ascending: false }).limit(1).maybeSingle()
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
@@ -918,6 +909,10 @@ async function loadRemoteState() {
   salesDaysTableAvailable = !salesDaysResult.error;
   onboardingTableAvailable = !onboardingResult.error;
   salesDays = (salesDaysResult.data || []).map(mapSalesDay);
+  if (!syncRunResult.error && syncRunResult.data) {
+    state.lastImport = syncRunResult.data.finished_at;
+    state.plannedHours = Number(syncRunResult.data.planned_hours);
+  }
 
   const hoursByWorker = new Map(attendanceResult.data
     .filter(row => row.period === latestPeriod)
@@ -1012,24 +1007,28 @@ function findActiveWorker(name) {
   return Object.values(state.people).find(worker => [worker.name, ...(worker.aliases || [])].some(candidate => slugify(candidate) === key));
 }
 
-async function syncGoogleSheets(automatic = false) {
+async function syncGoogleSheets() {
   const button = elements.googleSheetsButton;
   button.disabled = true;
   elements.syncRefreshButton.disabled = true;
   elements.syncRefreshButton.classList.add("is-loading");
-  button.textContent = "Načítám…";
-  elements.syncStatusTitle.textContent = "Načítám změny…";
-  elements.syncStatusMeta.textContent = "Kontroluji aktuální data v Google Sheets";
+  button.textContent = "Synchronizuji…";
+  elements.syncStatusTitle.textContent = "Synchronizuji docházku…";
+  elements.syncStatusMeta.textContent = "Server kontroluje aktuální data v Google Sheets";
   setMessage("");
   try {
-    const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Google Sheets vrátil chybu ${response.status}.`);
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("text/html")) throw new Error("Tabulka není dostupná bez přihlášení. Nastavte sdílení na Kdokoli s odkazem – čtenář.");
-    const file = new File([await response.blob()], "BRIGÁDNÍCI P7 – Google Sheets.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
-    await prepareWorkbook(file, true);
+    const { data, error } = await supabaseClient.functions.invoke("sync-google-sheets", { body: {} });
+    if (error) throw new Error(error.message || "Serverovou synchronizaci se nepodařilo spustit.");
+    if (data?.status === "error") throw new Error(data.error || "Serverová synchronizace selhala.");
+    if (data?.status === "skipped") {
+      setMessage("Synchronizace už právě probíhá. Data se zobrazí po jejím dokončení.");
+      return;
+    }
+    await loadRemoteState();
+    render();
+    elements.syncStatusTitle.textContent = "Docházka synchronizována";
+    elements.syncStatusMeta.textContent = `Aktualizováno právě • ${data?.changed || 0} změn`;
+    setMessage(`Načteno ${data?.seen || 0} brigádníků z listu ${data?.sheet || "aktuální měsíc"}.`);
   } catch (error) {
     elements.syncStatusTitle.textContent = "Synchronizace se nezdařila";
     elements.syncStatusMeta.textContent = "Kliknutím na ikonu ji můžete zopakovat";
@@ -1038,7 +1037,7 @@ async function syncGoogleSheets(automatic = false) {
     button.disabled = false;
     elements.syncRefreshButton.disabled = false;
     elements.syncRefreshButton.classList.remove("is-loading");
-    button.textContent = "Načíst z Google Sheets";
+    button.textContent = "Synchronizovat nyní";
   }
 }
 
