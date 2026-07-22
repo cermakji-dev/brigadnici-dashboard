@@ -11,7 +11,7 @@
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="styles.css?v=74">
+  <link rel="stylesheet" href="styles.css?v=75">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -492,8 +492,8 @@
         <button class="icon-button edit-button" type="button" aria-label="Upravit profil">•••</button>
       </div>
       <div class="hours-block">
-        <div><strong class="hours-value"></strong><span>h / měsíc</span></div>
-        <span class="rolling-hours"><strong class="hours-60-value"></strong> / 60 dní</span>
+        <div><strong class="hours-value"></strong><span>hodin tento měsíc</span></div>
+        <span class="rolling-hours"><strong class="hours-60-value"></strong> za 60 dní</span>
       </div>
       <div class="department-badges" aria-label="Zaškolení"></div>
       <div class="metric">
@@ -505,7 +505,7 @@
         <div class="bar"><span class="reliability-bar"></span></div>
       </div>
       <div class="card-note">
-        <textarea class="note-preview inline-note" rows="1" placeholder="Poznámka v přehledu…" aria-label="Poznámka v přehledu"></textarea>
+        <textarea class="note-preview inline-note" rows="2" placeholder="Poznámka v přehledu…" aria-label="Poznámka v přehledu"></textarea>
       </div>
       <div class="sales-card-row"><span class="sales-card-status"></span><button class="sales-card-button" type="button">Report prodejů</button></div>
       <div class="feedback-row">
