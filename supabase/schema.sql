@@ -49,11 +49,14 @@ create table if not exists public.feedback (
   category text not null default 'general' check (category in ('attendance', 'training', 'general')),
   note text not null check (length(trim(note)) > 0),
   created_by uuid not null references auth.users(id),
+  created_by_email text not null,
   created_at timestamptz not null default now()
 );
 
 alter table public.feedback
   add column if not exists category text not null default 'general';
+alter table public.feedback
+  add column if not exists created_by_email text;
 
 do $$
 begin

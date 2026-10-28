@@ -1,4 +1,4 @@
-import { incompleteOnboardingTasks, normalizeText, slugFromName } from "./logic.mjs";
+import { addRosterOnlyWorkers, incompleteOnboardingTasks, normalizeText, slugFromName } from "./logic.mjs";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -66,6 +66,7 @@ const elements = {
   onboardingTraining: document.querySelector("#onboardingTraining"),
   onboardingContracts: document.querySelector("#onboardingContracts"),
   onboardingTaxes: document.querySelector("#onboardingTaxes"),
+  onboardingAttribution: document.querySelector("#onboardingAttribution"),
   peopleGrid: document.querySelector("#peopleGrid"),
   skeletonGrid: document.querySelector("#skeletonGrid"),
   peopleTableWrap: document.querySelector("#peopleTableWrap"),
@@ -119,6 +120,7 @@ const elements = {
   reliabilityRange: document.querySelector("#reliabilityRange"),
   reliabilityOutput: document.querySelector("#reliabilityOutput"),
   notesInput: document.querySelector("#notesInput"),
+  detailNoteAttribution: document.querySelector("#detailNoteAttribution"),
   clearNotesButton: document.querySelector("#clearNotesButton"),
   workerNoteInput: document.querySelector("#workerNoteInput"),
   addWorkerNoteButton: document.querySelector("#addWorkerNoteButton"),
@@ -333,6 +335,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     type: elements.feedbackType.value,
     category: elements.feedbackCategoryInputs.find(input => input.checked)?.value,
     note,
+    createdByEmail: remoteUser?.email || "",
     createdAt: new Date().toISOString()
   };
   if (supabaseClient && remoteUser && person.remoteId) {
@@ -341,8 +344,9 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
       kind: feedbackItem.type,
       category: feedbackItem.category,
       note: feedbackItem.note,
-      created_by: remoteUser.id
-    }).select("id, kind, category, note, created_at").single();
+      created_by: remoteUser.id,
+      created_by_email: remoteUser.email.toLowerCase()
+    }).select("id, kind, category, note, created_by_email, created_at").single();
     if (error) {
       elements.feedbackNote.setCustomValidity(error.message);
       elements.feedbackNote.reportValidity();
@@ -351,6 +355,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     elements.feedbackNote.setCustomValidity("");
     feedbackItem.id = data.id;
     feedbackItem.category = data.category;
+    feedbackItem.createdByEmail = data.created_by_email;
     feedbackItem.createdAt = data.created_at;
   }
   if (!Array.isArray(person.feedback)) person.feedback = [];
@@ -631,6 +636,29 @@ function closeDialogFromBackdrop(event) {
   if (!inside) event.currentTarget.close();
 }
 
+function renderOnboardingAttribution(onboarding = {}) {
+  if (!onboarding.updatedByEmail) {
+    elements.onboardingAttribution.textContent = "Zatím bez zaznamenané změny.";
+    return;
+  }
+  const when = onboarding.updatedAt
+    ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(onboarding.updatedAt))
+    : "";
+  elements.onboardingAttribution.textContent = [`Upravil ${onboarding.updatedByEmail}`, when].filter(Boolean).join(" · ");
+}
+
+function renderDetailNoteAttribution(person) {
+  const change = (person.audit || []).find(item =>
+    item.operation === "UPDATE" && item.before?.notes !== item.after?.notes
+  );
+  if (!change) {
+    elements.detailNoteAttribution.textContent = "Autor poslední změny je v historii profilu.";
+    return;
+  }
+  const when = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(change.changedAt));
+  elements.detailNoteAttribution.textContent = `Upravil ${change.changedBy} · ${when}`;
+}
+
 function updateRangeControl(input, output) {
   output.value = `${input.value} %`;
   input.style.setProperty("--range-value", `${input.value}%`);
@@ -723,7 +751,14 @@ async function saveOnboarding() {
     setMessage(`Nástupní úkol se nepodařilo uložit: ${error.message}`, true);
     return;
   }
-  person.onboarding = next;
+  person.onboarding = {
+    ...next,
+    updatedByEmail: remoteUser.email.toLowerCase(),
+    updatedAt: new Date().toISOString()
+  };
+  if (elements.dialog.open && elements.personId.value === person.id) {
+    renderOnboardingAttribution(person.onboarding);
+  }
   if (next.training && normalize(person.status) === "novacek") {
     const { error: statusError } = await supabaseClient.from("workers").update({ status: "Aktivní" }).eq("id", person.remoteId);
     if (!statusError) person.status = "Aktivní";
@@ -764,6 +799,7 @@ async function saveDetailNotes() {
       await refreshWorkerAudit(person);
     }
     person.notes = next;
+    renderDetailNoteAttribution(person);
     elements.clearNotesButton.hidden = !next;
     saveState();
     render();
@@ -778,12 +814,14 @@ async function restoreNote(person, note) {
   if (supabaseClient && remoteUser && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ notes: note }).eq("id", person.remoteId);
     if (error) throw error;
+    await refreshWorkerAudit(person);
   }
   person.notes = note;
   saveState();
   if (elements.dialog.open && elements.personId.value === person.id) {
     elements.notesInput.value = note;
     elements.clearNotesButton.hidden = !note;
+    renderDetailNoteAttribution(person);
   }
   render();
 }
@@ -940,11 +978,11 @@ async function loadRemoteState() {
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
   const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult] = await Promise.all([
     scoped(supabaseClient.from("attendance_totals").select("worker_id, period, hours")).eq("period", latestPeriod),
-    scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_at")).order("created_at"),
+    scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).order("created_at"),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
     scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", dateKey(salesCutoff)).order("shift_date", { ascending: false }),
-    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed"))
+    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed, updated_by_email, updated_at"))
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
@@ -968,6 +1006,7 @@ async function loadRemoteState() {
       type: item.kind,
       category: item.category || "general",
       note: item.note,
+      createdByEmail: item.created_by_email || "",
       createdAt: item.created_at
     });
   });
@@ -997,7 +1036,9 @@ async function loadRemoteState() {
   const onboardingByWorker = new Map((onboardingResult.data || []).map(item => [item.worker_id, {
     training: item.training_completed,
     contracts: item.contracts_completed,
-    taxes: item.taxes_completed
+    taxes: item.taxes_completed,
+    updatedByEmail: item.updated_by_email || "",
+    updatedAt: item.updated_at || ""
   }]));
 
   const remotePeople = {};
@@ -1358,7 +1399,7 @@ async function importWorkbookSheet(sheetName) {
     const sheet = pendingWorkbook.Sheets[sheetName];
     const match = findWorkbookHeader(sheet);
     if (!match) throw new Error("Vybraný list nemá očekávaný souhrn hodin.");
-    const shiftNewcomers = await ensureWorkersFromShiftSheet(sheet);
+    const { newcomers: shiftNewcomers, rosterNames: shiftRosterNames } = await ensureWorkersFromShiftSheet(sheet);
     const rows = [];
     for (let index = match.rowIndex + 1; index < match.matrix.length; index += 1) {
       const name = String(match.matrix[index][match.nameIndex] || "").trim();
@@ -1370,7 +1411,7 @@ async function importWorkbookSheet(sheetName) {
     state.plannedHours = findWorkbookSummaryValue(match.matrix, ["plánované hodiny", "planovane hodiny"]);
     state.freeHours = calculateFreeShiftHours(sheet);
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
-    await importRows(rows, `${pendingWorkbookName} — ${sheetName}`, shiftNewcomers);
+    await importRows(rows, `${pendingWorkbookName} — ${sheetName}`, shiftNewcomers, shiftRosterNames);
     return true;
   } catch (error) {
     setMessage(error.message || "List se nepodařilo načíst.", true);
@@ -1389,7 +1430,7 @@ function findWorkbookSummaryValue(matrix, labels) {
   return null;
 }
 
-async function importRows(rows, sourceName, precreatedNewcomers = []) {
+async function importRows(rows, sourceName, precreatedNewcomers = [], shiftRosterNames = []) {
   if (!rows.length) throw new Error("Soubor neobsahuje žádné datové řádky.");
   const columns = Object.keys(rows[0]);
   const nameColumn = findColumn(columns, ["jméno", "jmeno", "brigádník", "brigadnik", "name"]);
@@ -1418,6 +1459,9 @@ async function importRows(rows, sourceName, precreatedNewcomers = []) {
     if (emailColumn && row[emailColumn]) imported.email = String(row[emailColumn]).trim();
     if (photoColumn && row[photoColumn]) imported.photo = String(row[photoColumn]).trim();
   });
+
+  // Preserve sheet-assigned people even when the monthly hours summary has no row yet.
+  addRosterOnlyWorkers(totals, shiftRosterNames, findActiveWorker);
 
   monthRosterPersonIds.clear();
   monthRosterRemoteIds.clear();
@@ -1472,7 +1516,9 @@ async function ensureWorkersFromShiftSheet(sheet) {
       });
     }
   }
-  return ensureImportedWorkers(rows, "Jméno", null);
+  const newcomers = await ensureImportedWorkers(rows, "Jméno", null);
+  const rosterNames = [...new Set(rows.map(row => row.Jméno))];
+  return { newcomers, rosterNames };
 }
 
 function isLikelyWorkerName(value) {
@@ -2237,6 +2283,7 @@ async function saveInlineNote(person, input) {
     await refreshWorkerAudit(person);
   }
   person.notes = next;
+  renderDetailNoteAttribution(person);
   saveState();
   input.disabled = false;
   input.classList.remove("is-saving", "has-error");
@@ -2335,11 +2382,13 @@ async function openPerson(id) {
   elements.onboardingTraining.checked = Boolean(onboarding.training);
   elements.onboardingContracts.checked = Boolean(onboarding.contracts);
   elements.onboardingTaxes.checked = Boolean(onboarding.taxes);
+  renderOnboardingAttribution(onboarding);
   elements.notesInput.value = person.notes || "";
   elements.clearNotesButton.hidden = !person.notes;
   elements.workerNoteInput.value = "";
   elements.workerNotesStatus.textContent = "";
   renderWorkerNotes(person);
+  renderDetailNoteAttribution(person);
   renderProfileSales(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
@@ -2348,6 +2397,7 @@ async function openPerson(id) {
   await loadWorkerDetails(person);
   if (elements.dialog.open && elements.personId.value === person.id) {
     renderWorkerNotes(person);
+    renderDetailNoteAttribution(person);
     renderAuditHistory(person);
   }
 }
@@ -2490,6 +2540,9 @@ function renderFeedbackHistory(person) {
     const category = document.createElement("span");
     category.className = `feedback-category ${item.category || "general"}`;
     category.textContent = feedbackCategoryLabel(item.category);
+    const author = document.createElement("span");
+    author.className = "feedback-author";
+    author.textContent = item.createdByEmail || "Neznámý uživatel";
     const time = document.createElement("time");
     time.dateTime = item.createdAt;
     time.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt));
@@ -2505,7 +2558,7 @@ function renderFeedbackHistory(person) {
     deleteButton.textContent = "Smazat";
     deleteButton.setAttribute("aria-label", `Smazat ${item.type === "positive" ? "palec nahoru" : "palec dolů"}`);
     deleteButton.addEventListener("click", () => deleteFeedback(person, item, deleteButton));
-    actions.append(time, deleteButton);
+    actions.append(author, time, deleteButton);
     heading.append(category, actions);
     entry.append(icon, heading, note);
     list.append(entry);

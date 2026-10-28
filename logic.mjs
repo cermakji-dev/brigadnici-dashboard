@@ -8,6 +8,20 @@ export const normalizeText = value => String(value ?? "")
 
 export const slugFromName = value => normalizeText(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+export const addRosterOnlyWorkers = (totals, rosterNames, findWorker) => {
+  rosterNames.forEach(rosterName => {
+    const worker = findWorker(rosterName);
+    if (!worker || totals.has(worker.id)) return;
+    totals.set(worker.id, {
+      id: worker.id,
+      name: worker.name,
+      hours: 0,
+      email: worker.email,
+      photo: ""
+    });
+  });
+};
+
 export const isIgnoredShiftName = value => {
   const name = normalizeText(value);
   return !name || name === "volna smena" || name === "volná směna" || name.startsWith("volna smena ");

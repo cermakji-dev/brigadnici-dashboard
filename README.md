@@ -2,20 +2,20 @@
 
 Jednoduchý přehled brigádníků připravený pro GitHub Pages.
 
-## Co umí první verze
+## Funkce
 
 - importovat celý XLSX sešit nebo CSV exportovaný z Google Sheets,
 - nabídnout výběr měsíčního listu a načíst jeho sloupce `Jméno` a `Počet zapsaných hodin`,
 - seskupit záznamy podle jména a sečíst odpracované hodiny,
+- automaticky založit kartu každému člověku uvedenému v měsíčním rozpisu směn, i když zatím nemá zapsané hodiny,
 - zobrazit karty brigádníků s fotografií,
 - evidovat schopnosti a docházkovou morálku,
-- přidávat palce nahoru a dolů s povinným důvodem a časem záznamu,
+- přidávat palce nahoru a dolů s povinným důvodem, časem a autorem záznamu,
 - otevřít kartu brigádníka a zobrazit detail včetně historie hodnocení,
-- zobrazovat pouze autoritativní seznam 27 aktivních brigádníků a ignorovat historické osoby z docházky,
-- evidovat zaškolení pro Výdej, Prodej, Lego, Pokladny, Upsell, MV a LOG,
+- zobrazovat aktivní brigádníky z rozpisu a ignorovat historické osoby, které v aktuálním rozpisu nejsou,
+- evidovat zaškolení pro Výdej, Prodej, Lego, Pokladny, Upsell, MV, LOG a PS,
 - filtrovat karty podle jednoho nebo více oddělení v režimu „alespoň jedno“ nebo „všechna vybraná“,
 - ukládat poznámky,
-- exportovat a importovat úplnou JSON zálohu.
 
 ## Formát docházky
 
@@ -41,8 +41,8 @@ V repozitáři otevřete **Settings → Pages**, jako zdroj vyberte **Deploy fro
 
 ## Důležitá poznámka k datům
 
-Tato první verze ukládá profily a hodnocení do `localStorage` konkrétního prohlížeče. Pro sdílení mezi zařízeními použijte export/import zálohy. Pro skutečnou víceuživatelskou databázi bude potřeba připojit backend (například Supabase) a přihlášení uživatelů.
+Profily, docházka, hodnocení, poznámky a prodejní reporty se ukládají v Supabase. V `localStorage` zůstává pouze nastavení zobrazení, barevný režim a lokální informace o posledním načtení.
 
 ## Připravený databázový backend
 
-Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. Aplikace používá přihlášení pomocí odkazu zaslaného na povolený e-mail a bez platného členství nezobrazí žádná osobní data.
+Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. Aplikace používá přihlášení e-mailem a heslem pro povolené účty a bez platného členství nezobrazí žádná osobní data.

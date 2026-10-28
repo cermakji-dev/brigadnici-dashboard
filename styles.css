@@ -514,12 +514,13 @@ textarea { resize: vertical; }
 .range-group label > span { display: grid; min-width: 0; gap: 3px; line-height: 1.2; }
 .range-group label small { margin: 0; color: var(--muted); font-size: 0.68rem; font-weight: 550; line-height: 1.25; }
 .range-group output { min-width: 3.7rem; color: var(--text); font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 750; line-height: 1.2; text-align: right; white-space: nowrap; }
-.range-group input[type="range"] { width: 100%; height: 8px; appearance: none; background: linear-gradient(to right, var(--range-start) 0%, var(--range-end) var(--range-value, 50%), var(--brand-soft) var(--range-value, 50%), var(--brand-soft) 100%); border: 0; border-radius: 999px; cursor: pointer; }
-.range-group input[type="range"]:disabled { cursor: default; opacity: 1; }
-.range-group input[type="range"]::-webkit-slider-thumb { width: 18px; height: 18px; appearance: none; background: var(--range-end); border: 3px solid var(--surface-elevated); border-radius: 50%; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.28); }
-.range-group input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: var(--range-end); border: 3px solid var(--surface-elevated); border-radius: 50%; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.28); }
-.skills-range-group input { --range-start: #315fc2; --range-end: #71359a; }
-.reliability-range-group input { --range-start: var(--metric-color, #16a34a); --range-end: var(--metric-color, #16a34a); }
+.range-group progress.metric-meter { display: block; width: 100%; height: 8px; appearance: none; background: var(--brand-soft); border: 0; border-radius: 999px; overflow: hidden; }
+.range-group progress.metric-meter::-webkit-progress-bar { background: var(--brand-soft); border-radius: 999px; }
+.skills-range-group progress.metric-meter::-webkit-progress-value { background: linear-gradient(90deg, #315fc2, #71359a); border-radius: 999px; transition: width 180ms ease; }
+.skills-range-group progress.metric-meter::-moz-progress-bar { background: #71359a; border-radius: 999px; }
+.reliability-range-group progress.metric-meter::-webkit-progress-value { background: var(--metric-color, #16a34a); border-radius: 999px; transition: width 180ms ease; }
+.reliability-range-group progress.metric-meter::-moz-progress-bar { background: var(--metric-color, #16a34a); border-radius: 999px; }
+.onboarding-attribution { display: block; margin-top: 10px; color: var(--muted); font-size: .72rem; }
 .notes-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .notes-label > span { display: grid; gap: 2px; }
 .notes-label small { color: var(--muted); font-size: .68rem; font-weight: 550; }
@@ -556,7 +557,7 @@ textarea { resize: vertical; }
 .feedback-entry { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .feedback-entry:last-child { border-bottom: 0; }
 .feedback-entry p { grid-column: 2; margin: 0; line-height: 1.45; }
-.feedback-entry time { color: var(--muted); font-size: 0.78rem; }
+.feedback-entry time, .feedback-author { color: var(--muted); font-size: 0.78rem; }
 .feedback-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .feedback-entry-actions { display: flex; align-items: center; gap: 9px; }
 .feedback-delete { padding: 3px 5px; background: transparent; color: var(--negative); border: 0; border-radius: 6px; cursor: pointer; font: inherit; font-size: .72rem; font-weight: 650; }

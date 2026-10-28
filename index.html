@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.2.0">
+  <meta name="app-build" content="5.3.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=85">
+    <link rel="stylesheet" href="styles.css?v=86">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -312,12 +312,12 @@
       </nav>
       <div class="profile-editor-grid profile-tab-panel is-active" data-profile-panel="overview">
         <div class="range-group skills-range-group">
-          <label for="skillsRange"><span>Schopnosti <small>podle zaškolených oddělení</small></span><output id="skillsOutput">0 %</output></label>
-          <input id="skillsRange" type="range" min="0" max="100" step="5" value="50" disabled>
+          <label for="skillsRange"><span>Schopnosti <small>automaticky podle zaškolených oddělení</small></span><output id="skillsOutput">0 %</output></label>
+          <progress id="skillsRange" class="metric-meter" max="100" value="50">50 %</progress>
         </div>
         <div class="range-group reliability-range-group">
-          <label for="reliabilityRange"><span>Docházková morálka <small>výchozí hodnota 100 %</small></span><output id="reliabilityOutput">100 %</output></label>
-          <input id="reliabilityRange" type="range" min="0" max="100" step="5" value="100" disabled>
+          <label for="reliabilityRange"><span>Docházková morálka <small>automaticky podle hodnocení docházky</small></span><output id="reliabilityOutput">100 %</output></label>
+          <progress id="reliabilityRange" class="metric-meter" max="100" value="100">100 %</progress>
         </div>
         <fieldset class="department-editor">
           <legend>Zaškolení na oddělení</legend>
@@ -340,10 +340,12 @@
             <label><input id="onboardingContracts" type="checkbox"> Podpis smluv</label>
             <label><input id="onboardingTaxes" type="checkbox"> Daně</label>
           </div>
+          <small id="onboardingAttribution" class="onboarding-attribution" aria-live="polite">Zatím bez zaznamenané změny.</small>
         </fieldset>
         <label class="notes-field">
           <span class="notes-label"><span>Poznámka v přehledu <small>zobrazuje se přímo na kartě a v seznamu</small></span><button id="clearNotesButton" class="text-button danger" type="button">Vymazat</button></span>
           <textarea id="notesInput" rows="4" placeholder="Krátká hlavní informace viditelná bez otevření detailu…"></textarea>
+          <small id="detailNoteAttribution" class="onboarding-attribution" aria-live="polite">Autor poslední změny je v historii profilu.</small>
         </label>
       </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="notes" hidden>
