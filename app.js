@@ -4,12 +4,13 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv
-} from "./logic.mjs?v=86";
+} from "./logic.mjs?v=87";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
 const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const SORT_KEY = "brigadnici-dashboard-sort";
+const EDITOR_KEY = "brigadnici-editor-name";
 const SORT_OPTIONS = {
   name: { key: "name", direction: "asc" },
   "hours-desc": { key: "hours", direction: "desc" },
@@ -25,11 +26,8 @@ let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
 let supabaseClient = null;
-let remoteUser = null;
 let messageTimer = null;
 let loaderHideTimer = null;
-let sessionLoadPromise = null;
-let hasAutoSynced = false;
 let workerNotesTableAvailable = true;
 let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
@@ -50,18 +48,17 @@ const monthRosterRemoteIds = new Set();
 
 const state = loadState();
 const elements = {
-  authGate: document.querySelector("#authGate"),
-  loginForm: document.querySelector("#loginForm"),
-  loginEmail: document.querySelector("#loginEmail"),
-  loginPassword: document.querySelector("#loginPassword"),
-  loginButton: document.querySelector("#loginButton"),
   themeToggles: [...document.querySelectorAll("[data-theme-toggle]")],
-  authMessage: document.querySelector("#authMessage"),
   appLoader: document.querySelector("#appLoader"),
   appLoaderStatus: document.querySelector("#appLoaderStatus"),
   appContent: [...document.querySelectorAll(".app-content")],
-  signedInUser: document.querySelector("#signedInUser"),
-  signOutButton: document.querySelector("#signOutButton"),
+  editorNameButton: document.querySelector("#editorNameButton"),
+  editorNameLabel: document.querySelector("#editorNameLabel"),
+  editorDialog: document.querySelector("#editorDialog"),
+  editorForm: document.querySelector("#editorForm"),
+  editorNameInput: document.querySelector("#editorNameInput"),
+  closeEditorDialog: document.querySelector("#closeEditorDialog"),
+  skipEditorName: document.querySelector("#skipEditorName"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   syncRefreshButton: document.querySelector("#syncRefreshButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
@@ -182,7 +179,6 @@ const elements = {
   newWorkerName: document.querySelector("#newWorkerName"),
   newWorkerId: document.querySelector("#newWorkerId"),
   newWorkerEmail: document.querySelector("#newWorkerEmail"),
-  addWorkerPassword: document.querySelector("#addWorkerPassword"),
   addWorkerStatus: document.querySelector("#addWorkerStatus"),
   confirmAddWorker: document.querySelector("#confirmAddWorker"),
   closeAddWorker: document.querySelector("#closeAddWorker"),
@@ -191,7 +187,6 @@ const elements = {
   deleteWorkerDialog: document.querySelector("#deleteWorkerDialog"),
   deleteWorkerForm: document.querySelector("#deleteWorkerForm"),
   deleteWorkerName: document.querySelector("#deleteWorkerName"),
-  deleteWorkerPassword: document.querySelector("#deleteWorkerPassword"),
   deleteWorkerStatus: document.querySelector("#deleteWorkerStatus"),
   confirmDeleteWorker: document.querySelector("#confirmDeleteWorker"),
   closeDeleteWorker: document.querySelector("#closeDeleteWorker"),
@@ -204,18 +199,20 @@ const elements = {
   closeInactiveWorkers: document.querySelector("#closeInactiveWorkers"),
   restoreWorkerConfirm: document.querySelector("#restoreWorkerConfirm"),
   restoreWorkerName: document.querySelector("#restoreWorkerName"),
-  restoreWorkerPassword: document.querySelector("#restoreWorkerPassword"),
   restoreWorkerStatus: document.querySelector("#restoreWorkerStatus"),
   cancelRestoreWorker: document.querySelector("#cancelRestoreWorker"),
   confirmRestoreWorker: document.querySelector("#confirmRestoreWorker")
 };
 
-elements.loginForm.addEventListener("submit", signInWithPassword);
 elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
 updateThemeControls();
-elements.signOutButton.addEventListener("click", async () => {
-  if (supabaseClient) await supabaseClient.auth.signOut();
-});
+elements.editorNameButton.addEventListener("click", () => openEditorDialog());
+elements.editorForm.addEventListener("submit", saveEditorName);
+elements.closeEditorDialog.addEventListener("click", () => elements.editorDialog.close());
+elements.skipEditorName.addEventListener("click", () => elements.editorDialog.close());
+elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.editorDialog.addEventListener("close", () => { if (!editorName()) sessionStorage.setItem(EDITOR_KEY, "skipped"); });
+renderEditorName();
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
@@ -370,17 +367,17 @@ async function saveFeedback() {
     type: elements.feedbackType.value,
     category: elements.feedbackCategoryInputs.find(input => input.checked)?.value,
     note,
-    createdByEmail: remoteUser?.email || "",
+    createdByEmail: editorLabel(),
     createdAt: new Date().toISOString()
   };
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { data, error } = await supabaseClient.from("feedback").insert({
       worker_id: person.remoteId,
       kind: feedbackItem.type,
       category: feedbackItem.category,
       note: feedbackItem.note,
-      created_by: remoteUser.id,
-      created_by_email: remoteUser.email.toLowerCase()
+      created_by: null,
+      created_by_email: editorLabel()
     }).select("id, kind, category, note, created_by_email, created_at").single();
     if (error) {
       elements.feedbackNote.setCustomValidity(error.message);
@@ -399,7 +396,7 @@ async function saveFeedback() {
   const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
   person.skills = metrics.skills;
   person.reliability = metrics.reliability;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
     if (error) setMessage(`Hodnocení je uložené, ale ukazatele se nepodařilo zapsat: ${error.message}`, true);
     else await refreshWorkerAudit(person);
@@ -431,14 +428,9 @@ function openDeleteWorkerDialog() {
   elements.deleteWorkerDialog.dataset.personId = person.id;
   setDialogStatus(elements.deleteWorkerStatus, "");
   elements.deleteWorkerDialog.showModal();
-  elements.deleteWorkerPassword.focus();
+  elements.confirmDeleteWorker.focus();
 }
 
-async function verifyCurrentPassword(password) {
-  if (!supabaseClient || !remoteUser?.email) throw new Error("Přihlášení není aktivní.");
-  const { error } = await supabaseClient.auth.signInWithPassword({ email: remoteUser.email, password });
-  if (error) throw new Error("Zadané heslo není správné.");
-}
 
 async function addWorker(event) {
   event.preventDefault();
@@ -446,10 +438,8 @@ async function addWorker(event) {
   const externalId = elements.newWorkerId.value.trim();
   const email = elements.newWorkerEmail.value.trim() || null;
   elements.confirmAddWorker.disabled = true;
-  setDialogStatus(elements.addWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
   try {
-    await verifyCurrentPassword(elements.addWorkerPassword.value);
-    setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
     const { data: createdWorkerId, error } = await supabaseClient.rpc("admin_create_worker", {
       p_external_user_id: externalId,
       p_full_name: name,
@@ -472,7 +462,6 @@ async function addWorker(event) {
     setDialogStatus(elements.addWorkerStatus, error.message || "Kartu se nepodařilo vytvořit.", true);
   } finally {
     elements.confirmAddWorker.disabled = false;
-    elements.addWorkerPassword.value = "";
   }
 }
 
@@ -481,10 +470,8 @@ async function removeWorker(event) {
   const person = state.people[elements.deleteWorkerDialog.dataset.personId];
   if (!person?.remoteId) return;
   elements.confirmDeleteWorker.disabled = true;
-  setDialogStatus(elements.deleteWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.deleteWorkerStatus, "Odebírám z přehledu…");
   try {
-    await verifyCurrentPassword(elements.deleteWorkerPassword.value);
-    setDialogStatus(elements.deleteWorkerStatus, "Odebírám z přehledu…");
     const { error } = await supabaseClient.rpc("admin_set_worker_active", { p_worker_id: person.remoteId, p_active: false });
     if (error) throw new Error(error.message);
     delete state.people[person.id];
@@ -502,7 +489,6 @@ async function removeWorker(event) {
     setDialogStatus(elements.deleteWorkerStatus, error.message || "Brigádníka se nepodařilo odebrat.", true);
   } finally {
     elements.confirmDeleteWorker.disabled = false;
-    elements.deleteWorkerPassword.value = "";
   }
 }
 
@@ -548,9 +534,8 @@ function selectWorkerForRestore(worker) {
   elements.restoreWorkerConfirm.hidden = false;
   elements.cancelRestoreWorker.hidden = false;
   elements.confirmRestoreWorker.hidden = false;
-  elements.restoreWorkerPassword.value = "";
   setDialogStatus(elements.restoreWorkerStatus, "");
-  elements.restoreWorkerPassword.focus();
+  elements.confirmRestoreWorker.focus();
 }
 
 function cancelRestoreWorker() {
@@ -559,7 +544,6 @@ function cancelRestoreWorker() {
   elements.restoreWorkerConfirm.hidden = true;
   elements.cancelRestoreWorker.hidden = true;
   elements.confirmRestoreWorker.hidden = true;
-  elements.restoreWorkerPassword.value = "";
   setDialogStatus(elements.restoreWorkerStatus, "");
 }
 
@@ -569,9 +553,8 @@ async function restoreWorker(event) {
   const workerName = elements.inactiveWorkersDialog.dataset.workerName;
   if (!workerId) return;
   elements.confirmRestoreWorker.disabled = true;
-  setDialogStatus(elements.restoreWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.restoreWorkerStatus, "Obnovuji…");
   try {
-    await verifyCurrentPassword(elements.restoreWorkerPassword.value);
     const { error } = await supabaseClient.rpc("admin_set_worker_active", { p_worker_id: workerId, p_active: true });
     if (error) throw error;
     await loadRemoteState();
@@ -587,7 +570,6 @@ async function restoreWorker(event) {
     setDialogStatus(elements.restoreWorkerStatus, error.message || "Brigádníka se nepodařilo obnovit.", true);
   } finally {
     elements.confirmRestoreWorker.disabled = false;
-    elements.restoreWorkerPassword.value = "";
   }
 }
 
@@ -618,42 +600,80 @@ function saveState() {
 async function initializeApp() {
   const config = window.APP_CONFIG;
   if (!config?.supabaseUrl || !config?.supabasePublishableKey || !window.supabase?.createClient) {
-    hideAppLoader();
-    showAuthMessage("Chybí konfigurace Supabase nebo se nenačetla jeho knihovna.", true);
+    showLoadError("Chybí konfigurace Supabase nebo se nenačetla jeho knihovna.");
     return;
   }
-  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey);
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    // Ověření hesla při přidání/odebrání brigádníka, obnova tokenu i návrat
-    // na kartu prohlížeče vyvolají událost pro stejného uživatele. Data jsou
-    // už načtená, takže znovu neukazujeme loader ani nenačítáme vše od začátku.
-    const sameUser = session?.user && remoteUser?.id === session.user.id && elements.authGate.hidden;
-    if (sameUser && event !== "SIGNED_OUT") {
-      remoteUser = session.user;
-      return;
-    }
-    // Supabase nedoporučuje volat jeho API přímo v obsluze události (hrozí zablokování).
-    setTimeout(() => { void processSession(session); }, 0);
-  });
-  const { data, error } = await supabaseClient.auth.getSession();
-  if (error) showAuthMessage(error.message, true);
-  else await processSession(data.session);
+  createSupabaseClient();
+  showAppLoader("Načítám profily brigádníků…");
+  try {
+    await loadRemoteState();
+    render();
+    updateAppLoader("Synchronizuji docházku…");
+    await syncGoogleSheets(true);
+    render();
+    elements.appContent.forEach(element => { element.hidden = false; });
+    updateAppLoader("Přehled je připravený");
+    await waitForAppPaint();
+    hideAppLoader();
+    if (!editorName() && !sessionStorage.getItem(EDITOR_KEY)) openEditorDialog();
+  } catch (error) {
+    showLoadError(error.message || "Data se nepodařilo načíst.");
+  }
 }
 
-async function signInWithPassword(event) {
-  event.preventDefault();
-  if (!supabaseClient) return;
-  showAuthMessage("Přihlašuji…");
-  elements.loginButton.disabled = true;
-  elements.loginButton.textContent = "Přihlašuji…";
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email: elements.loginEmail.value.trim(),
-    password: elements.loginPassword.value
+// Aplikace běží bez přihlášení (veřejný přístup, viz supabase/2026-10-28-public-access.sql).
+// Případné staré přihlášení z prohlížeče se nepoužije, aby všechny požadavky
+// šly pod stejnou veřejnou rolí. Jméno editora jde v hlavičce kvůli historii změn;
+// hlavičky nesmí obsahovat diakritiku, proto je URL-kódované.
+function createSupabaseClient() {
+  const config = window.APP_CONFIG;
+  const name = editorName();
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "brigadnici-public" },
+    global: { headers: name ? { "x-editor-name": encodeURIComponent(name) } : {} }
   });
-  elements.loginButton.disabled = false;
-  elements.loginButton.textContent = "Přihlásit se";
-  if (error) hideAppLoader();
-  showAuthMessage(error ? "E-mail nebo heslo není správné." : "Přihlášení proběhlo úspěšně.", Boolean(error));
+}
+
+function showLoadError(text) {
+  elements.appLoader.hidden = false;
+  elements.appLoader.classList.add("is-visible", "has-error");
+  updateAppLoader(text);
+}
+
+function editorName() {
+  try {
+    return (localStorage.getItem(EDITOR_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+// Text ukládaný do sloupců *_by_email u palců, poznámek, reportů a nástupu.
+function editorLabel() {
+  return editorName() || "Neuvedeno";
+}
+
+function renderEditorName() {
+  const name = editorName();
+  elements.editorNameLabel.textContent = name || "Podepsat se";
+  elements.editorNameButton.classList.toggle("is-missing", !name);
+}
+
+function openEditorDialog() {
+  elements.editorNameInput.value = editorName();
+  elements.editorDialog.showModal();
+  elements.editorNameInput.focus();
+}
+
+function saveEditorName(event) {
+  event.preventDefault();
+  const name = elements.editorNameInput.value.trim().slice(0, 80);
+  if (!name) return;
+  localStorage.setItem(EDITOR_KEY, name);
+  createSupabaseClient();
+  renderEditorName();
+  elements.editorDialog.close();
+  setMessage(`Změny se budou ukládat pod jménem ${name}.`);
 }
 
 function toggleTheme() {
@@ -755,7 +775,7 @@ async function saveDepartmentTraining() {
   const metrics = calculateAutomaticMetrics(person.feedback, next);
   elements.personDepartments.forEach(input => { input.disabled = true; });
   try {
-    if (supabaseClient && remoteUser && person.remoteId) {
+    if (supabaseClient && person.remoteId) {
       const { error } = await supabaseClient.from("workers").update({ departments: next, skills: metrics.skills, status: nextStatus }).eq("id", person.remoteId);
       if (error) throw error;
       await refreshWorkerAudit(person);
@@ -788,8 +808,8 @@ async function saveOnboarding() {
     training_completed: next.training,
     contracts_completed: next.contracts,
     taxes_completed: next.taxes,
-    updated_by: remoteUser.id,
-    updated_by_email: remoteUser.email.toLowerCase()
+    updated_by: null,
+    updated_by_email: editorLabel()
   };
   const { error } = await supabaseClient.from("worker_onboarding").upsert(payload, { onConflict: "worker_id" });
   if (error) {
@@ -798,7 +818,7 @@ async function saveOnboarding() {
   }
   person.onboarding = {
     ...next,
-    updatedByEmail: remoteUser.email.toLowerCase(),
+    updatedByEmail: editorLabel(),
     updatedAt: new Date().toISOString()
   };
   if (elements.dialog.open && elements.personId.value === person.id) {
@@ -815,7 +835,7 @@ async function saveOnboarding() {
 
 async function restoreDepartments(person, departments, status = person.status) {
   const metrics = calculateAutomaticMetrics(person.feedback, departments);
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ departments, skills: metrics.skills, status }).eq("id", person.remoteId);
     if (error) throw error;
   }
@@ -838,7 +858,7 @@ async function saveDetailNotes() {
   const next = elements.notesInput.value.trim();
   if (previous === next) return;
   try {
-    if (supabaseClient && remoteUser && person.remoteId) {
+    if (supabaseClient && person.remoteId) {
       const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
       if (error) throw error;
       await refreshWorkerAudit(person);
@@ -856,7 +876,7 @@ async function saveDetailNotes() {
 }
 
 async function restoreNote(person, note) {
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ notes: note }).eq("id", person.remoteId);
     if (error) throw error;
     await refreshWorkerAudit(person);
@@ -943,70 +963,6 @@ function updateSalesSortIndicators() {
   });
 }
 
-async function processSession(session) {
-  if (!session?.user) return handleSession(session);
-  if (sessionLoadPromise) return sessionLoadPromise;
-  const currentLoad = handleSession(session);
-  sessionLoadPromise = currentLoad;
-  try {
-    return await currentLoad;
-  } finally {
-    if (sessionLoadPromise === currentLoad) sessionLoadPromise = null;
-  }
-}
-
-async function handleSession(session) {
-  if (!session?.user) {
-    hideAppLoader();
-    remoteUser = null;
-    hasAutoSynced = false;
-    elements.authGate.hidden = false;
-    elements.appContent.forEach(element => { element.hidden = true; });
-    return;
-  }
-  showAppLoader("Ověřuji přístup…");
-  remoteUser = session.user;
-  const { data: membership, error: membershipError } = await supabaseClient
-    .from("app_members")
-    .select("email")
-    .eq("email", remoteUser.email.toLocaleLowerCase())
-    .maybeSingle();
-  if (membershipError) {
-    hideAppLoader();
-    showAuthMessage(`Databáze ještě není připravená: ${membershipError.message}`, true);
-    return;
-  }
-  if (!membership) {
-    hideAppLoader();
-    showAuthMessage("Tento e-mail není na seznamu povolených vedoucích.", true);
-    await supabaseClient.auth.signOut();
-    return;
-  }
-  elements.authGate.hidden = true;
-  elements.appContent.forEach(element => { element.hidden = true; });
-  elements.signedInUser.textContent = remoteUser.email;
-  try {
-    updateAppLoader("Načítám profily brigádníků…");
-    await loadRemoteState();
-    render();
-    if (!hasAutoSynced) {
-      hasAutoSynced = true;
-      updateAppLoader("Synchronizuji docházku…");
-      await syncGoogleSheets(true);
-    }
-    render();
-    elements.appContent.forEach(element => { element.hidden = false; });
-    updateAppLoader("Přehled je připravený");
-    await waitForAppPaint();
-    hideAppLoader();
-  } catch (error) {
-    hideAppLoader();
-    elements.authGate.hidden = false;
-    elements.appContent.forEach(element => { element.hidden = true; });
-    showAuthMessage(error.message, true);
-  }
-}
-
 function waitForAppPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
@@ -1029,10 +985,6 @@ function hideAppLoader() {
   loaderHideTimer = setTimeout(() => { elements.appLoader.hidden = true; }, 240);
 }
 
-function showAuthMessage(text, error = false) {
-  elements.authMessage.textContent = text;
-  elements.authMessage.classList.toggle("error", error);
-}
 
 async function loadRemoteState() {
   const workersResult = await supabaseClient.from("workers").select("*").eq("active", true).order("full_name");
@@ -1080,7 +1032,7 @@ async function loadRemoteState() {
     auditByWorker.get(item.worker_id).push({
       id: item.id,
       changedAt: item.changed_at,
-      changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+      changedBy: item.changed_by_email || "Dřívější uživatel",
       operation: item.operation,
       before: item.before_data,
       after: item.after_data
@@ -1234,7 +1186,7 @@ function mapSalesDay(row) {
 }
 
 async function syncSalesExpectations(workbook) {
-  if (!salesDaysTableAvailable || !supabaseClient || !remoteUser) return;
+  if (!salesDaysTableAvailable || !supabaseClient) return;
   const totals = new Map();
   const scannedDates = new Set();
   const today = startOfDay(new Date());
@@ -1473,7 +1425,7 @@ async function importRows(rows, sourceName, precreatedNewcomers = [], shiftRoste
   });
 
   state.lastImport = new Date().toISOString();
-  if (supabaseClient && remoteUser) await saveAttendanceRemote(totals, sourceName);
+  if (supabaseClient) await saveAttendanceRemote(totals, sourceName);
   saveState();
   render();
   setImportCollapsed(true);
@@ -1502,7 +1454,7 @@ async function ensureWorkersFromShiftSheet(sheet) {
 
 
 async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
-  if (!supabaseClient || !remoteUser) return [];
+  if (!supabaseClient) return [];
   const imported = new Map();
   rows.forEach(row => {
     const name = String(row[nameColumn] || "").trim();
@@ -1595,7 +1547,7 @@ async function saveAttendanceRemote(totals, sourceName) {
       period: currentImportPeriod,
       hours: imported.hours,
       source_name: sourceName,
-      imported_by: remoteUser.id,
+      imported_by: null,
       imported_at: new Date().toISOString()
     }] : [];
   });
@@ -2134,14 +2086,14 @@ async function markSalesDayNotSales() {
 
 async function updateSalesDay(changes, successMessage) {
   const day = salesDays.find(item => item.id === elements.salesReportId.value);
-  if (!day || !supabaseClient || !remoteUser) return;
+  if (!day || !supabaseClient) return;
   const buttons = [...elements.salesReportForm.querySelectorAll("button")];
   if (buttons.some(button => button.disabled)) return;
   buttons.forEach(button => { button.disabled = true; });
   setDialogStatus(elements.salesReportStatus, "Ukládám…");
   try {
     const { data, error } = await supabaseClient.from("sales_days")
-      .update({ ...changes, updated_by: remoteUser.id, updated_by_email: remoteUser.email.toLowerCase() })
+      .update({ ...changes, updated_by: null, updated_by_email: editorLabel() })
       .eq("id", day.id).select("*").single();
     if (error) {
       setDialogStatus(elements.salesReportStatus, `Report se nepodařilo uložit: ${error.message}`, true);
@@ -2331,7 +2283,7 @@ async function saveInlineNote(person, input) {
   if (next === previous) return;
   input.classList.add("is-saving");
   input.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
     if (error) {
       input.value = previous;
@@ -2557,16 +2509,16 @@ async function addWorkerNote() {
   const note = {
     id: crypto.randomUUID(),
     body,
-    createdBy: remoteUser?.id || "local",
-    createdByEmail: remoteUser?.email || "",
+    createdBy: null,
+    createdByEmail: editorLabel(),
     createdAt: new Date().toISOString()
   };
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { data, error } = await supabaseClient.from("worker_notes").insert({
       worker_id: person.remoteId,
       body,
-      created_by: remoteUser.id,
-      created_by_email: remoteUser.email.toLowerCase()
+      created_by: null,
+      created_by_email: editorLabel()
     }).select("id, body, created_by, created_by_email, created_at").single();
     if (error) {
       elements.addWorkerNoteButton.disabled = false;
@@ -2627,7 +2579,7 @@ function renderWorkerNotes(person) {
 async function deleteWorkerNote(person, note, button) {
   if (!confirm("Opravdu chcete tuto poznámku smazat?")) return;
   button.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("worker_notes").delete().eq("id", note.id).eq("worker_id", person.remoteId);
     if (error) {
       button.disabled = false;
@@ -2689,7 +2641,7 @@ function renderFeedbackHistory(person) {
 async function deleteFeedback(person, item, button) {
   if (!confirm("Opravdu chcete toto hodnocení smazat?")) return;
   button.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("feedback").delete().eq("id", item.id).eq("worker_id", person.remoteId);
     if (error) {
       button.disabled = false;
@@ -2701,7 +2653,7 @@ async function deleteFeedback(person, item, button) {
   const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
   person.skills = metrics.skills;
   person.reliability = metrics.reliability;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
     if (error) setMessage(`Hodnocení je smazané, ale ukazatele se nepodařilo přepočítat: ${error.message}`, true);
     else await refreshWorkerAudit(person);
@@ -2803,7 +2755,7 @@ async function refreshWorkerAudit(person) {
   person.audit = data.map(item => ({
     id: item.id,
     changedAt: item.changed_at,
-    changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+    changedBy: item.changed_by_email || "Dřívější uživatel",
     operation: item.operation,
     before: item.before_data,
     after: item.after_data
@@ -2813,7 +2765,7 @@ async function refreshWorkerAudit(person) {
 async function submitAppFeedback(event) {
   event.preventDefault();
   const message = elements.appFeedbackMessage.value.trim();
-  if (!message || !supabaseClient || !remoteUser) return;
+  if (!message || !supabaseClient) return;
   elements.sendAppFeedback.disabled = true;
   elements.sendAppFeedback.textContent = "Odesílám…";
   elements.appFeedbackStatus.textContent = "";
@@ -2822,8 +2774,8 @@ async function submitAppFeedback(event) {
     category: elements.appFeedbackCategory.value,
     message,
     page_url: window.location.href,
-    created_by: remoteUser.id,
-    created_by_email: remoteUser.email.toLocaleLowerCase()
+    created_by: null,
+    created_by_email: editorLabel()
   });
   elements.sendAppFeedback.disabled = false;
   elements.sendAppFeedback.textContent = "Odeslat zpětnou vazbu";

@@ -60,4 +60,4 @@ Profily, docházka, hodnocení, poznámky a prodejní reporty se ukládají v Su
 
 ## Připravený databázový backend
 
-Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. Aplikace používá přihlášení e-mailem a heslem pro povolené účty a bez platného členství nezobrazí žádná osobní data.
+Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. **Od 28. 10. 2026 je aplikace veřejná bez přihlášení.** Kdokoli s odkazem může data číst i měnit. Jméno u změn se bere z pole „Podepisovat jako“ (uložené jen v prohlížeči), takže ho nelze ověřit. Databázová pravidla jsou v `supabase/2026-10-28-public-access.sql`. Přihlášení vrátíte spuštěním `supabase/2026-10-28-public-access-revert.sql` a nasazením verze v86.

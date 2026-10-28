@@ -4,40 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.4.0">
+  <meta name="app-build" content="5.5.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=87">
+    <link rel="stylesheet" href="styles.css?v=88">
 </head>
 <body>
-  <section id="authGate" class="auth-gate">
-    <button class="theme-toggle auth-theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
-      <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
-    </button>
-    <form id="loginForm" class="login-card">
-      <div class="login-brand" aria-hidden="true">B</div>
-      <div class="login-heading">
-        <p class="eyebrow">Brigádníci P7 · interní aplikace</p>
-        <h1>Vítejte zpět</h1>
-        <p class="section-copy">Přihlaste se ke správě týmu, docházky a hodnocení.</p>
-      </div>
-      <label>E-mail
-        <input id="loginEmail" type="email" required autocomplete="email" placeholder="jmeno@firma.cz">
-      </label>
-      <label>Heslo
-        <input id="loginPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="Vaše heslo">
-      </label>
-      <button id="loginButton" class="button button-primary login-button" type="submit">Přihlásit se</button>
-      <p id="authMessage" class="message" role="status" aria-live="polite"></p>
-      <p class="login-help">Přístup mají pouze povolené účty vedoucích.</p>
-    </form>
-  </section>
 
-  <div id="appLoader" class="app-loader" role="status" aria-live="polite" hidden>
+  <div id="appLoader" class="app-loader is-visible" role="status" aria-live="polite">
     <div class="loader-glow loader-glow-one"></div>
     <div class="loader-glow loader-glow-two"></div>
     <div class="loader-card">
@@ -68,8 +46,7 @@
       <button class="topbar-action" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
         <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
       </button>
-      <span id="signedInUser" class="signed-in-user"></span>
-      <button id="signOutButton" class="topbar-action signout-action" type="button">Odhlásit</button>
+      <button id="editorNameButton" class="topbar-action editor-name-action" type="button" title="Jméno, pod kterým se ukládají vaše změny"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Podepsat se</span></button>
     </div>
   </header>
 
@@ -293,7 +270,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v86</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v87</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -418,10 +395,21 @@
       <p id="inactiveWorkersEmpty" class="empty-copy">Žádní neaktivní brigádníci.</p>
       <div id="restoreWorkerConfirm" class="restore-confirm" hidden>
         <p>Obnovit brigádníka <strong id="restoreWorkerName"></strong>?</p>
-        <label>Vaše heslo pro potvrzení<input id="restoreWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
         <p id="restoreWorkerStatus" class="message" role="status"></p>
       </div>
       <div class="dialog-actions"><button id="cancelRestoreWorker" class="button button-secondary" type="button" hidden>Zrušit obnovu</button><button id="confirmRestoreWorker" class="button button-primary" type="submit" hidden>Obnovit brigádníka</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="editorDialog" class="simple-dialog">
+    <form id="editorForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Kdo provádí změny</p><h2>Podepisovat jako</h2></div>
+        <button id="closeEditorDialog" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <p class="section-copy">Aplikace je bez přihlášení. Jméno se uloží jen v tomto prohlížeči a zobrazí se u palců, poznámek, reportů a v historii změn.</p>
+      <label>Vaše jméno<input id="editorNameInput" type="text" required maxlength="80" autocomplete="name" placeholder="Jméno a příjmení"></label>
+      <div class="dialog-actions"><button id="skipEditorName" class="button button-secondary" type="button">Později</button><button class="button button-primary" type="submit">Uložit</button></div>
     </form>
   </dialog>
 
@@ -434,7 +422,6 @@
       <label>Celé jméno<input id="newWorkerName" type="text" required autocomplete="off" placeholder="Jméno a příjmení"></label>
       <label>Interní ID<input id="newWorkerId" type="text" required autocomplete="off" placeholder="např. USER123456"></label>
       <label>E-mail <small class="optional-label">nepovinné</small><input id="newWorkerEmail" type="email" autocomplete="off" placeholder="jmeno@firma.cz"></label>
-      <label>Vaše heslo pro potvrzení<input id="addWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
       <p id="addWorkerStatus" class="message" role="status"></p>
       <div class="dialog-actions"><button id="cancelAddWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmAddWorker" class="button button-primary" type="submit">Přidat brigádníka</button></div>
     </form>
@@ -447,7 +434,6 @@
         <button id="closeDeleteWorker" class="icon-button" type="button" aria-label="Zavřít">×</button>
       </div>
       <p>Brigádník <strong id="deleteWorkerName"></strong> zmizí z aktivního přehledu. Jeho historie zůstane bezpečně zachovaná.</p>
-      <label>Vaše heslo pro potvrzení<input id="deleteWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
       <p id="deleteWorkerStatus" class="message" role="status"></p>
       <div class="dialog-actions"><button id="cancelDeleteWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmDeleteWorker" class="button button-danger" type="submit">Odebrat z přehledu</button></div>
     </form>
@@ -565,6 +551,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=86"></script>
+  <script type="module" src="app.js?v=87"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@ test("profil zobrazuje schopnosti a docházku jako automatické ukazatele", () =
 });
 
 test("historie hodnocení ukládá a zobrazuje e-mail autora", () => {
-  assert.match(app, /created_by_email: remoteUser\.email\.toLowerCase\(\)/);
+  assert.match(app, /created_by_email: editorLabel\(\)/);
   assert.match(app, /createdByEmail: item\.created_by_email/);
   assert.match(app, /author\.textContent = item\.createdByEmail/);
 });
@@ -30,8 +30,14 @@ test("autor prodejního reportu se nevkládá jako HTML", () => {
   assert.match(app, /\.sales-author"\)\.textContent = day\.updatedByEmail/);
 });
 
-test("ověření hesla stejného uživatele znovu nenačítá celou aplikaci", () => {
-  assert.match(app, /remoteUser\?\.id === session\.user\.id && elements\.authGate\.hidden/);
+test("aplikace běží bez přihlášení a neposílá staré přihlášení", () => {
+  assert.doesNotMatch(html, /id="authGate"|type="password"/);
+  assert.doesNotMatch(app, /signInWithPassword|remoteUser/);
+  assert.match(app, /persistSession: false/);
+});
+
+test("autor změny se posílá jako URL-kódovaná hlavička", () => {
+  assert.match(app, /"x-editor-name": encodeURIComponent\(name\)/);
 });
 
 test("profil má záložku docházky a přehledy mají export", () => {
