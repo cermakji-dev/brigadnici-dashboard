@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.3.0">
+  <meta name="app-build" content="5.4.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=86">
+    <link rel="stylesheet" href="styles.css?v=87">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -172,15 +172,21 @@
       <div class="toolbar">
         <label class="search-field">
           <span class="visually-hidden">Hledat brigádníka</span>
-          <input id="searchInput" type="search" placeholder="Hledat podle jména…">
+          <input id="searchInput" type="search" placeholder="Hledat jméno, e-mail nebo ID…">
           <kbd aria-hidden="true">/</kbd>
           <button id="clearSearchButton" type="button" aria-label="Vymazat hledání" hidden>×</button>
         </label>
         <select id="sortSelect" aria-label="Řazení brigádníků">
+          <option value="" hidden>Vlastní řazení z tabulky</option>
           <option value="name">Podle jména</option>
           <option value="hours-desc">Nejvíce hodin</option>
+          <option value="hours-asc">Nejméně hodin</option>
+          <option value="hours60-desc">Nejvíce hodin za 60 dní</option>
           <option value="rating-desc">Nejlepší hodnocení</option>
+          <option value="rating-asc">Nejhorší hodnocení</option>
+          <option value="reliability-asc">Nejnižší docházková morálka</option>
         </select>
+        <button id="exportTeamButton" class="toolbar-action" type="button" title="Stáhnout zobrazené brigádníky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
         <div class="view-switch" aria-label="Způsob zobrazení">
           <button id="cardViewButton" class="view-button is-active" type="button" aria-label="Zobrazit karty"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
           <button id="tableViewButton" class="view-button" type="button" aria-label="Zobrazit tabulku"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
@@ -188,6 +194,8 @@
       </div>
 
       <div class="quick-filters" aria-label="Rychlé filtry">
+        <button class="quick-filter" type="button" data-quick-filter="newcomer">Nováčci <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="onboarding">Nedokončený nástup <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů <span>0</span></button>
@@ -262,7 +270,9 @@
       </div>
       <div class="sales-toolbar">
         <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
+        <select id="salesPersonFilter" aria-label="Brigádník"><option value="all">Všichni brigádníci</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
+        <button id="exportSalesButton" class="toolbar-action" type="button" title="Stáhnout zobrazené řádky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
       </div>
       <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
         <th><button class="table-sort" type="button" data-sales-sort-key="name">Brigádník <span>↕</span></button></th>
@@ -283,7 +293,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v85</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v86</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -306,6 +316,7 @@
       <nav class="profile-tabs" aria-label="Sekce profilu">
         <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
         <button class="profile-tab" type="button" data-profile-tab="notes">Poznámky</button>
+        <button class="profile-tab" type="button" data-profile-tab="attendance">Docházka</button>
         <button class="profile-tab" type="button" data-profile-tab="sales">Prodeje</button>
         <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
         <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
@@ -359,6 +370,15 @@
           </div>
           <p id="workerNotesStatus" class="message" role="status" aria-live="polite"></p>
           <div id="workerNotesList" class="worker-notes-list"></div>
+        </section>
+      </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="attendance" hidden>
+        <section class="attendance-history" aria-labelledby="attendanceHistoryHeading">
+          <div class="attendance-history-heading">
+            <div><h3 id="attendanceHistoryHeading">Odpracované hodiny po měsících</h3><p>Posledních 12 měsíců podle importované docházky.</p></div>
+            <div id="attendanceHistoryStats" class="attendance-history-stats"></div>
+          </div>
+          <div id="attendanceHistoryChart" class="attendance-history-chart" role="img" aria-label="Graf odpracovaných hodin po měsících"></div>
         </section>
       </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="sales" hidden>
@@ -545,6 +565,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=85"></script>
+  <script type="module" src="app.js?v=86"></script>
 </body>
 </html>
