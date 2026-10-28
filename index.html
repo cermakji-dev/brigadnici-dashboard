@@ -4,40 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.3.0">
+  <meta name="app-build" content="5.5.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=86">
+    <link rel="stylesheet" href="styles.css?v=88">
 </head>
 <body>
-  <section id="authGate" class="auth-gate">
-    <button class="theme-toggle auth-theme-toggle" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
-      <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
-    </button>
-    <form id="loginForm" class="login-card">
-      <div class="login-brand" aria-hidden="true">B</div>
-      <div class="login-heading">
-        <p class="eyebrow">Brigádníci P7 · interní aplikace</p>
-        <h1>Vítejte zpět</h1>
-        <p class="section-copy">Přihlaste se ke správě týmu, docházky a hodnocení.</p>
-      </div>
-      <label>E-mail
-        <input id="loginEmail" type="email" required autocomplete="email" placeholder="jmeno@firma.cz">
-      </label>
-      <label>Heslo
-        <input id="loginPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="Vaše heslo">
-      </label>
-      <button id="loginButton" class="button button-primary login-button" type="submit">Přihlásit se</button>
-      <p id="authMessage" class="message" role="status" aria-live="polite"></p>
-      <p class="login-help">Přístup mají pouze povolené účty vedoucích.</p>
-    </form>
-  </section>
 
-  <div id="appLoader" class="app-loader" role="status" aria-live="polite" hidden>
+  <div id="appLoader" class="app-loader is-visible" role="status" aria-live="polite">
     <div class="loader-glow loader-glow-one"></div>
     <div class="loader-glow loader-glow-two"></div>
     <div class="loader-card">
@@ -68,8 +46,7 @@
       <button class="topbar-action" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
         <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
       </button>
-      <span id="signedInUser" class="signed-in-user"></span>
-      <button id="signOutButton" class="topbar-action signout-action" type="button">Odhlásit</button>
+      <button id="editorNameButton" class="topbar-action editor-name-action" type="button" title="Jméno, pod kterým se ukládají vaše změny"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Podepsat se</span></button>
     </div>
   </header>
 
@@ -172,15 +149,21 @@
       <div class="toolbar">
         <label class="search-field">
           <span class="visually-hidden">Hledat brigádníka</span>
-          <input id="searchInput" type="search" placeholder="Hledat podle jména…">
+          <input id="searchInput" type="search" placeholder="Hledat jméno, e-mail nebo ID…">
           <kbd aria-hidden="true">/</kbd>
           <button id="clearSearchButton" type="button" aria-label="Vymazat hledání" hidden>×</button>
         </label>
         <select id="sortSelect" aria-label="Řazení brigádníků">
+          <option value="" hidden>Vlastní řazení z tabulky</option>
           <option value="name">Podle jména</option>
           <option value="hours-desc">Nejvíce hodin</option>
+          <option value="hours-asc">Nejméně hodin</option>
+          <option value="hours60-desc">Nejvíce hodin za 60 dní</option>
           <option value="rating-desc">Nejlepší hodnocení</option>
+          <option value="rating-asc">Nejhorší hodnocení</option>
+          <option value="reliability-asc">Nejnižší docházková morálka</option>
         </select>
+        <button id="exportTeamButton" class="toolbar-action" type="button" title="Stáhnout zobrazené brigádníky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
         <div class="view-switch" aria-label="Způsob zobrazení">
           <button id="cardViewButton" class="view-button is-active" type="button" aria-label="Zobrazit karty"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
           <button id="tableViewButton" class="view-button" type="button" aria-label="Zobrazit tabulku"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
@@ -188,6 +171,8 @@
       </div>
 
       <div class="quick-filters" aria-label="Rychlé filtry">
+        <button class="quick-filter" type="button" data-quick-filter="newcomer">Nováčci <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="onboarding">Nedokončený nástup <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky <span>0</span></button>
         <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů <span>0</span></button>
@@ -262,7 +247,9 @@
       </div>
       <div class="sales-toolbar">
         <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
+        <select id="salesPersonFilter" aria-label="Brigádník"><option value="all">Všichni brigádníci</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
+        <button id="exportSalesButton" class="toolbar-action" type="button" title="Stáhnout zobrazené řádky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
       </div>
       <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
         <th><button class="table-sort" type="button" data-sales-sort-key="name">Brigádník <span>↕</span></button></th>
@@ -283,7 +270,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v85</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v87</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -306,6 +293,7 @@
       <nav class="profile-tabs" aria-label="Sekce profilu">
         <button class="profile-tab is-active" type="button" data-profile-tab="overview">Přehled</button>
         <button class="profile-tab" type="button" data-profile-tab="notes">Poznámky</button>
+        <button class="profile-tab" type="button" data-profile-tab="attendance">Docházka</button>
         <button class="profile-tab" type="button" data-profile-tab="sales">Prodeje</button>
         <button class="profile-tab" type="button" data-profile-tab="feedback">Hodnocení</button>
         <button class="profile-tab" type="button" data-profile-tab="history">Historie</button>
@@ -361,6 +349,15 @@
           <div id="workerNotesList" class="worker-notes-list"></div>
         </section>
       </div>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="attendance" hidden>
+        <section class="attendance-history" aria-labelledby="attendanceHistoryHeading">
+          <div class="attendance-history-heading">
+            <div><h3 id="attendanceHistoryHeading">Odpracované hodiny po měsících</h3><p>Posledních 12 měsíců podle importované docházky.</p></div>
+            <div id="attendanceHistoryStats" class="attendance-history-stats"></div>
+          </div>
+          <div id="attendanceHistoryChart" class="attendance-history-chart" role="img" aria-label="Graf odpracovaných hodin po měsících"></div>
+        </section>
+      </div>
       <div class="profile-editor-grid profile-tab-panel" data-profile-panel="sales" hidden>
         <section class="profile-sales">
           <div id="profileSalesSummary" class="profile-sales-summary"></div>
@@ -398,10 +395,21 @@
       <p id="inactiveWorkersEmpty" class="empty-copy">Žádní neaktivní brigádníci.</p>
       <div id="restoreWorkerConfirm" class="restore-confirm" hidden>
         <p>Obnovit brigádníka <strong id="restoreWorkerName"></strong>?</p>
-        <label>Vaše heslo pro potvrzení<input id="restoreWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
         <p id="restoreWorkerStatus" class="message" role="status"></p>
       </div>
       <div class="dialog-actions"><button id="cancelRestoreWorker" class="button button-secondary" type="button" hidden>Zrušit obnovu</button><button id="confirmRestoreWorker" class="button button-primary" type="submit" hidden>Obnovit brigádníka</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="editorDialog" class="simple-dialog">
+    <form id="editorForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Kdo provádí změny</p><h2>Podepisovat jako</h2></div>
+        <button id="closeEditorDialog" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <p class="section-copy">Aplikace je bez přihlášení. Jméno se uloží jen v tomto prohlížeči a zobrazí se u palců, poznámek, reportů a v historii změn.</p>
+      <label>Vaše jméno<input id="editorNameInput" type="text" required maxlength="80" autocomplete="name" placeholder="Jméno a příjmení"></label>
+      <div class="dialog-actions"><button id="skipEditorName" class="button button-secondary" type="button">Později</button><button class="button button-primary" type="submit">Uložit</button></div>
     </form>
   </dialog>
 
@@ -414,7 +422,6 @@
       <label>Celé jméno<input id="newWorkerName" type="text" required autocomplete="off" placeholder="Jméno a příjmení"></label>
       <label>Interní ID<input id="newWorkerId" type="text" required autocomplete="off" placeholder="např. USER123456"></label>
       <label>E-mail <small class="optional-label">nepovinné</small><input id="newWorkerEmail" type="email" autocomplete="off" placeholder="jmeno@firma.cz"></label>
-      <label>Vaše heslo pro potvrzení<input id="addWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
       <p id="addWorkerStatus" class="message" role="status"></p>
       <div class="dialog-actions"><button id="cancelAddWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmAddWorker" class="button button-primary" type="submit">Přidat brigádníka</button></div>
     </form>
@@ -427,7 +434,6 @@
         <button id="closeDeleteWorker" class="icon-button" type="button" aria-label="Zavřít">×</button>
       </div>
       <p>Brigádník <strong id="deleteWorkerName"></strong> zmizí z aktivního přehledu. Jeho historie zůstane bezpečně zachovaná.</p>
-      <label>Vaše heslo pro potvrzení<input id="deleteWorkerPassword" type="password" required autocomplete="current-password" placeholder="Zadejte znovu své heslo"></label>
       <p id="deleteWorkerStatus" class="message" role="status"></p>
       <div class="dialog-actions"><button id="cancelDeleteWorker" class="button button-secondary" type="button">Zrušit</button><button id="confirmDeleteWorker" class="button button-danger" type="submit">Odebrat z přehledu</button></div>
     </form>
@@ -545,6 +551,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=85"></script>
+  <script type="module" src="app.js?v=87"></script>
 </body>
 </html>
