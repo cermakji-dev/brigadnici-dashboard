@@ -988,3 +988,64 @@ button.shift-name:hover { text-decoration: underline; }
 .person-card .card-note { margin-top: 12px; padding: 0; background: transparent; border: 0; }
 .person-card .card-note .inline-note { min-height: 0; height: auto; padding: 8px 10px; background: color-mix(in srgb, var(--brand-soft) 60%, transparent); border: 1px solid transparent; border-left: 3px solid var(--border); border-radius: 0 8px 8px 0; font-size: .8rem; line-height: 1.4; resize: none; field-sizing: content; }
 .person-card .card-note .inline-note:focus { min-height: 60px; border-color: var(--border); border-left-color: var(--brand-blue); outline: none; }
+
+/* ==========================================================================
+   Profil v90 – hlavička jako karta, souhrn, 5 záložek s počty
+   ========================================================================== */
+#personDialog { width: min(860px, calc(100% - 32px)); height: min(800px, calc(100vh - 24px)); }
+#personDialog form { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+.profile-heading { align-items: center; padding: 22px 26px 18px; border-bottom: 0; }
+.profile-identity { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.profile-avatar { width: 56px; height: 56px; flex: none; font-size: 1.05rem; }
+.profile-identity-text { min-width: 0; }
+.profile-name-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.profile-name-row h2 { margin: 0; font-size: 1.6rem; letter-spacing: -.02em; }
+.profile-status { padding: 3px 9px; background: var(--positive-soft); color: var(--positive); border-radius: 999px; font-size: .72rem; font-weight: 750; }
+.profile-status.is-newcomer { background: color-mix(in srgb, var(--brand-purple) 14%, var(--surface)); color: color-mix(in srgb, var(--brand-purple) 75%, var(--text)); }
+.profile-sub { display: flex; flex-wrap: wrap; gap: 0; margin: 4px 0 0; color: var(--muted); font-size: .84rem; }
+.profile-sub span:empty { display: none; }
+.profile-sub span + span:not(:empty)::before { margin: 0 8px; color: var(--border); content: "•"; }
+.profile-heading-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.profile-thumb { display: inline-flex; min-height: 36px; align-items: center; gap: 6px; padding: 0 12px; background: var(--brand-soft); color: var(--text); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 650; }
+.profile-thumb.positive:hover { background: var(--positive-soft); border-color: var(--positive); }
+.profile-thumb.negative:hover { background: var(--negative-soft); border-color: var(--negative); }
+.profile-heading-actions .icon-button { margin-left: 4px; }
+.profile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 26px 16px; }
+.profile-summary > div { display: grid; min-width: 0; gap: 2px; padding: 11px 13px; background: color-mix(in srgb, var(--brand-soft) 70%, transparent); border-radius: 12px; }
+.profile-summary strong { overflow: hidden; font-size: 1.35rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
+.profile-summary span { overflow: hidden; color: var(--muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.profile-summary .positive-score { color: var(--positive); }
+.profile-summary .negative-score { color: var(--negative); }
+.profile-tabs { gap: 2px; padding: 0 18px; overflow-x: auto; scrollbar-width: none; }
+.profile-tab { display: inline-flex; align-items: center; gap: 6px; padding: 11px 10px 12px; font-size: .88rem; white-space: nowrap; }
+.profile-tab:hover { color: var(--text); }
+.profile-tab-count { display: inline-grid; min-width: 19px; height: 19px; place-items: center; padding: 0 5px; background: var(--brand-soft); color: var(--muted); border-radius: 999px; font-size: .68rem; font-weight: 750; }
+.profile-tab.is-active .profile-tab-count { background: color-mix(in srgb, var(--brand-blue) 14%, var(--surface)); color: var(--text); }
+.profile-tab-count.is-warning { background: var(--warning-soft); color: var(--warning); }
+.profile-tab-count[hidden] { display: none; }
+#personDialog .profile-tab-panel { overflow-y: auto; scrollbar-gutter: stable; padding: 20px 26px; gap: 16px; }
+#personDialog [data-profile-panel="overview"] { padding-top: 20px; }
+.profile-block { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+#personDialog .department-editor, #personDialog .onboarding-editor { padding: 14px 16px; border-radius: 14px; }
+#personDialog .department-editor legend, #personDialog .onboarding-editor legend { font-size: .9rem; }
+#personDialog .department-options label { padding: 7px 11px; border: 1px solid transparent; font-size: .85rem; }
+#personDialog .department-options label:has(input:checked) { background: color-mix(in srgb, var(--brand-blue) 12%, var(--surface)); border-color: color-mix(in srgb, var(--brand-blue) 35%, var(--border)); }
+#personDialog .onboarding-editor > p { font-size: .8rem; }
+#personDialog .onboarding-options label { font-size: .88rem; }
+#personDialog .onboarding-options label:has(input:checked) { background: var(--positive-soft); }
+.profile-section-copy { margin: -4px 0 10px; color: var(--muted); font-size: .8rem; }
+.profile-upcoming, .attendance-history, .feedback-history, .worker-notes, .audit-history, .profile-sales { grid-column: 1 / -1; }
+.profile-upcoming h3, .feedback-history h3, .worker-notes h3, .audit-history h3, .attendance-history h3 { margin: 0 0 10px; font-size: 1rem; }
+.profile-upcoming-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.profile-upcoming-list li { display: grid; grid-template-columns: 90px 100px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: .86rem; }
+.profile-upcoming-list li.is-soon { border-color: color-mix(in srgb, var(--skills-color) 40%, var(--border)); background: color-mix(in srgb, var(--skills-color) 6%, var(--surface)); }
+.profile-upcoming-list li.is-soon strong { color: color-mix(in srgb, var(--skills-color) 82%, var(--text)); }
+.profile-upcoming-time { font-variant-numeric: tabular-nums; }
+.profile-upcoming-department { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.profile-upcoming-list small { color: var(--muted); }
+.profile-upcoming-list li.no-feedback { display: block; background: transparent; border-style: dashed; color: var(--muted); }
+#personDialog [data-profile-panel="feedback"] .worker-notes { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--border); }
+#personDialog .feedback-history { border-top: 0; padding-top: 0; }
+#personDialog .dialog-actions { padding: 12px 26px; }
+#personDialog .button-danger.dialog-danger-action { background: transparent; border-color: transparent; color: var(--negative); font-size: .85rem; }
+#personDialog .button-danger.dialog-danger-action:hover { background: var(--negative-soft); }

@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=89";
+} from "./logic.mjs?v=90";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -168,7 +168,13 @@ const elements = {
   workerNotesStatus: document.querySelector("#workerNotesStatus"),
   workerNotesList: document.querySelector("#workerNotesList"),
   profileUserId: document.querySelector("#profileUserId"),
-  profileRole: document.querySelector("#profileRole"),
+  profileAvatar: document.querySelector("#profileAvatar"), profileStatus: document.querySelector("#profileStatus"),
+  profileHours: document.querySelector("#profileHours"), profileNextShift: document.querySelector("#profileNextShift"),
+  profileNextShiftMeta: document.querySelector("#profileNextShiftMeta"), profileScore: document.querySelector("#profileScore"),
+  profileScoreMeta: document.querySelector("#profileScoreMeta"), profileThumbUp: document.querySelector("#profileThumbUp"),
+  profileThumbDown: document.querySelector("#profileThumbDown"), profileTabShifts: document.querySelector("#profileTabShifts"),
+  profileTabSales: document.querySelector("#profileTabSales"), profileTabFeedback: document.querySelector("#profileTabFeedback"),
+  profileUpcomingShifts: document.querySelector("#profileUpcomingShifts"),
   profileEmail: document.querySelector("#profileEmail"),
   profileHours60: document.querySelector("#profileHours60"),
   feedbackHistory: document.querySelector("#feedbackHistory"),
@@ -254,6 +260,8 @@ elements.bulkSalesForm.addEventListener("submit", saveBulkSales);
 elements.bulkSalesForm.querySelector("#closeBulkSales").addEventListener("click", () => elements.bulkSalesDialog.close());
 elements.bulkSalesForm.querySelector("#cancelBulkSales").addEventListener("click", () => elements.bulkSalesDialog.close());
 elements.bulkSalesDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.profileThumbUp.addEventListener("click", () => openFeedback(elements.personId.value, "positive"));
+elements.profileThumbDown.addEventListener("click", () => openFeedback(elements.personId.value, "negative"));
 elements.topbarMenuButton.addEventListener("click", event => { event.stopPropagation(); setTopbarMenuOpen(elements.topbarMenu.hidden); });
 elements.topbarMenu.addEventListener("click", event => { if (event.target.closest("[role=menuitem]")) setTopbarMenuOpen(false); });
 document.addEventListener("click", event => { if (!event.target.closest(".topbar-menu")) setTopbarMenuOpen(false); });
@@ -448,6 +456,7 @@ async function saveFeedback() {
     updateRangeControl(elements.skillsRange, elements.skillsOutput);
     updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
     renderFeedbackHistory(person);
+    renderProfileSummary(person);
   }
 }
 
@@ -2909,10 +2918,14 @@ async function openPerson(id) {
   activateProfileTab("overview");
   elements.dialogTitle.textContent = person.name;
   elements.personId.value = id;
-  elements.profileUserId.textContent = person.userId || "—";
-  elements.profileRole.textContent = person.role || "—";
-  elements.profileEmail.textContent = person.email || "";
-  elements.profileHours60.textContent = `${formatNumber(person.hours60 || 0)} hodin`;
+  elements.profileUserId.textContent = person.userId && !String(person.userId).startsWith("AUTO_") ? `ID ${person.userId}` : "";
+  elements.profileEmail.textContent = person.email || "Bez e-mailu";
+  elements.profileAvatar.textContent = "";
+  elements.profileAvatar.style.backgroundImage = "";
+  if (person.photo) elements.profileAvatar.style.backgroundImage = `url("${safeCssUrl(person.photo)}")`;
+  else elements.profileAvatar.textContent = initials(person.name);
+  renderProfileSummary(person);
+  renderProfileUpcoming(person);
   elements.skillsRange.value = person.skills ?? 50;
   updateRangeControl(elements.skillsRange, elements.skillsOutput);
   elements.reliabilityRange.value = person.reliability ?? 50;
@@ -2943,7 +2956,73 @@ async function openPerson(id) {
     renderDetailNoteAttribution(person);
     renderAttendanceHistory(person);
     renderAuditHistory(person);
+    renderProfileSummary(person);
   }
+}
+
+// Hlavička profilu: stejné údaje jako na kartě + počty v záložkách.
+function renderProfileSummary(person) {
+  const newcomer = isNewcomer(person);
+  elements.profileStatus.textContent = newcomer ? "Nováček" : (person.status || "Aktivní");
+  elements.profileStatus.classList.toggle("is-newcomer", newcomer);
+  elements.profileHours.textContent = formatNumber(person.hours || 0);
+  elements.profileHours60.textContent = formatNumber(person.hours60 || 0);
+  const shift = nextShiftsByPerson.get(person.id);
+  if (shift) {
+    const label = shiftDayLabel(shift.date);
+    elements.profileNextShift.textContent = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(shift.date);
+    elements.profileNextShiftMeta.textContent = `další směna ${shift.start}–${shift.end} · ${shift.department}`;
+    elements.profileNextShiftMeta.parentElement.title = `${shift.start}–${shift.end} · ${shift.department}`;
+  } else {
+    elements.profileNextShift.textContent = "—";
+    elements.profileNextShiftMeta.textContent = "další směna není v rozpisu";
+  }
+  const currentScore = score(person);
+  elements.profileScore.textContent = currentScore > 0 ? `+${currentScore}` : String(currentScore);
+  elements.profileScore.className = currentScore > 0 ? "positive-score" : currentScore < 0 ? "negative-score" : "";
+  elements.profileScoreMeta.textContent = `palce · ${feedbackCount(person, "positive")} 👍 ${feedbackCount(person, "negative")} 👎`;
+
+  const todayKey = dateKey(startOfDay(new Date()));
+  const upcoming = mergeShiftBlocks(shiftRows.filter(item => item.workerId === person.remoteId && !item.free && item.date >= todayKey)).length;
+  setTabCount(elements.profileTabShifts, upcoming, `${upcoming} nadcházejících směn`);
+  const pendingSales = salesDays.filter(day => day.workerId === person.remoteId && day.status === "pending" && day.date < todayKey).length;
+  setTabCount(elements.profileTabSales, pendingSales, `Chybí ${pendingSales} reportů`, true);
+  const records = (person.feedback || []).length + (person.workerNotes || []).length;
+  setTabCount(elements.profileTabFeedback, records, `${records} záznamů`);
+}
+
+function setTabCount(element, count, title, warning = false) {
+  element.hidden = !count;
+  element.textContent = count;
+  element.title = title;
+  element.classList.toggle("is-warning", warning && count > 0);
+}
+
+function renderProfileUpcoming(person) {
+  const todayKey = dateKey(startOfDay(new Date()));
+  const blocks = mergeShiftBlocks(shiftRows.filter(item => item.workerId === person.remoteId && !item.free && item.date >= todayKey)).slice(0, 8);
+  if (!blocks.length) {
+    elements.profileUpcomingShifts.innerHTML = '<li class="no-feedback">V rozpisu na příštích 6 týdnů zatím nic není.</li>';
+    return;
+  }
+  elements.profileUpcomingShifts.replaceChildren(...blocks.map(block => {
+    const item = document.createElement("li");
+    const date = parseDateKey(block.date);
+    const label = shiftDayLabel(date);
+    const day = document.createElement("strong");
+    day.textContent = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(date);
+    const time = document.createElement("span");
+    time.className = "profile-upcoming-time";
+    time.textContent = `${formatClock(block.start)}–${formatClock(block.end)}`;
+    const department = document.createElement("span");
+    department.className = "profile-upcoming-department";
+    department.textContent = block.department || "Oddělení neuvedeno";
+    const hours = document.createElement("small");
+    hours.textContent = `${formatNumber(block.hours)} h`;
+    item.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
+    item.append(day, time, department, hours);
+    return item;
+  }));
 }
 
 function renderAttendanceHistory(person) {
@@ -3084,6 +3163,7 @@ async function addWorkerNote() {
   elements.addWorkerNoteButton.disabled = false;
   saveState();
   renderWorkerNotes(person);
+  renderProfileSummary(person);
 }
 
 function renderWorkerNotes(person) {
@@ -3133,6 +3213,7 @@ async function deleteWorkerNote(person, note, button) {
   person.workerNotes = (person.workerNotes || []).filter(item => item.id !== note.id);
   saveState();
   renderWorkerNotes(person);
+  renderProfileSummary(person);
   elements.workerNotesStatus.textContent = "";
   elements.workerNotesStatus.classList.remove("error");
   setMessage("Poznámka byla smazána.", false, async () => {
@@ -3214,6 +3295,7 @@ async function applyFeedbackChange(person) {
     updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
     renderFeedbackHistory(person);
     renderAuditHistory(person);
+    renderProfileSummary(person);
   }
 }
 
