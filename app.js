@@ -3,8 +3,9 @@ import {
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
-  summarizeSales, toCsv
-} from "./logic.mjs?v=87";
+  summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
+  suggestReplacements, summarizeShifts
+} from "./logic.mjs?v=88";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -20,8 +21,6 @@ const SORT_OPTIONS = {
   "rating-asc": { key: "rating", direction: "asc" },
   "reliability-asc": { key: "reliability", direction: "asc" }
 };
-const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
-const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
@@ -35,6 +34,15 @@ let salesDays = [];
 let visibleSalesRows = [];
 let visibleTeamPeople = [];
 const nextShiftsByPerson = new Map();
+// Rozpis směn z databáze (plní ho serverová synchronizace každých 5 minut).
+let shiftRows = [];
+let currentMainView = "team";
+let selectedShiftDay = startOfDay(new Date());
+const MAIN_VIEW_KEY = "brigadnici-main-view";
+let lastSyncRun = null;
+const SHIFT_WINDOW_PAST_DAYS = 62;
+const SHIFT_WINDOW_FUTURE_DAYS = 45;
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = loadSavedSort();
 let currentSalesSort = { key: "date", direction: "desc" };
@@ -96,7 +104,6 @@ const elements = {
   alertsToggle: document.querySelector("#alertsToggle"),
   alertsClose: document.querySelector("#alertsClose"),
   alertsClear: document.querySelector("#alertsClear"),
-  alertsHandleIcon: document.querySelector("#alertsHandleIcon"),
   alertsEarCount: document.querySelector("#alertsEarCount"),
   alertsList: document.querySelector("#alertsList"),
   alertsCount: document.querySelector("#alertsCount"),
@@ -119,6 +126,22 @@ const elements = {
   salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
   teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
+  shiftsViewButton: document.querySelector("#shiftsViewButton"), shiftsFreeBadge: document.querySelector("#shiftsFreeBadge"),
+  shiftsDashboard: document.querySelector("#shiftsDashboard"), shiftsDayTitle: document.querySelector("#shiftsDayTitle"),
+  shiftsDaySubtitle: document.querySelector("#shiftsDaySubtitle"), shiftsDateInput: document.querySelector("#shiftsDateInput"),
+  shiftsPrevDay: document.querySelector("#shiftsPrevDay"), shiftsNextDay: document.querySelector("#shiftsNextDay"),
+  shiftsDayChips: [...document.querySelectorAll("[data-shift-offset]")], shiftsBoard: document.querySelector("#shiftsBoard"),
+  shiftsAttention: document.querySelector("#shiftsAttention"), shiftsEmpty: document.querySelector("#shiftsEmpty"),
+  shiftsPeopleKpi: document.querySelector("#shiftsPeopleKpi"), shiftsHoursKpi: document.querySelector("#shiftsHoursKpi"),
+  shiftsFreeKpi: document.querySelector("#shiftsFreeKpi"), shiftsFreeCard: document.querySelector("#shiftsFreeCard"),
+  shiftsReportsKpi: document.querySelector("#shiftsReportsKpi"), shiftsReportsLabel: document.querySelector("#shiftsReportsLabel"),
+  shiftsReportsCard: document.querySelector("#shiftsReportsCard"),
+  bulkSalesButton: document.querySelector("#bulkSalesButton"), bulkSalesDialog: document.querySelector("#bulkSalesDialog"),
+  bulkSalesForm: document.querySelector("#bulkSalesForm"), bulkSalesTitle: document.querySelector("#bulkSalesTitle"),
+  bulkSalesDate: document.querySelector("#bulkSalesDate"), bulkSalesBody: document.querySelector("#bulkSalesBody"),
+  bulkSalesStatus: document.querySelector("#bulkSalesStatus"), saveBulkSales: document.querySelector("#saveBulkSales"),
+  feedbackQuickReasons: document.querySelector("#feedbackQuickReasons"),
+  topbarMenuButton: document.querySelector("#topbarMenuButton"), topbarMenu: document.querySelector("#topbarMenu"),
   teamViewSections: [...document.querySelectorAll(".team-view-section")], salesDashboard: document.querySelector("#salesDashboard"),
   salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesArosKpi: document.querySelector("#salesArosKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
   salesPeriodFilter: document.querySelector("#salesPeriodFilter"), salesStatusFilter: document.querySelector("#salesStatusFilter"), salesTableBody: document.querySelector("#salesTableBody"), salesEmpty: document.querySelector("#salesEmpty"),
@@ -213,13 +236,28 @@ elements.skipEditorName.addEventListener("click", () => elements.editorDialog.cl
 elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.editorDialog.addEventListener("close", () => { if (!editorName()) sessionStorage.setItem(EDITOR_KEY, "skipped"); });
 renderEditorName();
-elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
-elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets(false));
+elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets());
+elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets());
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
 elements.cardViewButton.addEventListener("click", () => setViewMode("cards"));
 elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
 elements.teamViewButton.addEventListener("click", () => setMainView("team"));
 elements.salesViewButton.addEventListener("click", () => setMainView("sales"));
+elements.shiftsViewButton.addEventListener("click", () => setMainView("shifts"));
+elements.shiftsDayChips.forEach(chip => chip.addEventListener("click", () => setShiftDay(addDays(startOfDay(new Date()), Number(chip.dataset.shiftOffset)))));
+elements.shiftsPrevDay.addEventListener("click", () => setShiftDay(addDays(selectedShiftDay, -1)));
+elements.shiftsNextDay.addEventListener("click", () => setShiftDay(addDays(selectedShiftDay, 1)));
+elements.shiftsDateInput.addEventListener("change", () => { if (elements.shiftsDateInput.value) setShiftDay(parseDateKey(elements.shiftsDateInput.value)); });
+elements.bulkSalesButton.addEventListener("click", () => openBulkSales());
+elements.bulkSalesDate.addEventListener("change", () => renderBulkSalesRows(elements.bulkSalesDate.value));
+elements.bulkSalesForm.addEventListener("submit", saveBulkSales);
+elements.bulkSalesForm.querySelector("#closeBulkSales").addEventListener("click", () => elements.bulkSalesDialog.close());
+elements.bulkSalesForm.querySelector("#cancelBulkSales").addEventListener("click", () => elements.bulkSalesDialog.close());
+elements.bulkSalesDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.topbarMenuButton.addEventListener("click", event => { event.stopPropagation(); setTopbarMenuOpen(elements.topbarMenu.hidden); });
+elements.topbarMenu.addEventListener("click", event => { if (event.target.closest("[role=menuitem]")) setTopbarMenuOpen(false); });
+document.addEventListener("click", event => { if (!event.target.closest(".topbar-menu")) setTopbarMenuOpen(false); });
+document.addEventListener("keydown", event => { if (event.key === "Escape" && !elements.topbarMenu.hidden) { setTopbarMenuOpen(false); elements.topbarMenuButton.focus(); } });
 elements.salesPeriodFilter.addEventListener("change", renderSalesDashboard);
 elements.salesStatusFilter.addEventListener("change", renderSalesDashboard);
 elements.profileTabs.forEach(button => button.addEventListener("click", () => activateProfileTab(button.dataset.profileTab)));
@@ -608,10 +646,11 @@ async function initializeApp() {
   try {
     await loadRemoteState();
     render();
-    updateAppLoader("Synchronizuji docházku…");
-    await syncGoogleSheets(true);
-    render();
     elements.appContent.forEach(element => { element.hidden = false; });
+    let savedView = "team";
+    try { savedView = localStorage.getItem(MAIN_VIEW_KEY) || "team"; } catch { /* výchozí pohled */ }
+    if (["shifts", "sales"].includes(savedView)) setMainView(savedView);
+    scheduleAutoRefresh();
     updateAppLoader("Přehled je připravený");
     await waitForAppPaint();
     hideAppLoader();
@@ -992,13 +1031,21 @@ async function loadRemoteState() {
   const workerIds = workersResult.data.map(worker => worker.id);
   const latestPeriod = firstDayOfMonth(new Date());
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
-  const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult] = await Promise.all([
+  const today = startOfDay(new Date());
+  const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult, shiftsResult, syncRunResult] = await Promise.all([
     scoped(supabaseClient.from("attendance_totals").select("worker_id, period, hours")).eq("period", latestPeriod),
-    scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).order("created_at"),
+    scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at"),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
     scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", salesCutoffKey()).order("shift_date", { ascending: false }),
-    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed, updated_by_email, updated_at"))
+    scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed, updated_by_email, updated_at")),
+    fetchAllRows(() => supabaseClient.from("shifts")
+      .select("shift_date, start_minutes, end_minutes, department, column_index, raw_name, worker_id, is_free")
+      .gte("shift_date", dateKey(addDays(today, -SHIFT_WINDOW_PAST_DAYS)))
+      .lte("shift_date", dateKey(addDays(today, SHIFT_WINDOW_FUTURE_DAYS)))
+      .order("shift_date").order("start_minutes").order("id")),
+    supabaseClient.from("sheets_sync_runs").select("status, sheet_name, finished_at, planned_hours, details")
+      .eq("status", "success").order("finished_at", { ascending: false }).limit(1).maybeSingle()
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
@@ -1006,6 +1053,12 @@ async function loadRemoteState() {
   salesDaysTableAvailable = !salesDaysResult.error;
   onboardingTableAvailable = !onboardingResult.error;
   salesDays = (salesDaysResult.data || []).map(mapSalesDay);
+  shiftRows = shiftsResult.error ? [] : shiftsResult.data.map(mapShiftRow);
+  lastSyncRun = syncRunResult.error ? null : syncRunResult.data;
+  if (lastSyncRun) {
+    state.lastImport = lastSyncRun.finished_at;
+    if (lastSyncRun.planned_hours !== null) state.plannedHours = Number(lastSyncRun.planned_hours);
+  }
 
   const currentAttendance = attendanceResult.data.filter(row => row.period === latestPeriod);
   monthRosterPersonIds.clear();
@@ -1095,6 +1148,7 @@ async function loadRemoteState() {
   });
   state.people = remotePeople;
   if (latestPeriod) currentImportPeriod = latestPeriod;
+  applyShiftSummary();
   saveState();
 }
 
@@ -1107,35 +1161,95 @@ function findActiveWorker(name) {
   return Object.values(state.people).find(worker => [worker.name, ...(worker.aliases || [])].some(candidate => slugify(candidate) === key));
 }
 
-async function syncGoogleSheets(automatic = false) {
+// Data z Google Sheets stahuje a zapisuje serverová funkce sync-google-sheets
+// (pg_cron každých 5 minut). Tlačítko ji jen spustí hned a pak načte výsledek.
+async function syncGoogleSheets() {
   const button = elements.googleSheetsButton;
   button.disabled = true;
   elements.syncRefreshButton.disabled = true;
   elements.syncRefreshButton.classList.add("is-loading");
   button.textContent = "Načítám…";
   elements.syncStatusTitle.textContent = "Načítám změny…";
-  elements.syncStatusMeta.textContent = "Kontroluji aktuální data v Google Sheets";
+  elements.syncStatusMeta.textContent = "Server stahuje aktuální Google tabulku";
   setMessage("");
   try {
-    const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" })
-      .catch(() => { throw new Error("Google tabulku se nepodařilo stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu."); });
-    if (!response.ok) throw new Error(`Google Sheets vrátil chybu ${response.status}.`);
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("text/html")) throw new Error("Tabulka není dostupná bez přihlášení. Nastavte sdílení na Kdokoli s odkazem – čtenář.");
-    const file = new File([await response.blob()], "BRIGÁDNÍCI P7 – Google Sheets.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
-    await prepareWorkbook(file, true);
+    const { data, error } = await supabaseClient.functions.invoke("sync-google-sheets", { method: "POST", body: {} });
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null);
+      throw new Error(detail?.error || error.message);
+    }
+    await refreshData();
+    if (data?.status === "skipped") setMessage("Data jsou aktuální, synchronizace proběhla před chvílí.");
+    else setMessage(syncResultMessage(data));
   } catch (error) {
-    elements.syncStatusTitle.textContent = "Synchronizace se nezdařila";
-    elements.syncStatusMeta.textContent = "Kliknutím na ikonu ji můžete zopakovat";
-    setMessage(`${automatic ? "Automatická synchronizace: " : ""}${error.message || "Google tabulku se nepodařilo načíst."}`, true);
+    renderSyncStatus();
+    setMessage(`Synchronizace se nezdařila: ${error.message || "neznámá chyba"}`, true);
   } finally {
     button.disabled = false;
     elements.syncRefreshButton.disabled = false;
     elements.syncRefreshButton.classList.remove("is-loading");
     button.textContent = "Načíst z Google Sheets";
   }
+}
+
+function syncResultMessage(result) {
+  const created = result?.unknown_names?.length ? ` Nové karty: ${result.unknown_names.join(", ")}.` : "";
+  return `Docházka a rozpis jsou aktuální (${result?.sheet || "aktuální měsíc"}).${created}`;
+}
+
+// Tiché obnovení dat, když je karta otevřená a uživatel zrovna nic needituje.
+let refreshTimer = null;
+function scheduleAutoRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (document.hidden || document.querySelector("dialog[open]") || document.activeElement?.matches("textarea, input")) return;
+    void refreshData().catch(() => {});
+  }, AUTO_REFRESH_MS);
+}
+
+async function refreshData() {
+  await loadRemoteState();
+  render();
+  if (currentMainView === "shifts") renderShiftsDashboard();
+  if (currentMainView === "sales") renderSalesDashboard();
+}
+
+// PostgREST vrací nejvýš 1000 řádků na dotaz, rozpis jich má víc.
+async function fetchAllRows(buildQuery, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
+    if (error) return { data: rows, error };
+    rows.push(...data);
+    if (data.length < pageSize) return { data: rows, error: null };
+  }
+}
+
+function mapShiftRow(row) {
+  return {
+    date: row.shift_date,
+    start: row.start_minutes,
+    end: row.end_minutes,
+    department: row.department || "",
+    column: row.column_index,
+    name: row.raw_name,
+    workerId: row.worker_id,
+    free: row.is_free
+  };
+}
+
+// Odvozené hodnoty z rozpisu: hodiny za 60 dní, další směna, volné hodiny
+// a kdo patří do přehledu aktuálního měsíce.
+function applyShiftSummary() {
+  const summary = summarizeShifts(shiftRows, startOfDay(new Date()));
+  nextShiftsByPerson.clear();
+  Object.values(state.people).forEach(person => {
+    person.hours60 = summary.hours60.get(person.remoteId) || 0;
+    const block = summary.nextShift.get(person.remoteId);
+    if (block) nextShiftsByPerson.set(person.id, { date: parseDateKey(block.date), start: formatClock(block.start), end: formatClock(block.end), department: block.department || "Oddělení neuvedeno" });
+  });
+  summary.rosterWorkerIds.forEach(id => monthRosterRemoteIds.add(id));
+  if (shiftRows.length) state.freeHours = summary.freeHours;
 }
 
 async function importAttendance(file) {
@@ -1593,6 +1707,7 @@ function render() {
   renderSyncStatus();
   renderSalesDashboard();
   renderAlerts();
+  renderShiftsBadge();
 }
 
 function scheduleTeamRender() {
@@ -1704,13 +1819,17 @@ function comparePeople(a, b, key) {
 function renderSyncStatus() {
   if (!state.lastImport) {
     elements.syncStatusTitle.textContent = "Docházka není načtená";
-    elements.syncStatusMeta.textContent = "Připraveno k synchronizaci";
+    elements.syncStatusMeta.textContent = "Server ji načítá automaticky každých 5 minut";
     return;
   }
   const imported = new Date(state.lastImport);
-  const today = imported.toDateString() === new Date().toDateString() ? "dnes" : new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(imported);
-  elements.syncStatusTitle.textContent = "Docházka synchronizována";
-  elements.syncStatusMeta.textContent = `Synchronizováno ${today} v ${new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(imported)}`;
+  const minutes = Math.round((Date.now() - imported.getTime()) / 60000);
+  const time = new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(imported);
+  const day = imported.toDateString() === new Date().toDateString() ? "dnes" : new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(imported);
+  const stale = minutes > 30;
+  elements.syncStatusTitle.textContent = stale ? "Data mohou být zastaralá" : "Docházka synchronizována";
+  elements.syncStatusTitle.classList.toggle("is-stale", stale);
+  elements.syncStatusMeta.textContent = minutes < 1 ? "Právě teď · automaticky každých 5 minut" : `${day} v ${time} · automaticky každých 5 minut`;
 }
 
 function renderPeopleTable(people) {
@@ -1878,8 +1997,13 @@ function setAlertsOpen(open) {
   elements.alertsToggle.classList.toggle("is-open", open);
   elements.alertsPanel.setAttribute("aria-hidden", String(!open));
   elements.alertsToggle.setAttribute("aria-expanded", String(open));
-  elements.alertsHandleIcon.textContent = open ? "‹" : "›";
   if (open) requestAnimationFrame(() => elements.alertsClose.focus({ preventScroll: true }));
+}
+
+function setTopbarMenuOpen(open) {
+  elements.topbarMenu.hidden = !open;
+  elements.topbarMenuButton.setAttribute("aria-expanded", String(open));
+  if (open) elements.topbarMenu.querySelector("[role=menuitem]")?.focus();
 }
 
 function isPersonInSelectedMonth(person) {
@@ -1897,15 +2021,19 @@ function previousAuditValue(person, field) {
 }
 
 function setMainView(view) {
-  const sales = view === "sales";
-  elements.teamViewSections.forEach(section => { section.hidden = sales; });
-  elements.salesDashboard.hidden = !sales;
-  elements.teamViewButton.classList.toggle("is-active", !sales);
-  elements.salesViewButton.classList.toggle("is-active", sales);
-  if (sales) {
+  currentMainView = view;
+  elements.teamViewSections.forEach(section => { section.hidden = view !== "team"; });
+  elements.salesDashboard.hidden = view !== "sales";
+  elements.shiftsDashboard.hidden = view !== "shifts";
+  elements.teamViewButton.classList.toggle("is-active", view === "team");
+  elements.salesViewButton.classList.toggle("is-active", view === "sales");
+  elements.shiftsViewButton.classList.toggle("is-active", view === "shifts");
+  try { localStorage.setItem(MAIN_VIEW_KEY, view); } catch { /* jen pohodlí */ }
+  if (view === "sales") {
     renderSalesDashboard();
     if (!salesDaysTableAvailable) setMessage("Prodejní výkon vyžaduje spuštění migrace sales-performance-migration.sql v Supabase.", true);
   }
+  if (view === "shifts") renderShiftsDashboard();
 }
 
 function personByRemoteId(id) { return Object.values(state.people).find(person => person.remoteId === id); }
@@ -2126,7 +2254,16 @@ function createCard(person, index = 0) {
   if (person.photo) avatar.style.backgroundImage = `url("${safeCssUrl(person.photo)}")`;
   else avatar.textContent = initials(person.name);
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
-  card.querySelector(".hours-60-value").textContent = `${formatNumber(person.hours60 || 0)} h`;
+  card.querySelector(".hours-60-value").textContent = formatNumber(person.hours60 || 0);
+  const nextShift = nextShiftsByPerson.get(person.id);
+  const nextShiftValue = card.querySelector(".next-shift-value");
+  if (nextShift) {
+    const label = shiftDayLabel(nextShift.date);
+    nextShiftValue.textContent = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(nextShift.date);
+    card.querySelector(".next-shift-caption").textContent = `${nextShift.start}–${nextShift.end}`;
+    card.querySelector(".card-stat-shift").title = `${nextShift.department}`;
+    card.querySelector(".card-stat-shift").classList.toggle("is-soon", Boolean(label) && label !== "Včera");
+  }
   const departmentBadges = card.querySelector(".department-badges");
   renderDepartmentBadges(departmentBadges, person.departments);
   if (normalize(person.status) === "novacek") {
@@ -2137,14 +2274,51 @@ function createCard(person, index = 0) {
   }
   setMetric(card, "skills", person.skills);
   setMetric(card, "reliability", person.reliability);
-  setupInlineNote(card.querySelector(".inline-note"), person);
+  const noteWrap = card.querySelector(".card-note");
+  const noteInput = card.querySelector(".inline-note");
+  const addNoteButton = card.querySelector(".add-note-button");
+  setupInlineNote(noteInput, person);
+  noteWrap.hidden = !person.notes;
+  addNoteButton.hidden = Boolean(person.notes);
+  addNoteButton.addEventListener("click", event => {
+    event.stopPropagation();
+    noteWrap.hidden = false;
+    addNoteButton.hidden = true;
+    noteInput.focus();
+  });
+  noteInput.addEventListener("blur", () => {
+    if (noteInput.value.trim()) return;
+    noteWrap.hidden = true;
+    addNoteButton.hidden = false;
+  });
   const personSales = salesDays.filter(day => day.workerId === person.remoteId);
   const pendingSales = personSales.filter(day => day.status === "pending" && day.date < dateKey(new Date())).length;
   const { asr } = summarizeSales(personSales);
+  const salesButton = card.querySelector(".sales-card-button");
   const salesStatus = card.querySelector(".sales-card-status");
-  salesStatus.textContent = pendingSales ? `Chybí ${pendingSales} report${pendingSales > 1 ? "y" : ""}` : (asr ? `ASR ${formatCurrency(asr)}/h` : "Bez prodejních dat");
-  salesStatus.classList.toggle("pending", pendingSales > 0);
-  card.querySelector(".sales-card-button").addEventListener("click", event => { event.stopPropagation(); openSalesForPerson(person); });
+  salesStatus.textContent = asr ? `ASR ${formatCurrency(asr)}/h` : "Prodeje";
+  salesButton.hidden = !personSales.length;
+  salesButton.addEventListener("click", event => { event.stopPropagation(); openSalesForPerson(person); });
+  // Co vyžaduje akci – jediná barevně zvýrazněná místa na kartě.
+  const flags = [];
+  const onboarding = incompleteOnboardingTasks(person.onboarding);
+  if (onboarding.length) flags.push(["onboarding", `Nástup: ${onboarding.length} ${onboarding.length === 1 ? "úkol" : "úkoly"}`, onboarding.join(", ")]);
+  if (pendingSales) flags.push(["sales", `Chybí ${pendingSales} ${pendingSales === 1 ? "report" : pendingSales < 5 ? "reporty" : "reportů"}`, "Doplnit prodejní reporty"]);
+  if (Number(person.reliability) < 70) flags.push(["attendance", `Docházka ${clampMetric(person.reliability)} %`, "Nízká docházková morálka"]);
+  const flagsElement = card.querySelector(".card-flags");
+  flagsElement.hidden = !flags.length;
+  flagsElement.replaceChildren(...flags.map(([type, text, title]) => {
+    const flag = document.createElement(type === "sales" ? "button" : "span");
+    flag.className = `card-flag ${type}`;
+    flag.textContent = text;
+    flag.title = title;
+    if (type === "sales") {
+      flag.type = "button";
+      flag.addEventListener("click", event => { event.stopPropagation(); openSalesForPerson(person); });
+    }
+    return flag;
+  }));
+  card.classList.toggle("needs-attention", flags.length > 0);
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
@@ -2165,6 +2339,373 @@ function createCard(person, index = 0) {
   scoreElement.classList.toggle("positive-score", currentScore > 0);
   scoreElement.classList.toggle("negative-score", currentScore < 0);
   return card;
+}
+
+// ---------------------------------------------------------------------------
+// Pohled Směny: kdo je ve vybraný den na jakém oddělení, volné směny s návrhem
+// náhrady a chybějící prodejní reporty.
+// ---------------------------------------------------------------------------
+function setShiftDay(date) {
+  selectedShiftDay = startOfDay(date);
+  renderShiftsDashboard();
+}
+
+function shiftDayLabel(date) {
+  const offset = Math.round((startOfDay(date) - startOfDay(new Date())) / 86400000);
+  return { "-1": "Včera", "0": "Dnes", "1": "Zítra" }[offset] || null;
+}
+
+function freeShiftBlocksFrom(date) {
+  const fromKey = dateKey(date);
+  return mergeShiftBlocks(shiftRows.filter(shift => shift.free && shift.date >= fromKey));
+}
+
+function renderShiftsBadge() {
+  // Volné směny dnes a zítra – to, co je potřeba obsadit nejdřív.
+  const today = startOfDay(new Date());
+  const keys = new Set([dateKey(today), dateKey(addDays(today, 1))]);
+  const count = freeShiftBlocksFrom(today).filter(block => keys.has(block.date)).length;
+  elements.shiftsFreeBadge.hidden = count === 0;
+  elements.shiftsFreeBadge.textContent = count;
+  elements.shiftsFreeBadge.title = `${count} volných směn dnes a zítra`;
+}
+
+function renderShiftsDashboard() {
+  renderShiftsBadge();
+  if (elements.shiftsDashboard.hidden) return;
+  const day = selectedShiftDay;
+  const key = dateKey(day);
+  const todayKey = dateKey(startOfDay(new Date()));
+  const label = shiftDayLabel(day);
+  const longDate = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long" }).format(day);
+  elements.shiftsDayTitle.textContent = label ? `${label} · ${longDate}` : longDate.charAt(0).toUpperCase() + longDate.slice(1);
+  elements.shiftsDateInput.value = key;
+  elements.shiftsDayChips.forEach(chip => chip.classList.toggle("is-active", shiftDayLabel(day) === chip.textContent.trim()));
+
+  const dayShifts = shiftRows.filter(shift => shift.date === key);
+  const blocks = mergeShiftBlocks(dayShifts);
+  const workBlocks = blocks.filter(block => !block.free);
+  const freeBlocks = blocks.filter(block => block.free);
+  const peopleOnShift = new Set(workBlocks.map(block => block.workerId || `n:${normalize(block.name)}`));
+  const workedHours = workBlocks.reduce((sum, block) => sum + block.hours, 0);
+  const freeHours = freeBlocks.reduce((sum, block) => sum + block.hours, 0);
+  elements.shiftsPeopleKpi.textContent = peopleOnShift.size;
+  elements.shiftsHoursKpi.textContent = `${formatNumber(workedHours)} h`;
+  elements.shiftsFreeKpi.textContent = `${formatNumber(freeHours)} h`;
+  elements.shiftsFreeCard.classList.toggle("attention", freeHours > 0);
+
+  const reports = salesDays.filter(item => item.date === key);
+  const pendingReports = reports.filter(item => item.status === "pending");
+  const past = key < todayKey;
+  elements.shiftsReportsLabel.textContent = past ? "Chybí prodejní report" : "Na prodeji";
+  elements.shiftsReportsKpi.textContent = past ? pendingReports.length : new Set(workBlocks.filter(block => normalize(block.department).includes("prodej")).map(block => block.workerId || block.name)).size;
+  elements.shiftsReportsCard.classList.toggle("attention", past && pendingReports.length > 0);
+
+  const lastSync = state.lastImport ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport)) : null;
+  elements.shiftsDaySubtitle.textContent = dayShifts.length
+    ? `${blocks.length} bloků směn${lastSync ? ` · rozpis načten v ${lastSync}` : ""}`
+    : "";
+
+  renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReports });
+
+  elements.shiftsEmpty.hidden = dayShifts.length > 0;
+  const columns = new Map();
+  blocks.forEach(block => {
+    const name = block.department || "Bez oddělení";
+    if (!columns.has(name)) columns.set(name, { name, order: block.column, blocks: [] });
+    const column = columns.get(name);
+    column.order = Math.min(column.order, block.column);
+    column.blocks.push(block);
+  });
+  elements.shiftsBoard.replaceChildren(...[...columns.values()].sort((a, b) => a.order - b.order).map(column => {
+    const section = document.createElement("section");
+    section.className = "shift-column";
+    const heading = document.createElement("header");
+    const title = document.createElement("h3");
+    title.textContent = column.name;
+    const count = document.createElement("span");
+    const people = column.blocks.filter(block => !block.free).length;
+    count.textContent = `${people} ${people === 1 ? "člověk" : people >= 2 && people <= 4 ? "lidé" : "lidí"}`;
+    heading.append(title, count);
+    const list = document.createElement("ul");
+    list.replaceChildren(...column.blocks.sort((a, b) => a.start - b.start || Number(a.free) - Number(b.free)).map(createShiftItem));
+    section.append(heading, list);
+    return section;
+  }));
+}
+
+function createShiftItem(block) {
+  const item = document.createElement("li");
+  item.className = "shift-item";
+  const person = block.workerId ? personByRemoteId(block.workerId) : null;
+  const time = document.createElement("span");
+  time.className = "shift-time";
+  time.textContent = `${formatClock(block.start)}–${formatClock(block.end)}`;
+  if (block.free) {
+    item.classList.add("is-free");
+    const label = document.createElement("strong");
+    label.textContent = "Volná směna";
+    item.append(time, label);
+    return item;
+  }
+  const avatar = document.createElement("span");
+  avatar.className = "shift-avatar";
+  avatar.textContent = initials(person?.name || block.name || "?");
+  const name = document.createElement(person ? "button" : "span");
+  name.className = "shift-name";
+  name.textContent = person?.name || block.name;
+  if (person) {
+    name.type = "button";
+    name.addEventListener("click", () => openPerson(person.id));
+    if (isNewcomer(person)) item.classList.add("is-newcomer");
+  } else {
+    item.classList.add("is-unmatched");
+    name.title = "Jméno z rozpisu nemá kartu brigádníka";
+  }
+  const hours = document.createElement("span");
+  hours.className = "shift-hours";
+  hours.textContent = `${formatNumber(block.hours)} h`;
+  item.append(time, avatar, name, hours);
+  return item;
+}
+
+function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReports }) {
+  const cards = [];
+  if (!past && freeBlocks.length) {
+    const activePeople = Object.values(state.people);
+    freeBlocks.forEach(block => {
+      const card = document.createElement("article");
+      card.className = "shift-alert";
+      const text = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = `Volná směna ${formatClock(block.start)}–${formatClock(block.end)}`;
+      const meta = document.createElement("span");
+      const trainedFor = departmentsForLabel(block.department);
+      meta.textContent = `${block.department || "Oddělení neuvedeno"} · ${formatNumber(block.hours)} h${trainedFor.length ? ` · potřeba zaškolení: ${trainedFor.join(", ")}` : ""}`;
+      text.append(title, meta);
+      const suggestions = document.createElement("div");
+      suggestions.className = "shift-suggestions";
+      const candidates = suggestReplacements(block, activePeople, dayShifts);
+      const caption = document.createElement("span");
+      caption.className = "shift-suggestions-caption";
+      caption.textContent = candidates.length ? "Mohli by vzít:" : "Nikdo vhodný volný není";
+      suggestions.append(caption, ...candidates.map(person => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "suggestion-chip";
+        button.title = `${formatNumber(person.hours || 0)} h tento měsíc · docházka ${clampMetric(person.reliability)} %`;
+        const name = document.createElement("strong");
+        name.textContent = person.name;
+        const hours = document.createElement("small");
+        hours.textContent = `${formatNumber(person.hours || 0)} h`;
+        button.append(name, hours);
+        button.addEventListener("click", () => openPerson(person.id));
+        return button;
+      }));
+      card.append(text, suggestions);
+      cards.push(card);
+    });
+  }
+  if (past && pendingReports.length) {
+    const card = document.createElement("article");
+    card.className = "shift-alert is-report";
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = `Chybí ${pendingReports.length} ${pendingReports.length === 1 ? "prodejní report" : pendingReports.length < 5 ? "prodejní reporty" : "prodejních reportů"}`;
+    const meta = document.createElement("span");
+    meta.textContent = pendingReports.map(item => personByRemoteId(item.workerId)?.name).filter(Boolean).join(", ");
+    text.append(title, meta);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button button-primary";
+    button.textContent = "Vyplnit reporty za den";
+    button.addEventListener("click", () => openBulkSales(key));
+    card.append(text, button);
+    cards.push(card);
+  }
+  elements.shiftsAttention.replaceChildren(...cards);
+  elements.shiftsAttention.hidden = cards.length === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Hromadné vyplnění prodejních reportů za jeden den.
+// ---------------------------------------------------------------------------
+function openBulkSales(date) {
+  const todayKey = dateKey(startOfDay(new Date()));
+  const pendingDates = [...new Set(salesDays.filter(day => day.status === "pending" && day.date < todayKey).map(day => day.date))].sort().reverse();
+  const allDates = [...new Set(salesDays.filter(day => day.date < todayKey).map(day => day.date))].sort().reverse();
+  const target = date || pendingDates[0] || allDates[0];
+  if (!target) {
+    setMessage("Zatím nejsou žádné prodejní směny k vyplnění.");
+    return;
+  }
+  const options = [...new Set([target, ...pendingDates, ...allDates.slice(0, 31)])].sort().reverse();
+  const pendingCount = dateValue => salesDays.filter(day => day.date === dateValue && day.status === "pending").length;
+  elements.bulkSalesDate.replaceChildren(...options.map(value => {
+    const missing = pendingCount(value);
+    const label = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(parseDateKey(value));
+    return new Option(missing ? `${label} · chybí ${missing}` : `${label} · vyplněno`, value);
+  }));
+  elements.bulkSalesDate.value = target;
+  elements.bulkSalesDate.syncCustomSelect?.();
+  renderBulkSalesRows(target);
+  setDialogStatus(elements.bulkSalesStatus, "");
+  elements.bulkSalesDialog.showModal();
+  elements.bulkSalesBody.querySelector("input:not([disabled])")?.focus();
+}
+
+function renderBulkSalesRows(date) {
+  elements.bulkSalesTitle.textContent = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long" }).format(parseDateKey(date));
+  const rows = salesDays.filter(day => day.date === date)
+    .sort((a, b) => salesStatusRank(a) - salesStatusRank(b) || (personByRemoteId(a.workerId)?.name || "").localeCompare(personByRemoteId(b.workerId)?.name || "", "cs"));
+  elements.bulkSalesBody.replaceChildren(...rows.map(day => {
+    const row = document.createElement("tr");
+    row.dataset.id = day.id;
+    row.classList.toggle("is-pending", day.status === "pending");
+    const reported = day.status === "reported";
+    const nameCell = document.createElement("td");
+    nameCell.textContent = personByRemoteId(day.workerId)?.name || "Neznámý brigádník";
+    const plannedCell = document.createElement("td");
+    plannedCell.textContent = `${formatNumber(day.plannedHours || 0)} h`;
+    const input = (field, value, step, min) => {
+      const cell = document.createElement("td");
+      const element = document.createElement("input");
+      element.type = "number";
+      element.inputMode = "decimal";
+      element.min = min;
+      element.step = step;
+      element.dataset.field = field;
+      element.value = reported ? value : "";
+      if (field === "hours" && !reported) element.placeholder = formatNumber(day.plannedHours || 0);
+      element.setAttribute("aria-label", `${nameCell.textContent}: ${{ hours: "prodejní hodiny", hardware: "železo v Kč", services: "služby v Kč" }[field]}`);
+      cell.append(element);
+      return cell;
+    };
+    const asrCell = document.createElement("td");
+    asrCell.className = "bulk-asr";
+    const notSalesCell = document.createElement("td");
+    const notSales = document.createElement("input");
+    notSales.type = "checkbox";
+    notSales.dataset.field = "notSales";
+    notSales.checked = day.status === "not_sales";
+    notSales.setAttribute("aria-label", `${nameCell.textContent}: nebyl na prodeji`);
+    notSalesCell.append(notSales);
+    row.append(nameCell, plannedCell, input("hours", day.salesHours, "0.25", "0.25"), input("hardware", day.hardware, "1", "0"), input("services", day.services, "1", "0"), asrCell, notSalesCell);
+    const update = () => {
+      const values = bulkRowValues(row);
+      row.querySelectorAll('input[type="number"]').forEach(element => { element.disabled = notSales.checked; });
+      row.classList.toggle("is-not-sales", notSales.checked);
+      asrCell.textContent = values.complete ? `${formatCurrency(salesAsr({ salesHours: values.hours, hardware: values.hardware, services: values.services }))}/h` : "—";
+    };
+    row.addEventListener("input", update);
+    update();
+    return row;
+  }));
+  if (!rows.length) {
+    const row = document.createElement("tr");
+    row.innerHTML = '<td colspan="7" class="no-feedback">Na tento den není žádná prodejní směna.</td>';
+    elements.bulkSalesBody.append(row);
+  }
+}
+
+function bulkRowValues(row) {
+  const read = field => row.querySelector(`[data-field="${field}"]`)?.value.trim();
+  const hours = read("hours"), hardware = read("hardware"), services = read("services");
+  const notSales = row.querySelector('[data-field="notSales"]')?.checked;
+  const any = Boolean(hours || hardware || services);
+  const complete = Number(hours) > 0 && hardware !== "" && services !== "" && Number(hardware) >= 0 && Number(services) >= 0;
+  return { hours: Number(hours), hardware: Number(hardware), services: Number(services), notSales, any, complete };
+}
+
+async function saveBulkSales(event) {
+  event.preventDefault();
+  if (elements.saveBulkSales.disabled) return;
+  const changes = [];
+  const incomplete = [];
+  elements.bulkSalesBody.querySelectorAll("tr[data-id]").forEach(row => {
+    const day = salesDays.find(item => item.id === row.dataset.id);
+    if (!day) return;
+    const values = bulkRowValues(row);
+    if (values.notSales) {
+      if (day.status !== "not_sales") changes.push({ day, payload: { status: "not_sales", sales_hours: null, hardware_revenue: null, services_revenue: null } });
+      return;
+    }
+    if (!values.any) {
+      if (day.status === "not_sales") changes.push({ day, payload: { status: "pending" } });
+      return;
+    }
+    if (!values.complete) { incomplete.push(row); return; }
+    if (day.status === "reported" && day.salesHours === values.hours && day.hardware === values.hardware && day.services === values.services) return;
+    changes.push({ day, payload: { status: "reported", sales_hours: values.hours, hardware_revenue: values.hardware, services_revenue: values.services } });
+  });
+  elements.bulkSalesBody.querySelectorAll("tr").forEach(row => row.classList.toggle("is-invalid", incomplete.includes(row)));
+  if (incomplete.length) {
+    setDialogStatus(elements.bulkSalesStatus, "U zvýrazněných řádků vyplňte prodejní hodiny, železo i služby (nebo je nechte prázdné).", true);
+    incomplete[0].querySelector("input")?.focus();
+    return;
+  }
+  if (!changes.length) {
+    setDialogStatus(elements.bulkSalesStatus, "Nic se nezměnilo.");
+    return;
+  }
+  elements.saveBulkSales.disabled = true;
+  setDialogStatus(elements.bulkSalesStatus, `Ukládám ${changes.length}…`);
+  const results = await Promise.all(changes.map(({ day, payload }) => supabaseClient.from("sales_days")
+    .update({ ...payload, updated_by: null, updated_by_email: editorLabel() })
+    .eq("id", day.id).select("*").single()
+    .then(result => ({ day, ...result }))));
+  elements.saveBulkSales.disabled = false;
+  const failed = results.filter(result => result.error);
+  results.filter(result => !result.error).forEach(result => Object.assign(result.day, mapSalesDay(result.data)));
+  renderSalesDashboard();
+  renderAlerts();
+  renderTeam();
+  if (currentMainView === "shifts") renderShiftsDashboard();
+  if (failed.length) {
+    setDialogStatus(elements.bulkSalesStatus, `Uloženo ${results.length - failed.length}, nepodařilo se ${failed.length}: ${failed[0].error.message}`, true);
+    return;
+  }
+  elements.bulkSalesDialog.close();
+  setMessage(`Uloženo ${results.length} ${results.length === 1 ? "report" : results.length < 5 ? "reporty" : "reportů"}.`);
+}
+
+// ---------------------------------------------------------------------------
+// Rychlé hodnocení jedním klikem.
+// ---------------------------------------------------------------------------
+const QUICK_FEEDBACK = {
+  positive: [
+    ["general", "Skvělá práce na směně"],
+    ["general", "Výborné prodeje"],
+    ["general", "Pomohl/a kolegům"],
+    ["training", "Rychle se zaučil/a na oddělení"],
+    ["attendance", "Vzal/a směnu navíc"]
+  ],
+  negative: [
+    ["attendance", "Pozdní příchod"],
+    ["attendance", "Nepřišel/la bez omluvy"],
+    ["attendance", "Odchod dříve bez domluvy"],
+    ["training", "Nedodržuje postupy oddělení"],
+    ["general", "Nevhodné chování k zákazníkovi"]
+  ]
+};
+
+function renderQuickFeedback(type) {
+  elements.feedbackQuickReasons.replaceChildren(...QUICK_FEEDBACK[type].map(([category, text]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `quick-reason ${type}`;
+    const label = document.createElement("strong");
+    label.textContent = text;
+    const meta = document.createElement("small");
+    meta.textContent = feedbackCategoryLabel(category);
+    button.append(label, meta);
+    button.addEventListener("click", () => {
+      elements.feedbackCategoryInputs.forEach(input => { input.checked = input.value === category; });
+      elements.feedbackNote.value = text;
+      elements.feedbackForm.requestSubmit();
+    });
+    return button;
+  }));
 }
 
 function downloadCsv(fileName, headers, rows) {
@@ -2347,8 +2888,9 @@ function openFeedback(id, type) {
   elements.feedbackDialogTitle.textContent = person.name;
   elements.feedbackKindBadge.textContent = type === "positive" ? "👍 Palec nahoru" : "👎 Palec dolů";
   elements.feedbackKindBadge.className = `feedback-kind-badge ${type}`;
+  renderQuickFeedback(type);
   elements.feedbackDialog.showModal();
-  elements.feedbackNote.focus();
+  elements.feedbackQuickReasons.querySelector("button")?.focus();
 }
 
 function feedbackCount(person, type) {
@@ -2472,7 +3014,7 @@ async function loadWorkerDetails(person) {
   if (!supabaseClient || !person.remoteId || (person.notesLoaded && person.auditLoaded && person.attendanceLoaded)) return;
   const periods = recentPeriods(new Date(), 12);
   const [notesResult, auditResult, attendanceResult] = await Promise.all([
-    supabaseClient.from("worker_notes").select("id, body, created_by, created_by_email, created_at").eq("worker_id", person.remoteId).order("created_at", { ascending: false }).limit(100),
+    supabaseClient.from("worker_notes").select("id, body, created_by, created_by_email, created_at").eq("worker_id", person.remoteId).is("deleted_at", null).order("created_at", { ascending: false }).limit(100),
     supabaseClient.from("worker_audit").select("*").eq("worker_id", person.remoteId).order("changed_at", { ascending: false }).limit(50),
     supabaseClient.from("attendance_totals").select("period, hours").eq("worker_id", person.remoteId).gte("period", periods[0]).order("period")
   ]);
@@ -2577,10 +3119,9 @@ function renderWorkerNotes(person) {
 }
 
 async function deleteWorkerNote(person, note, button) {
-  if (!confirm("Opravdu chcete tuto poznámku smazat?")) return;
   button.disabled = true;
   if (supabaseClient && person.remoteId) {
-    const { error } = await supabaseClient.from("worker_notes").delete().eq("id", note.id).eq("worker_id", person.remoteId);
+    const { error } = await setRecordDeleted("worker_notes", note.id, true);
     if (error) {
       button.disabled = false;
       elements.workerNotesStatus.textContent = `Poznámku se nepodařilo smazat: ${error.message}`;
@@ -2591,8 +3132,17 @@ async function deleteWorkerNote(person, note, button) {
   person.workerNotes = (person.workerNotes || []).filter(item => item.id !== note.id);
   saveState();
   renderWorkerNotes(person);
-  elements.workerNotesStatus.textContent = "Poznámka byla smazána.";
+  elements.workerNotesStatus.textContent = "";
   elements.workerNotesStatus.classList.remove("error");
+  setMessage("Poznámka byla smazána.", false, async () => {
+    if (supabaseClient && person.remoteId) {
+      const { error } = await setRecordDeleted("worker_notes", note.id, false);
+      if (error) throw error;
+    }
+    person.workerNotes = [note, ...(person.workerNotes || [])].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    saveState();
+    if (elements.dialog.open && elements.personId.value === person.id) renderWorkerNotes(person);
+  });
 }
 
 function renderFeedbackHistory(person) {
@@ -2638,11 +3188,38 @@ function renderFeedbackHistory(person) {
   elements.feedbackHistory.replaceChildren(list);
 }
 
+// Mazání je vratné: záznam se jen skryje (deleted_at) a jde vrátit z oznámení.
+function setRecordDeleted(table, id, deleted) {
+  return supabaseClient.from(table)
+    .update({ deleted_at: deleted ? new Date().toISOString() : null, deleted_by_email: deleted ? editorLabel() : null })
+    .eq("id", id);
+}
+
+async function applyFeedbackChange(person) {
+  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
+  person.skills = metrics.skills;
+  person.reliability = metrics.reliability;
+  if (supabaseClient && person.remoteId) {
+    const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
+    if (error) throw new Error(`ukazatele se nepodařilo přepočítat: ${error.message}`);
+    await refreshWorkerAudit(person);
+  }
+  saveState();
+  render();
+  if (elements.dialog.open && elements.personId.value === person.id) {
+    elements.skillsRange.value = person.skills;
+    elements.reliabilityRange.value = person.reliability;
+    updateRangeControl(elements.skillsRange, elements.skillsOutput);
+    updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
+    renderFeedbackHistory(person);
+    renderAuditHistory(person);
+  }
+}
+
 async function deleteFeedback(person, item, button) {
-  if (!confirm("Opravdu chcete toto hodnocení smazat?")) return;
   button.disabled = true;
   if (supabaseClient && person.remoteId) {
-    const { error } = await supabaseClient.from("feedback").delete().eq("id", item.id).eq("worker_id", person.remoteId);
+    const { error } = await setRecordDeleted("feedback", item.id, true);
     if (error) {
       button.disabled = false;
       setMessage(`Hodnocení se nepodařilo smazat: ${error.message}`, true);
@@ -2650,23 +3227,20 @@ async function deleteFeedback(person, item, button) {
     }
   }
   person.feedback = (person.feedback || []).filter(entry => entry.id !== item.id);
-  const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
-  person.skills = metrics.skills;
-  person.reliability = metrics.reliability;
-  if (supabaseClient && person.remoteId) {
-    const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
-    if (error) setMessage(`Hodnocení je smazané, ale ukazatele se nepodařilo přepočítat: ${error.message}`, true);
-    else await refreshWorkerAudit(person);
+  try {
+    await applyFeedbackChange(person);
+  } catch (error) {
+    setMessage(`Hodnocení je smazané, ale ${error.message}`, true);
+    return;
   }
-  saveState();
-  render();
-  elements.skillsRange.value = person.skills;
-  elements.reliabilityRange.value = person.reliability;
-  updateRangeControl(elements.skillsRange, elements.skillsOutput);
-  updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
-  renderFeedbackHistory(person);
-  renderAuditHistory(person);
-  setMessage("Hodnocení a příslušný palec byly smazány.");
+  setMessage("Hodnocení bylo smazáno.", false, async () => {
+    if (supabaseClient && person.remoteId) {
+      const { error } = await setRecordDeleted("feedback", item.id, false);
+      if (error) throw error;
+    }
+    person.feedback = [...(person.feedback || []), item].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    await applyFeedbackChange(person);
+  });
 }
 
 function renderFeedbackBreakdown(feedback) {
@@ -2793,6 +3367,7 @@ function setMessage(text, error = false, undoAction = null) {
   elements.toastText.textContent = text;
   elements.importMessage.classList.toggle("error", error);
   elements.importMessage.hidden = !text;
+  showToastLayer(Boolean(text));
   elements.toastUndo.hidden = !undoAction || error;
   elements.toastUndo.disabled = false;
   elements.toastUndo.onclick = undoAction ? async () => {
@@ -2809,9 +3384,33 @@ function setMessage(text, error = false, undoAction = null) {
   if (text) {
     messageTimer = setTimeout(() => {
       elements.importMessage.hidden = true;
+      showToastLayer(false);
     }, undoAction ? 7000 : (error ? 8000 : 4000));
   }
 }
+
+// Modální dialog zablokuje vše mimo sebe, takže tlačítko „Vrátit zpět“ by šlo
+// stisknout jen uvnitř dialogu. Oznámení se proto přesune do nejvyššího
+// otevřeného dialogu a zobrazí se jako popover v horní vrstvě.
+function showToastLayer(visible) {
+  const toast = elements.importMessage;
+  const openDialogs = [...document.querySelectorAll("dialog[open]")];
+  const host = openDialogs[openDialogs.length - 1] || document.body;
+  const supportsPopover = typeof toast.showPopover === "function";
+  try {
+    if (supportsPopover && toast.matches(":popover-open")) toast.hidePopover();
+  } catch { /* nic */ }
+  if (toast.parentElement !== host) host.append(toast);
+  if (!visible || !supportsPopover) return;
+  try { toast.showPopover(); } catch { /* prohlížeč bez podpory */ }
+}
+
+// Po zavření dialogu vrátit oznámení zpět do stránky, ať nezmizí s dialogem.
+document.addEventListener("close", event => {
+  if (event.target instanceof HTMLDialogElement && event.target.contains(elements.importMessage)) {
+    requestAnimationFrame(() => showToastLayer(!elements.importMessage.hidden));
+  }
+}, true);
 
 function initials(name) { return name.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toLocaleUpperCase("cs"); }
 function formatNumber(value) { return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(value); }

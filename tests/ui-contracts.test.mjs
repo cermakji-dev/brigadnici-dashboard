@@ -52,3 +52,26 @@ test("verze souborů pro obejití mezipaměti GitHub Pages sedí", () => {
   assert.match(app, new RegExp(`logic\\.mjs\\?v=${appVersion}"`));
   assert.match(html, new RegExp(`<span>v${appVersion}</span>`));
 });
+
+test("data z Google stahuje server, prohlížeč jen čte rozpis", () => {
+  assert.doesNotMatch(app, /docs\.google\.com\/spreadsheets\/d\/\$\{/);
+  assert.match(app, /functions\.invoke\("sync-google-sheets"/);
+  assert.match(app, /from\("shifts"\)/);
+});
+
+test("mazání palců a poznámek je vratné", () => {
+  assert.doesNotMatch(app, /from\("feedback"\)\.delete\(\)|from\("worker_notes"\)\.delete\(\)/);
+  assert.match(app, /setRecordDeleted\("feedback", item\.id, false\)/);
+  assert.match(app, /\.is\("deleted_at", null\)/);
+});
+
+test("oznámení s Vrátit zpět funguje i nad otevřeným dialogem", () => {
+  assert.match(html, /id="importMessage"[^>]*popover="manual"/);
+  assert.match(app, /host\.append\(toast\)/);
+});
+
+test("nové části rozhraní existují", () => {
+  for (const id of ["shiftsViewButton", "shiftsDashboard", "bulkSalesDialog", "feedbackQuickReasons", "topbarMenu", "alertsToggle"]) {
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  }
+});
