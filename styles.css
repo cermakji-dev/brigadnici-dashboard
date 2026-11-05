@@ -1197,3 +1197,105 @@ body.detail-open main.app-content { margin-right: calc(var(--detail-w) + var(--d
 #personDialog .profile-stat .positive-score { color: var(--positive); }
 #personDialog .profile-stat .negative-score { color: var(--negative); }
 #personDialog .profile-summary > .profile-stat { display: grid; align-content: start; gap: 3px; padding: 0 14px; }
+
+/* ==========================================================================
+   v93 – úklid: méně štítků na kartách, užší mřížka, jednotné záložky panelu
+   ========================================================================== */
+/* Mřížka: karty nikdy užší než 270 px a obsah nejvýš 1480 px i s panelem */
+.people-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+@media (min-width: 1500px) { .people-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); } }
+body.detail-open .people-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+body.detail-open main.app-content { max-width: 1480px; margin-left: auto; }
+
+/* Upozornění na kartě: krátký tichý text s barevnou tečkou místo barevných štítků */
+.card-flags { gap: 4px 12px; margin-top: 10px; }
+.card-flag { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none !important; color: var(--muted) !important; font-size: .74rem; font-weight: 600; }
+.card-flag::before { width: 7px; height: 7px; flex: none; border-radius: 50%; content: ""; }
+.card-flag.onboarding::before { background: var(--brand-purple); }
+.card-flag.sales::before { background: #d97706; }
+.card-flag.attendance::before { background: var(--negative); }
+.card-flag.sales:hover { color: var(--text) !important; text-decoration: none; }
+
+/* Patička karty: odkazy až při najetí myší */
+.card-footer-actions { opacity: 0; }
+.person-card:hover .card-footer-actions, .person-card:focus-within .card-footer-actions, .person-card.is-selected .card-footer-actions { opacity: 1; }
+
+/* Panel: jednotné řádky údajů v každé záložce */
+#personDialog .profile-section-title { margin: 0 0 8px; color: var(--muted); font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#personDialog .profile-tab-panel .profile-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; margin: 0 0 16px; padding: 11px 0; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 12px; }
+#personDialog .profile-tab-panel .profile-stats > .profile-stat { display: grid; min-width: 0; align-content: start; gap: 3px; padding: 0 14px; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+#personDialog .profile-tab-panel .profile-stats > .profile-stat + .profile-stat { border-left: 1px solid var(--border); }
+#personDialog .profile-tab-panel .profile-stat > strong { overflow: hidden; color: var(--text); font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+#personDialog .profile-tab-panel .profile-stat > span { overflow: hidden; color: var(--muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+#personDialog .feedback-breakdown-item::before { display: none; }
+
+/* Seznamy v záložkách: řádky oddělené čarou, bez rámečků */
+#personDialog .profile-upcoming-list, #personDialog .profile-sales-history, #personDialog .feedback-history-list, #personDialog .audit-history-list, #personDialog .worker-notes-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+#personDialog .profile-upcoming-list li, #personDialog .profile-sales-day, #personDialog .feedback-entry, #personDialog .audit-entry, #personDialog .worker-note-entry { margin: 0; padding: 10px 2px; background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+#personDialog .profile-upcoming-list li.is-soon { background: transparent; border-color: var(--border); }
+#personDialog .profile-sales-day { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; color: var(--text); cursor: pointer; font: inherit; text-align: left; }
+#personDialog .profile-sales-day:hover { background: color-mix(in srgb, var(--brand-soft) 60%, transparent); }
+#personDialog .profile-sales-day > span:first-child { display: grid; gap: 2px; }
+#personDialog .profile-sales-day strong { font-size: .88rem; }
+#personDialog .profile-sales-day small { color: var(--muted); font-size: .76rem; }
+#personDialog .feedback-entry { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; row-gap: 3px; }
+#personDialog .feedback-entry > span:first-child { grid-row: span 2; font-size: .95rem; }
+#personDialog .feedback-entry-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+#personDialog .feedback-entry p, #personDialog .worker-note-entry p, #personDialog .audit-entry p { margin: 0; font-size: .86rem; line-height: 1.45; }
+#personDialog .feedback-entry-actions, #personDialog .worker-note-meta, #personDialog .audit-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: .74rem; }
+#personDialog .worker-note-meta, #personDialog .audit-meta { margin-bottom: 3px; }
+#personDialog .worker-note-meta strong, #personDialog .audit-meta strong { color: var(--text); font-size: .76rem; }
+#personDialog .feedback-category { padding: 1px 7px; font-size: .68rem; }
+#personDialog .feedback-delete { margin-left: auto; padding: 2px 6px; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: .72rem; opacity: 0; }
+#personDialog .feedback-entry:hover .feedback-delete, #personDialog .worker-note-entry:hover .feedback-delete, #personDialog .feedback-delete:focus-visible { opacity: 1; }
+#personDialog .feedback-delete:hover { color: var(--negative); }
+#personDialog .worker-note-composer { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+#personDialog .worker-note-composer textarea { min-height: 64px; font-size: .86rem; }
+#personDialog .worker-note-composer .button { justify-self: end; min-height: 34px; padding: 0 14px; font-size: .82rem; }
+#personDialog .worker-notes-heading p { display: none; }
+#personDialog .profile-section-copy { display: none; }
+#personDialog .no-feedback { margin: 0; padding: 14px 2px; color: var(--muted); font-size: .84rem; }
+#personDialog .attendance-history-heading { display: block; }
+#personDialog .attendance-history-chart { min-height: 180px; padding: 12px 6px 8px; background: transparent; }
+#personDialog .attendance-bar { grid-template-rows: auto 120px auto; }
+#personDialog .attendance-bar-track b { background: color-mix(in srgb, var(--skills-color) 35%, var(--surface)); }
+#personDialog .attendance-bar.is-current .attendance-bar-track b { background: var(--brand-gradient); }
+body.detail-open main.app-content { width: min(1480px, calc(100% - var(--detail-w) - var(--detail-gap) * 4)); max-width: none; margin-left: calc(var(--detail-gap) * 1.5); margin-right: 0; }
+#personDialog .attendance-history-stats .profile-stat > span { display: block; padding: 0; background: none; border: 0; border-radius: 0; }
+#personDialog .attendance-history-chart { border: 0; }
+/* Bez animace okraje: mřížka se přepočítá jen jednou */
+main.app-content, body.detail-open main.app-content { transition: none; }
+:root { --detail-w: clamp(460px, 36vw, 600px); }
+
+/* Otevřený panel: méně místa pro seznam */
+body.detail-open .people-table th:nth-child(5), body.detail-open .people-table td:nth-child(5),
+body.detail-open .people-table th:nth-child(6), body.detail-open .people-table td:nth-child(6) { display: none; }
+body.detail-open .import-summary { grid-template-columns: minmax(0, 1fr) auto; }
+body.detail-open .import-summary .attendance-period-block { display: none; }
+.sync-state strong, .sync-state small { white-space: nowrap; }
+body.detail-open .toast[popover] { right: calc(var(--detail-w) + var(--detail-gap) * 2); }
+body.detail-open .import-summary-actions { grid-column: 2; grid-row: 1; }
+
+/* Oznámení dole vpravo – nepřekrývá zvonek, panel ani hlavičky */
+.toast[popover] { top: auto; bottom: 56px; right: 24px; }
+
+/* Dlouhá jména na kartě se zkrátí, nenajedou na tlačítko */
+.person-card .person-title { min-width: 0; }
+.person-card .person-title h3, .person-card .person-title .email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Upozornění pod zvonkem: tichý text s tečkami místo barevných štítků */
+.alerts-list { gap: 0; margin-top: 6px; }
+.alert-item { gap: 6px; padding: 12px 4px; background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.alert-item:hover { transform: none; background: color-mix(in srgb, var(--brand-soft) 50%, transparent); }
+.alert-reasons { gap: 3px 12px; }
+.alert-reason { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none !important; color: var(--muted) !important; font-size: .76rem; }
+.alert-reason::before { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--muted); content: ""; }
+.alert-reason.onboarding::before { background: var(--brand-purple); }
+.alert-reason.sales::before { background: #d97706; }
+.alert-reason.attendance::before, .alert-reason.feedback::before { background: var(--negative); }
+.alert-reason.hours::before { background: var(--skills-color); }
+
+/* Hromadné reporty: tabulka roluje uvnitř, tlačítka jsou vždy vidět */
+#bulkSalesDialog form { max-height: min(88vh, 820px); grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; overflow: hidden; }
+#bulkSalesDialog .bulk-sales-wrap { min-height: 0; overflow: auto; }
+#bulkSalesDialog .bulk-sales-table thead th { position: sticky; z-index: 1; top: 0; }
