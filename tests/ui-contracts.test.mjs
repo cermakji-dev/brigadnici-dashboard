@@ -83,3 +83,9 @@ test("profil má souhrn v hlavičce a pět záložek", () => {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
 });
+
+test("detail je boční panel, seznam zůstává použitelný", () => {
+  assert.match(app, /elements\.dialog\.show\(\)/);
+  assert.doesNotMatch(app, /elements\.dialog\.showModal\(\)/);
+  assert.match(app, /document\.body\.classList\.add\("detail-open"\)/);
+});

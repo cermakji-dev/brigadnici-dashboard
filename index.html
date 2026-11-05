@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.7.0">
+  <meta name="app-build" content="5.8.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=91">
+    <link rel="stylesheet" href="styles.css?v=92">
 </head>
 <body>
 
@@ -305,7 +305,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v90</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v91</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -334,10 +334,10 @@
       </div>
       <nav class="profile-tabs" aria-label="Sekce profilu" role="tablist">
         <button class="profile-tab is-active" type="button" role="tab" data-profile-tab="overview">Přehled</button>
-        <button class="profile-tab" type="button" role="tab" data-profile-tab="attendance">Směny a docházka <span id="profileTabShifts" class="profile-tab-count" hidden></span></button>
+        <button class="profile-tab" type="button" role="tab" data-profile-tab="attendance">Směny <span id="profileTabShifts" class="profile-tab-count" hidden></span></button>
         <button class="profile-tab" type="button" role="tab" data-profile-tab="sales">Prodeje <span id="profileTabSales" class="profile-tab-count" hidden></span></button>
-        <button class="profile-tab" type="button" role="tab" data-profile-tab="feedback">Hodnocení a poznámky <span id="profileTabFeedback" class="profile-tab-count" hidden></span></button>
-        <button class="profile-tab" type="button" role="tab" data-profile-tab="history">Historie změn</button>
+        <button class="profile-tab" type="button" role="tab" data-profile-tab="feedback">Hodnocení <span id="profileTabFeedback" class="profile-tab-count" hidden></span></button>
+        <button class="profile-tab" type="button" role="tab" data-profile-tab="history">Historie</button>
       </nav>
       <div class="profile-editor-grid profile-tab-panel is-active" data-profile-panel="overview">
         <div class="range-group skills-range-group profile-block">
@@ -345,7 +345,7 @@
           <progress id="skillsRange" class="metric-meter" max="100" value="50">50 %</progress>
         </div>
         <div class="range-group reliability-range-group profile-block">
-          <label for="reliabilityRange"><span>Docházková morálka <small>automaticky podle hodnocení docházky</small></span><output id="reliabilityOutput">100 %</output></label>
+          <label for="reliabilityRange"><span>Docházka <small>automaticky podle hodnocení docházky</small></span><output id="reliabilityOutput">100 %</output></label>
           <progress id="reliabilityRange" class="metric-meter" max="100" value="100">100 %</progress>
         </div>
         <fieldset class="department-editor">
@@ -632,6 +632,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=90"></script>
+  <script type="module" src="app.js?v=91"></script>
 </body>
 </html>
