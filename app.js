@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=88";
+} from "./logic.mjs?v=89";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2256,13 +2256,16 @@ function createCard(person, index = 0) {
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
   card.querySelector(".hours-60-value").textContent = formatNumber(person.hours60 || 0);
   const nextShift = nextShiftsByPerson.get(person.id);
-  const nextShiftValue = card.querySelector(".next-shift-value");
+  const nextShiftElement = card.querySelector(".card-next-shift");
   if (nextShift) {
     const label = shiftDayLabel(nextShift.date);
-    nextShiftValue.textContent = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(nextShift.date);
-    card.querySelector(".next-shift-caption").textContent = `${nextShift.start}–${nextShift.end}`;
-    card.querySelector(".card-stat-shift").title = `${nextShift.department}`;
-    card.querySelector(".card-stat-shift").classList.toggle("is-soon", Boolean(label) && label !== "Včera");
+    const day = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(nextShift.date);
+    nextShiftElement.textContent = `Další směna ${label ? day.toLocaleLowerCase("cs") : day} ${nextShift.start}–${nextShift.end}`;
+    nextShiftElement.title = nextShift.department;
+    nextShiftElement.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
+  } else {
+    nextShiftElement.textContent = "Bez další směny";
+    nextShiftElement.classList.add("is-empty");
   }
   const departmentBadges = card.querySelector(".department-badges");
   renderDepartmentBadges(departmentBadges, person.departments);
@@ -2304,7 +2307,6 @@ function createCard(person, index = 0) {
   const onboarding = incompleteOnboardingTasks(person.onboarding);
   if (onboarding.length) flags.push(["onboarding", `Nástup: ${onboarding.length} ${onboarding.length === 1 ? "úkol" : "úkoly"}`, onboarding.join(", ")]);
   if (pendingSales) flags.push(["sales", `Chybí ${pendingSales} ${pendingSales === 1 ? "report" : pendingSales < 5 ? "reporty" : "reportů"}`, "Doplnit prodejní reporty"]);
-  if (Number(person.reliability) < 70) flags.push(["attendance", `Docházka ${clampMetric(person.reliability)} %`, "Nízká docházková morálka"]);
   const flagsElement = card.querySelector(".card-flags");
   flagsElement.hidden = !flags.length;
   flagsElement.replaceChildren(...flags.map(([type, text, title]) => {
@@ -2318,7 +2320,6 @@ function createCard(person, index = 0) {
     }
     return flag;
   }));
-  card.classList.toggle("needs-attention", flags.length > 0);
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
