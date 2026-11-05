@@ -257,3 +257,166 @@ export const matchesSearch = (person, query) => {
   return [person.name, person.email, person.userId, ...(person.aliases || [])]
     .some(value => normalizeText(value).includes(needle));
 };
+
+// ---------------------------------------------------------------------------
+// Rozpis směn uložený v databázi (tabulka shifts). Stejné funkce používá
+// serverová synchronizace (supabase/functions/sync-google-sheets) i aplikace.
+// Řádek směny: { date: "RRRR-MM-DD", start, end (minuty od půlnoci),
+//                department, column, name, workerId | null, free }
+// ---------------------------------------------------------------------------
+
+export const parseDateKey = key => {
+  const [year, month, day] = String(key).slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+export const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+
+export const formatClock = minutes => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+
+// Rozdělí obsah buňky na jednotlivé lidi. lookup(jméno) vrací brigádníka nebo null.
+// Celá buňka se zkouší jako jedno jméno dřív než rozdělení, protože jména
+// s čárkou nebo více řádky se v tabulce nevyskytují, kdežto „Novák Petr 13:30“ ano.
+export const resolveShiftCell = (text, lookup) => {
+  const value = String(text ?? "").trim();
+  if (!value) return [];
+  if (normalizeText(value).includes("volna smena")) return [{ name: "Volná směna", worker: null, free: true }];
+  const whole = lookup(value) || lookup(stripTrailingTime(value));
+  if (whole) return [{ name: stripTrailingTime(value), worker: whole, free: false }];
+  const found = new Map();
+  value.split(/[\n,;]+/).map(part => part.trim()).filter(Boolean).forEach(part => {
+    const name = stripTrailingTime(part);
+    if (!name) return;
+    const worker = lookup(part) || lookup(name) || null;
+    const key = worker ? `w:${worker.id}` : `n:${normalizeText(name)}`;
+    if (!found.has(key)) found.set(key, { name, worker, free: false });
+  });
+  return [...found.values()];
+};
+
+// Převede matici listu na řádky směn v rozmezí dat (včetně krajních dní).
+export const buildShiftRows = (matrix, { from, to, lookup }) => {
+  const rows = [];
+  forEachShiftCell(matrix, ({ date, slot, text, column, assignment }) => {
+    if (!date || date < from || date > to) return;
+    resolveShiftCell(text, lookup).forEach(entry => rows.push({
+      date: dateKey(date),
+      start: slot.startMinutes,
+      end: slot.endMinutes,
+      department: formatShiftDepartment(assignment),
+      column,
+      name: entry.name,
+      workerId: entry.worker?.id ?? null,
+      free: entry.free
+    }));
+  });
+  return rows;
+};
+
+const shiftHours = shift => Math.max(0, shift.end - shift.start) / 60;
+const roundHours = value => Math.round(value * 100) / 100;
+
+// Plánované prodejní hodiny za uplynulé dny (dnešek se ještě nehodnotí).
+export const salesExpectationsFromShifts = (shifts, todayKey) => {
+  const totals = new Map();
+  shifts.forEach(shift => {
+    if (!shift.workerId || shift.free || shift.date >= todayKey) return;
+    if (!normalizeText(shift.department).includes("prodej")) return;
+    const key = `${shift.workerId}|${shift.date}`;
+    const current = totals.get(key) || { worker_id: shift.workerId, shift_date: shift.date, planned_hours: 0 };
+    current.planned_hours = roundHours(current.planned_hours + shiftHours(shift));
+    totals.set(key, current);
+  });
+  return [...totals.values()];
+};
+
+// Sloučí navazující sloty stejného člověka na stejném oddělení v jeden blok
+// (9-10, 10-11, 11-12 → 9:00–12:00). Volné směny se slučují podle sloupce.
+export const mergeShiftBlocks = shifts => {
+  const sorted = [...shifts].sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start);
+  const blocks = [];
+  const open = new Map();
+  sorted.forEach(shift => {
+    const who = shift.free ? `free:${shift.column}` : shift.workerId ? `w:${shift.workerId}` : `n:${normalizeText(shift.name)}`;
+    const key = `${shift.date}|${normalizeText(shift.department)}|${who}`;
+    const last = open.get(key);
+    if (last && shift.start <= last.end) {
+      last.end = Math.max(last.end, shift.end);
+      last.hours = roundHours(last.hours + shiftHours(shift));
+      return;
+    }
+    const block = { ...shift, hours: shiftHours(shift) };
+    blocks.push(block);
+    open.set(key, block);
+  });
+  return blocks;
+};
+
+// Odvozené hodnoty pro přehled týmu: hodiny za posledních 60 dní, nejbližší
+// směna, volné hodiny a kdo je v rozpisu daného měsíce.
+export const summarizeShifts = (shifts, today, { periodKey = firstDayOfMonth(today) } = {}) => {
+  const todayKey = dateKey(today);
+  const cutoffKey = dateKey(addDays(today, -59));
+  const monthPrefix = periodKey.slice(0, 7);
+  const hours60 = new Map();
+  const rosterWorkerIds = new Set();
+  let freeHours = 0;
+  shifts.forEach(shift => {
+    const inMonth = shift.date.startsWith(monthPrefix);
+    if (shift.free) {
+      if (inMonth) freeHours += shiftHours(shift);
+      return;
+    }
+    if (!shift.workerId) return;
+    if (inMonth) rosterWorkerIds.add(shift.workerId);
+    if (shift.date >= cutoffKey && shift.date <= todayKey) hours60.set(shift.workerId, (hours60.get(shift.workerId) || 0) + shiftHours(shift));
+  });
+  const nextShift = new Map();
+  mergeShiftBlocks(shifts.filter(shift => shift.workerId && !shift.free && shift.date >= todayKey))
+    .forEach(block => { if (!nextShift.has(block.workerId)) nextShift.set(block.workerId, block); });
+  hours60.forEach((value, key) => hours60.set(key, roundHours(value)));
+  return { hours60, nextShift, freeHours: roundHours(freeHours), rosterWorkerIds };
+};
+
+// Na která oddělení ze seznamu DEPARTMENTS se vztahuje popisek ve rozpisu,
+// např. „Prodej / Výdej“ → ["Výdej", "Prodej"].
+export const departmentsForLabel = label => {
+  const text = normalizeText(label);
+  return DEPARTMENTS.filter(department => {
+    const key = normalizeText(department);
+    return key.length <= 3 ? new RegExp(`(^|[^a-z])${key}([^a-z]|$)`).test(text) : text.includes(key);
+  });
+};
+
+// Návrh náhrady na volnou směnu: zaškolení na oddělení, ten den v tu dobu
+// nepracují, přednost má méně hodin v měsíci a lepší docházka.
+export const suggestReplacements = (freeBlock, people, dayShifts, limit = 3) => {
+  const needed = departmentsForLabel(freeBlock.department);
+  const busy = new Set(dayShifts
+    .filter(shift => shift.workerId && !shift.free && shift.date === freeBlock.date && shift.start < freeBlock.end && shift.end > freeBlock.start)
+    .map(shift => shift.workerId));
+  return people
+    .filter(person => person.remoteId && !busy.has(person.remoteId))
+    .map(person => ({ person, trained: needed.filter(department => (person.departments || []).includes(department)).length }))
+    .filter(item => !needed.length || item.trained > 0)
+    .sort((a, b) => b.trained - a.trained
+      || Number(a.person.hours || 0) - Number(b.person.hours || 0)
+      || Number(b.person.reliability || 0) - Number(a.person.reliability || 0)
+      || a.person.name.localeCompare(b.person.name, "cs"))
+    .slice(0, limit)
+    .map(item => item.person);
+};
+
+// Výběr jména pro zápis do rozpisu: preferuje ručně založené karty před AUTO_.
+export const buildWorkerLookup = workers => {
+  const byName = new Map();
+  [...workers]
+    .sort((a, b) => Number(String(a.external_user_id || a.userId || "").startsWith("AUTO_")) - Number(String(b.external_user_id || b.userId || "").startsWith("AUTO_")))
+    .forEach(worker => {
+      [worker.full_name ?? worker.name, ...(worker.aliases || [])].forEach(name => {
+        const key = slugFromName(name);
+        if (key && !byName.has(key)) byName.set(key, worker);
+      });
+    });
+  return name => byName.get(slugFromName(name)) || null;
+};
