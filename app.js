@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=88";
+} from "./logic.mjs?v=89";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2307,7 +2307,6 @@ function createCard(person, index = 0) {
   const onboarding = incompleteOnboardingTasks(person.onboarding);
   if (onboarding.length) flags.push(["onboarding", `Nástup: ${onboarding.length} ${onboarding.length === 1 ? "úkol" : "úkoly"}`, onboarding.join(", ")]);
   if (pendingSales) flags.push(["sales", `Chybí ${pendingSales} ${pendingSales === 1 ? "report" : pendingSales < 5 ? "reporty" : "reportů"}`, "Doplnit prodejní reporty"]);
-  if (Number(person.reliability) < 70) flags.push(["attendance", `Docházka ${clampMetric(person.reliability)} %`, "Nízká docházková morálka"]);
   const flagsElement = card.querySelector(".card-flags");
   flagsElement.hidden = !flags.length;
   flagsElement.replaceChildren(...flags.map(([type, text, title]) => {
@@ -2321,7 +2320,6 @@ function createCard(person, index = 0) {
     }
     return flag;
   }));
-  card.classList.toggle("needs-attention", flags.length > 0);
   const positive = card.querySelector(".positive");
   const negative = card.querySelector(".negative");
   positive.querySelector("span").textContent = feedbackCount(person, "positive");
