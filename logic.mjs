@@ -5,11 +5,11 @@ export const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "M
 export const SALES_ASR_TARGET = 6500;
 
 export const normalizeText = value => String(value ?? "")
-  .replace(/[​-‍﻿]/g, "")
+  .replace(/[\u200B-\u200D\uFEFF]/g, "")
   .replace(/\s+/g, " ")
   .toLocaleLowerCase("cs")
   .normalize("NFD")
-  .replace(/[̀-ͯ]/g, "")
+  .replace(/[\u0300-\u036f]/g, "")
   .trim();
 
 export const slugFromName = value => normalizeText(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -50,8 +50,11 @@ export const isLikelyWorkerName = value => {
   return !isIgnoredShiftName(name) && /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(name);
 };
 
-// Odstraní případný čas za jménem, např. „Novák Petr 14:30“.
-export const stripTrailingTime = value => String(value || "").trim().replace(/\s+\d{1,2}:\d{2}\s*$/, "").trim();
+// Odstraní případný čas příchodu za jménem: „Novák Petr 14:30“,
+// „Novák Petr (19:30)“, „Novák Petr od 9.30h“.
+export const stripTrailingTime = value => String(value || "").trim()
+  .replace(/\s*(?:\(\s*)?(?:od\s+)?\d{1,2}[:.]\d{2}\s*h?\s*\)?\s*$/i, "")
+  .trim();
 
 export const salesMetrics = ({ hours = 0, hardware = 0, services = 0 } = {}) => ({
   asr: Number(hours) > 0 ? (Number(hardware) + Number(services)) / Number(hours) : 0,
@@ -108,7 +111,7 @@ export const parseHours = value => {
 };
 
 export const parseCsv = text => {
-  const source = String(text || "").replace(/^﻿/, "");
+  const source = String(text || "").replace(/^\uFEFF/, "");
   const firstLine = source.split(/\r?\n/, 1)[0] || "";
   const delimiter = firstLine.split(";").length > firstLine.split(",").length ? ";" : ",";
   const records = [];
@@ -145,7 +148,7 @@ export const toCsv = (headers, rows) => {
     if (/^[=+\-@\t\r]/.test(text) && !/^-?\d+(?:[.,]\d+)?$/.test(text)) text = `'${text}`;
     return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
-  return "﻿" + [headers, ...rows].map(row => row.map(escape).join(";")).join("\r\n");
+  return "\uFEFF" + [headers, ...rows].map(row => row.map(escape).join(";")).join("\r\n");
 };
 
 export const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -184,7 +187,7 @@ export const parseShiftSlot = value => {
 };
 
 export const formatShiftDepartment = value => String(value || "")
-  .replace(/[←-⇿▲-◿]/g, "")
+  .replace(/[\u2190-\u21ff\u25b2-\u25ff]/g, "")
   .replace(/\s+/g, " ")
   .trim()
   .replace(/(^|\s)\S/g, letter => letter.toUpperCase());
