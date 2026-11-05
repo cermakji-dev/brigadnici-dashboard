@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=90";
+} from "./logic.mjs?v=91";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -347,7 +347,18 @@ document.addEventListener("click", event => {
   if (!elements.alertsPanel.classList.contains("is-open")) return;
   if (!elements.alertsPanel.contains(event.target) && !elements.alertsToggle.contains(event.target)) setAlertsOpen(false);
 });
-elements.dialog.addEventListener("click", closeDialogFromBackdrop);
+// Detail brigádníka je boční panel (nemodální dialog): seznam zůstává vidět
+// a kliknutím na jinou kartu se detail přepne.
+elements.dialog.addEventListener("close", () => {
+  document.body.classList.remove("detail-open");
+  markSelectedPerson(null);
+});
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || !elements.dialog.open || document.querySelector("dialog:modal")) return;
+  if (event.target.closest?.("input, textarea, select") && event.target.closest("#personDialog") === null) return;
+  elements.dialog.close();
+});
+window.addEventListener("resize", updateTopbarOffset);
 elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.appFeedbackDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.appFeedbackButton.addEventListener("click", () => {
@@ -1211,7 +1222,7 @@ let refreshTimer = null;
 function scheduleAutoRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
-    if (document.hidden || document.querySelector("dialog[open]") || document.activeElement?.matches("textarea, input")) return;
+    if (document.hidden || document.querySelector("dialog:modal") || document.activeElement?.matches("textarea, input")) return;
     void refreshData().catch(() => {});
   }, AUTO_REFRESH_MS);
 }
@@ -1844,6 +1855,8 @@ function renderSyncStatus() {
 function renderPeopleTable(people) {
   elements.peopleTableBody.replaceChildren(...people.map((person, index) => {
     const row = document.createElement("tr");
+    row.dataset.personId = person.id;
+    row.classList.toggle("is-selected", elements.dialog.open && elements.personId.value === person.id);
     row.style.setProperty("--item-index", index);
     row.tabIndex = 0;
     const departments = Array.isArray(person.departments) && person.departments.length ? person.departments.join(", ") : "—";
@@ -2251,6 +2264,8 @@ async function updateSalesDay(changes, successMessage) {
 
 function createCard(person, index = 0) {
   const card = elements.cardTemplate.content.firstElementChild.cloneNode(true);
+  card.dataset.personId = person.id;
+  card.classList.toggle("is-selected", elements.dialog.open && elements.personId.value === person.id);
   card.style.setProperty("--item-index", index);
   card.tabIndex = 0;
   card.setAttribute("aria-label", `Zobrazit detail: ${person.name}`);
@@ -2913,9 +2928,22 @@ function feedbackCount(person, type) {
 
 function score(person) { return feedbackCount(person, "positive") - feedbackCount(person, "negative"); }
 
+function updateTopbarOffset() {
+  const topbar = document.querySelector(".topbar");
+  if (topbar) document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
+}
+
+function markSelectedPerson(id) {
+  document.querySelectorAll(".person-card.is-selected, .people-table tr.is-selected").forEach(element => element.classList.remove("is-selected"));
+  if (!id) return;
+  document.querySelectorAll(`[data-person-id="${CSS.escape(id)}"]`).forEach(element => element.classList.add("is-selected"));
+}
+
 async function openPerson(id) {
   const person = state.people[id];
-  activateProfileTab("overview");
+  const switching = elements.dialog.open;
+  // Při přepnutí na dalšího člověka zůstane otevřená stejná záložka.
+  if (!switching) activateProfileTab("overview");
   elements.dialogTitle.textContent = person.name;
   elements.personId.value = id;
   elements.profileUserId.textContent = person.userId && !String(person.userId).startsWith("AUTO_") ? `ID ${person.userId}` : "";
@@ -2948,8 +2976,14 @@ async function openPerson(id) {
   renderAttendanceHistory(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
-  elements.dialog.showModal();
-  elements.dialog.querySelector('[data-profile-tab="overview"]').focus({ preventScroll: true });
+  if (!switching) {
+    updateTopbarOffset();
+    document.body.classList.add("detail-open");
+    elements.dialog.show();
+    elements.dialog.querySelector(".profile-tab.is-active")?.focus({ preventScroll: true });
+  }
+  elements.dialog.querySelector(".profile-tab-panel.is-active")?.scrollTo({ top: 0 });
+  markSelectedPerson(person.id);
   await loadWorkerDetails(person);
   if (elements.dialog.open && elements.personId.value === person.id) {
     renderWorkerNotes(person);
@@ -3477,7 +3511,7 @@ function setMessage(text, error = false, undoAction = null) {
 // otevřeného dialogu a zobrazí se jako popover v horní vrstvě.
 function showToastLayer(visible) {
   const toast = elements.importMessage;
-  const openDialogs = [...document.querySelectorAll("dialog[open]")];
+  const openDialogs = [...document.querySelectorAll("dialog:modal")];
   const host = openDialogs[openDialogs.length - 1] || document.body;
   const supportsPopover = typeof toast.showPopover === "function";
   try {

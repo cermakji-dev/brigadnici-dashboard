@@ -1049,3 +1049,61 @@ button.shift-name:hover { text-decoration: underline; }
 #personDialog .dialog-actions { padding: 12px 26px; }
 #personDialog .button-danger.dialog-danger-action { background: transparent; border-color: transparent; color: var(--negative); font-size: .85rem; }
 #personDialog .button-danger.dialog-danger-action:hover { background: var(--negative-soft); }
+
+/* ==========================================================================
+   Detail jako panel zprava (v91): seznam se odsune a zůstane použitelný
+   ========================================================================== */
+:root { --detail-w: min(600px, 44vw); --topbar-h: 66px; }
+#personDialog {
+  position: fixed;
+  z-index: 14;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: var(--detail-w);
+  max-width: none;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  box-shadow: -18px 0 40px rgba(17, 24, 39, .08);
+}
+#personDialog[open] { animation: detail-slide-in 220ms cubic-bezier(.2, .8, .25, 1); }
+@keyframes detail-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+#personDialog form { height: 100%; max-height: none; }
+body.detail-open main.app-content { width: auto; margin-right: calc(var(--detail-w) + 20px); margin-left: 20px; }
+body.detail-open .people-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+body.detail-open .app-signature { display: none; }
+.person-card.is-selected { border-color: var(--brand-blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-blue) 35%, transparent), 0 8px 24px rgba(17, 24, 39, .08); }
+.people-table tr.is-selected td { background: color-mix(in srgb, var(--brand-blue) 8%, var(--surface)); }
+
+/* Užší panel: kompaktnější hlavička a souhrn */
+#personDialog .profile-heading { padding: 18px 20px 14px; }
+#personDialog .profile-avatar { width: 46px; height: 46px; font-size: .95rem; }
+#personDialog .profile-name-row h2 { font-size: 1.35rem; }
+#personDialog .profile-thumb span { display: none; }
+#personDialog .profile-thumb { padding: 0 10px; }
+#personDialog .profile-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 20px 14px; }
+#personDialog .profile-summary strong { font-size: 1.15rem; }
+#personDialog .profile-tabs { padding: 0 12px; }
+#personDialog .profile-tab { padding: 10px 8px 11px; font-size: .84rem; }
+#personDialog .profile-tab-panel { padding: 16px 20px; grid-template-columns: 1fr; }
+#personDialog [data-profile-panel="overview"] { grid-template-columns: 1fr 1fr; }
+#personDialog .dialog-actions { padding: 10px 20px; }
+#personDialog .autosave-label { display: none; }
+#personDialog .profile-upcoming-list li { grid-template-columns: 70px 92px minmax(0, 1fr) auto; }
+#personDialog .attendance-history-stats { grid-template-columns: 1fr; }
+@media (min-width: 1700px) { #personDialog .profile-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Doladění panelu */
+#personDialog [data-profile-panel="overview"] .range-group small { display: none; }
+#personDialog .attendance-history-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#personDialog .attendance-history-stats span { padding: 8px 10px; }
+#personDialog .attendance-history-stats strong { font-size: .85rem; }
+#personDialog .profile-tabs { justify-content: space-between; }
+
+/* Karta: doplňkové údaje na dvou řádcích bez oddělovačů */
+.card-meta { flex-direction: column; gap: 1px; }
+.card-meta-item + .card-meta-item::before { content: none; }
