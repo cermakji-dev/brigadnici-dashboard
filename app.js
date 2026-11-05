@@ -1,28 +1,42 @@
-import { addRosterOnlyWorkers, incompleteOnboardingTasks, normalizeText, slugFromName } from "./logic.mjs";
+import {
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics,
+  calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
+  incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
+  parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
+  summarizeSales, toCsv
+} from "./logic.mjs?v=87";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
 const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
-const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG", "PS"];
+const SORT_KEY = "brigadnici-dashboard-sort";
+const EDITOR_KEY = "brigadnici-editor-name";
+const SORT_OPTIONS = {
+  name: { key: "name", direction: "asc" },
+  "hours-desc": { key: "hours", direction: "desc" },
+  "hours-asc": { key: "hours", direction: "asc" },
+  "hours60-desc": { key: "hours60", direction: "desc" },
+  "rating-desc": { key: "rating", direction: "desc" },
+  "rating-asc": { key: "rating", direction: "asc" },
+  "reliability-asc": { key: "reliability", direction: "asc" }
+};
 const GOOGLE_SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const GOOGLE_SHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
-const SALES_ASR_TARGET = 6500;
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
 let supabaseClient = null;
-let remoteUser = null;
 let messageTimer = null;
 let loaderHideTimer = null;
-let sessionLoadPromise = null;
-let hasAutoSynced = false;
 let workerNotesTableAvailable = true;
 let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
 let salesDays = [];
+let visibleSalesRows = [];
+let visibleTeamPeople = [];
 const nextShiftsByPerson = new Map();
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
-let currentSort = { key: "name", direction: "asc" };
+let currentSort = loadSavedSort();
 let currentSalesSort = { key: "date", direction: "desc" };
 const activeQuickFilters = new Set();
 const dismissedAlertSignatures = new Set(loadDismissedAlerts());
@@ -34,18 +48,17 @@ const monthRosterRemoteIds = new Set();
 
 const state = loadState();
 const elements = {
-  authGate: document.querySelector("#authGate"),
-  loginForm: document.querySelector("#loginForm"),
-  loginEmail: document.querySelector("#loginEmail"),
-  loginPassword: document.querySelector("#loginPassword"),
-  loginButton: document.querySelector("#loginButton"),
   themeToggles: [...document.querySelectorAll("[data-theme-toggle]")],
-  authMessage: document.querySelector("#authMessage"),
   appLoader: document.querySelector("#appLoader"),
   appLoaderStatus: document.querySelector("#appLoaderStatus"),
   appContent: [...document.querySelectorAll(".app-content")],
-  signedInUser: document.querySelector("#signedInUser"),
-  signOutButton: document.querySelector("#signOutButton"),
+  editorNameButton: document.querySelector("#editorNameButton"),
+  editorNameLabel: document.querySelector("#editorNameLabel"),
+  editorDialog: document.querySelector("#editorDialog"),
+  editorForm: document.querySelector("#editorForm"),
+  editorNameInput: document.querySelector("#editorNameInput"),
+  closeEditorDialog: document.querySelector("#closeEditorDialog"),
+  skipEditorName: document.querySelector("#skipEditorName"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   syncRefreshButton: document.querySelector("#syncRefreshButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
@@ -97,6 +110,11 @@ const elements = {
   freeHoursKpi: document.querySelector("#freeHoursKpi"),
   freeHoursShareKpi: document.querySelector("#freeHoursShareKpi"),
   sortSelect: document.querySelector("#sortSelect"),
+  exportTeamButton: document.querySelector("#exportTeamButton"),
+  exportSalesButton: document.querySelector("#exportSalesButton"),
+  salesPersonFilter: document.querySelector("#salesPersonFilter"),
+  attendanceHistoryStats: document.querySelector("#attendanceHistoryStats"),
+  attendanceHistoryChart: document.querySelector("#attendanceHistoryChart"),
   tableSortButtons: [...document.querySelectorAll(".people-table .table-sort")],
   salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
@@ -161,7 +179,6 @@ const elements = {
   newWorkerName: document.querySelector("#newWorkerName"),
   newWorkerId: document.querySelector("#newWorkerId"),
   newWorkerEmail: document.querySelector("#newWorkerEmail"),
-  addWorkerPassword: document.querySelector("#addWorkerPassword"),
   addWorkerStatus: document.querySelector("#addWorkerStatus"),
   confirmAddWorker: document.querySelector("#confirmAddWorker"),
   closeAddWorker: document.querySelector("#closeAddWorker"),
@@ -170,7 +187,6 @@ const elements = {
   deleteWorkerDialog: document.querySelector("#deleteWorkerDialog"),
   deleteWorkerForm: document.querySelector("#deleteWorkerForm"),
   deleteWorkerName: document.querySelector("#deleteWorkerName"),
-  deleteWorkerPassword: document.querySelector("#deleteWorkerPassword"),
   deleteWorkerStatus: document.querySelector("#deleteWorkerStatus"),
   confirmDeleteWorker: document.querySelector("#confirmDeleteWorker"),
   closeDeleteWorker: document.querySelector("#closeDeleteWorker"),
@@ -183,18 +199,20 @@ const elements = {
   closeInactiveWorkers: document.querySelector("#closeInactiveWorkers"),
   restoreWorkerConfirm: document.querySelector("#restoreWorkerConfirm"),
   restoreWorkerName: document.querySelector("#restoreWorkerName"),
-  restoreWorkerPassword: document.querySelector("#restoreWorkerPassword"),
   restoreWorkerStatus: document.querySelector("#restoreWorkerStatus"),
   cancelRestoreWorker: document.querySelector("#cancelRestoreWorker"),
   confirmRestoreWorker: document.querySelector("#confirmRestoreWorker")
 };
 
-elements.loginForm.addEventListener("submit", signInWithPassword);
 elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
 updateThemeControls();
-elements.signOutButton.addEventListener("click", async () => {
-  if (supabaseClient) await supabaseClient.auth.signOut();
-});
+elements.editorNameButton.addEventListener("click", () => openEditorDialog());
+elements.editorForm.addEventListener("submit", saveEditorName);
+elements.closeEditorDialog.addEventListener("click", () => elements.editorDialog.close());
+elements.skipEditorName.addEventListener("click", () => elements.editorDialog.close());
+elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
+elements.editorDialog.addEventListener("close", () => { if (!editorName()) sessionStorage.setItem(EDITOR_KEY, "skipped"); });
+renderEditorName();
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets(false));
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
@@ -216,14 +234,15 @@ elements.clearSearchButton.addEventListener("click", () => {
   elements.searchInput.focus();
   renderTeam();
 });
+elements.sortSelect.value = sortOptionValue(currentSort);
 elements.sortSelect.addEventListener("change", () => {
-  currentSort = {
-    name: { key: "name", direction: "asc" },
-    "hours-desc": { key: "hours", direction: "desc" },
-    "rating-desc": { key: "rating", direction: "desc" }
-  }[elements.sortSelect.value] || { key: "name", direction: "asc" };
+  currentSort = { ...(SORT_OPTIONS[elements.sortSelect.value] || SORT_OPTIONS.name) };
+  saveSort();
   render();
 });
+elements.exportTeamButton.addEventListener("click", exportTeamCsv);
+elements.exportSalesButton.addEventListener("click", exportSalesCsv);
+elements.salesPersonFilter.addEventListener("change", renderSalesDashboard);
 elements.tableSortButtons.forEach(button => button.addEventListener("click", () => setTableSort(button.dataset.sortKey)));
 elements.salesSortButtons.forEach(button => button.addEventListener("click", () => setSalesTableSort(button.dataset.salesSortKey)));
 elements.departmentFilters.forEach(input => input.addEventListener("change", renderTeam));
@@ -245,6 +264,7 @@ document.addEventListener("click", event => {
   if (!elements.sheetSelectWrap.contains(event.target)) closeMonthPicker();
 });
 elements.cancelFeedbackButton.addEventListener("click", () => elements.feedbackDialog.close());
+elements.feedbackNote.addEventListener("input", () => elements.feedbackNote.setCustomValidity(""));
 elements.cancelFeedbackAction.addEventListener("click", () => elements.feedbackDialog.close());
 elements.personDepartments.forEach(input => input.addEventListener("change", saveDepartmentTraining));
 elements.onboardingTraining.addEventListener("change", saveOnboarding);
@@ -258,6 +278,7 @@ elements.clearNotesButton.addEventListener("click", () => {
 elements.addWorkerNoteButton.addEventListener("click", addWorkerNote);
 elements.closeSalesReport.addEventListener("click", () => elements.salesReportDialog.close());
 elements.salesReportForm.addEventListener("submit", saveSalesReport);
+elements.salesReportDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.markNotSalesButton.addEventListener("click", markSalesDayNotSales);
 [elements.salesReportHours, elements.salesReportHardware, elements.salesReportServices].forEach(input => input.addEventListener("input", updateSalesReportPreview));
 elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
@@ -327,6 +348,17 @@ elements.dropZone.addEventListener("drop", (event) => importAttendance(event.dat
 
 elements.feedbackForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const submitButton = elements.feedbackForm.querySelector('button[type="submit"]');
+  if (submitButton.disabled) return;
+  submitButton.disabled = true;
+  try {
+    await saveFeedback();
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+async function saveFeedback() {
   const person = state.people[elements.feedbackPersonId.value];
   const note = elements.feedbackNote.value.trim();
   if (!person || !note) return;
@@ -335,17 +367,17 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     type: elements.feedbackType.value,
     category: elements.feedbackCategoryInputs.find(input => input.checked)?.value,
     note,
-    createdByEmail: remoteUser?.email || "",
+    createdByEmail: editorLabel(),
     createdAt: new Date().toISOString()
   };
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { data, error } = await supabaseClient.from("feedback").insert({
       worker_id: person.remoteId,
       kind: feedbackItem.type,
       category: feedbackItem.category,
       note: feedbackItem.note,
-      created_by: remoteUser.id,
-      created_by_email: remoteUser.email.toLowerCase()
+      created_by: null,
+      created_by_email: editorLabel()
     }).select("id, kind, category, note, created_by_email, created_at").single();
     if (error) {
       elements.feedbackNote.setCustomValidity(error.message);
@@ -358,12 +390,13 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     feedbackItem.createdByEmail = data.created_by_email;
     feedbackItem.createdAt = data.created_at;
   }
+  elements.feedbackNote.setCustomValidity("");
   if (!Array.isArray(person.feedback)) person.feedback = [];
   person.feedback.push(feedbackItem);
   const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
   person.skills = metrics.skills;
   person.reliability = metrics.reliability;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
     if (error) setMessage(`Hodnocení je uložené, ale ukazatele se nepodařilo zapsat: ${error.message}`, true);
     else await refreshWorkerAudit(person);
@@ -378,7 +411,7 @@ elements.feedbackForm.addEventListener("submit", async (event) => {
     updateRangeControl(elements.reliabilityRange, elements.reliabilityOutput);
     renderFeedbackHistory(person);
   }
-});
+}
 
 function openAddWorkerDialog() {
   elements.addWorkerForm.reset();
@@ -395,14 +428,9 @@ function openDeleteWorkerDialog() {
   elements.deleteWorkerDialog.dataset.personId = person.id;
   setDialogStatus(elements.deleteWorkerStatus, "");
   elements.deleteWorkerDialog.showModal();
-  elements.deleteWorkerPassword.focus();
+  elements.confirmDeleteWorker.focus();
 }
 
-async function verifyCurrentPassword(password) {
-  if (!supabaseClient || !remoteUser?.email) throw new Error("Přihlášení není aktivní.");
-  const { error } = await supabaseClient.auth.signInWithPassword({ email: remoteUser.email, password });
-  if (error) throw new Error("Zadané heslo není správné.");
-}
 
 async function addWorker(event) {
   event.preventDefault();
@@ -410,10 +438,8 @@ async function addWorker(event) {
   const externalId = elements.newWorkerId.value.trim();
   const email = elements.newWorkerEmail.value.trim() || null;
   elements.confirmAddWorker.disabled = true;
-  setDialogStatus(elements.addWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
   try {
-    await verifyCurrentPassword(elements.addWorkerPassword.value);
-    setDialogStatus(elements.addWorkerStatus, "Vytvářím kartu…");
     const { data: createdWorkerId, error } = await supabaseClient.rpc("admin_create_worker", {
       p_external_user_id: externalId,
       p_full_name: name,
@@ -436,7 +462,6 @@ async function addWorker(event) {
     setDialogStatus(elements.addWorkerStatus, error.message || "Kartu se nepodařilo vytvořit.", true);
   } finally {
     elements.confirmAddWorker.disabled = false;
-    elements.addWorkerPassword.value = "";
   }
 }
 
@@ -445,10 +470,8 @@ async function removeWorker(event) {
   const person = state.people[elements.deleteWorkerDialog.dataset.personId];
   if (!person?.remoteId) return;
   elements.confirmDeleteWorker.disabled = true;
-  setDialogStatus(elements.deleteWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.deleteWorkerStatus, "Odebírám z přehledu…");
   try {
-    await verifyCurrentPassword(elements.deleteWorkerPassword.value);
-    setDialogStatus(elements.deleteWorkerStatus, "Odebírám z přehledu…");
     const { error } = await supabaseClient.rpc("admin_set_worker_active", { p_worker_id: person.remoteId, p_active: false });
     if (error) throw new Error(error.message);
     delete state.people[person.id];
@@ -466,7 +489,6 @@ async function removeWorker(event) {
     setDialogStatus(elements.deleteWorkerStatus, error.message || "Brigádníka se nepodařilo odebrat.", true);
   } finally {
     elements.confirmDeleteWorker.disabled = false;
-    elements.deleteWorkerPassword.value = "";
   }
 }
 
@@ -512,9 +534,8 @@ function selectWorkerForRestore(worker) {
   elements.restoreWorkerConfirm.hidden = false;
   elements.cancelRestoreWorker.hidden = false;
   elements.confirmRestoreWorker.hidden = false;
-  elements.restoreWorkerPassword.value = "";
   setDialogStatus(elements.restoreWorkerStatus, "");
-  elements.restoreWorkerPassword.focus();
+  elements.confirmRestoreWorker.focus();
 }
 
 function cancelRestoreWorker() {
@@ -523,7 +544,6 @@ function cancelRestoreWorker() {
   elements.restoreWorkerConfirm.hidden = true;
   elements.cancelRestoreWorker.hidden = true;
   elements.confirmRestoreWorker.hidden = true;
-  elements.restoreWorkerPassword.value = "";
   setDialogStatus(elements.restoreWorkerStatus, "");
 }
 
@@ -533,9 +553,8 @@ async function restoreWorker(event) {
   const workerName = elements.inactiveWorkersDialog.dataset.workerName;
   if (!workerId) return;
   elements.confirmRestoreWorker.disabled = true;
-  setDialogStatus(elements.restoreWorkerStatus, "Ověřuji heslo…");
+  setDialogStatus(elements.restoreWorkerStatus, "Obnovuji…");
   try {
-    await verifyCurrentPassword(elements.restoreWorkerPassword.value);
     const { error } = await supabaseClient.rpc("admin_set_worker_active", { p_worker_id: workerId, p_active: true });
     if (error) throw error;
     await loadRemoteState();
@@ -551,7 +570,6 @@ async function restoreWorker(event) {
     setDialogStatus(elements.restoreWorkerStatus, error.message || "Brigádníka se nepodařilo obnovit.", true);
   } finally {
     elements.confirmRestoreWorker.disabled = false;
-    elements.restoreWorkerPassword.value = "";
   }
 }
 
@@ -582,33 +600,80 @@ function saveState() {
 async function initializeApp() {
   const config = window.APP_CONFIG;
   if (!config?.supabaseUrl || !config?.supabasePublishableKey || !window.supabase?.createClient) {
-    hideAppLoader();
-    showAuthMessage("Chybí konfigurace Supabase nebo se nenačetla jeho knihovna.", true);
+    showLoadError("Chybí konfigurace Supabase nebo se nenačetla jeho knihovna.");
     return;
   }
-  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey);
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
-    void processSession(session);
-  });
-  const { data, error } = await supabaseClient.auth.getSession();
-  if (error) showAuthMessage(error.message, true);
-  else await processSession(data.session);
+  createSupabaseClient();
+  showAppLoader("Načítám profily brigádníků…");
+  try {
+    await loadRemoteState();
+    render();
+    updateAppLoader("Synchronizuji docházku…");
+    await syncGoogleSheets(true);
+    render();
+    elements.appContent.forEach(element => { element.hidden = false; });
+    updateAppLoader("Přehled je připravený");
+    await waitForAppPaint();
+    hideAppLoader();
+    if (!editorName() && !sessionStorage.getItem(EDITOR_KEY)) openEditorDialog();
+  } catch (error) {
+    showLoadError(error.message || "Data se nepodařilo načíst.");
+  }
 }
 
-async function signInWithPassword(event) {
-  event.preventDefault();
-  if (!supabaseClient) return;
-  showAuthMessage("Přihlašuji…");
-  elements.loginButton.disabled = true;
-  elements.loginButton.textContent = "Přihlašuji…";
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email: elements.loginEmail.value.trim(),
-    password: elements.loginPassword.value
+// Aplikace běží bez přihlášení (veřejný přístup, viz supabase/2026-10-28-public-access.sql).
+// Případné staré přihlášení z prohlížeče se nepoužije, aby všechny požadavky
+// šly pod stejnou veřejnou rolí. Jméno editora jde v hlavičce kvůli historii změn;
+// hlavičky nesmí obsahovat diakritiku, proto je URL-kódované.
+function createSupabaseClient() {
+  const config = window.APP_CONFIG;
+  const name = editorName();
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "brigadnici-public" },
+    global: { headers: name ? { "x-editor-name": encodeURIComponent(name) } : {} }
   });
-  elements.loginButton.disabled = false;
-  elements.loginButton.textContent = "Přihlásit se";
-  if (error) hideAppLoader();
-  showAuthMessage(error ? "E-mail nebo heslo není správné." : "Přihlášení proběhlo úspěšně.", Boolean(error));
+}
+
+function showLoadError(text) {
+  elements.appLoader.hidden = false;
+  elements.appLoader.classList.add("is-visible", "has-error");
+  updateAppLoader(text);
+}
+
+function editorName() {
+  try {
+    return (localStorage.getItem(EDITOR_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+// Text ukládaný do sloupců *_by_email u palců, poznámek, reportů a nástupu.
+function editorLabel() {
+  return editorName() || "Neuvedeno";
+}
+
+function renderEditorName() {
+  const name = editorName();
+  elements.editorNameLabel.textContent = name || "Podepsat se";
+  elements.editorNameButton.classList.toggle("is-missing", !name);
+}
+
+function openEditorDialog() {
+  elements.editorNameInput.value = editorName();
+  elements.editorDialog.showModal();
+  elements.editorNameInput.focus();
+}
+
+function saveEditorName(event) {
+  event.preventDefault();
+  const name = elements.editorNameInput.value.trim().slice(0, 80);
+  if (!name) return;
+  localStorage.setItem(EDITOR_KEY, name);
+  createSupabaseClient();
+  renderEditorName();
+  elements.editorDialog.close();
+  setMessage(`Změny se budou ukládat pod jménem ${name}.`);
 }
 
 function toggleTheme() {
@@ -710,7 +775,7 @@ async function saveDepartmentTraining() {
   const metrics = calculateAutomaticMetrics(person.feedback, next);
   elements.personDepartments.forEach(input => { input.disabled = true; });
   try {
-    if (supabaseClient && remoteUser && person.remoteId) {
+    if (supabaseClient && person.remoteId) {
       const { error } = await supabaseClient.from("workers").update({ departments: next, skills: metrics.skills, status: nextStatus }).eq("id", person.remoteId);
       if (error) throw error;
       await refreshWorkerAudit(person);
@@ -743,8 +808,8 @@ async function saveOnboarding() {
     training_completed: next.training,
     contracts_completed: next.contracts,
     taxes_completed: next.taxes,
-    updated_by: remoteUser.id,
-    updated_by_email: remoteUser.email.toLowerCase()
+    updated_by: null,
+    updated_by_email: editorLabel()
   };
   const { error } = await supabaseClient.from("worker_onboarding").upsert(payload, { onConflict: "worker_id" });
   if (error) {
@@ -753,7 +818,7 @@ async function saveOnboarding() {
   }
   person.onboarding = {
     ...next,
-    updatedByEmail: remoteUser.email.toLowerCase(),
+    updatedByEmail: editorLabel(),
     updatedAt: new Date().toISOString()
   };
   if (elements.dialog.open && elements.personId.value === person.id) {
@@ -770,7 +835,7 @@ async function saveOnboarding() {
 
 async function restoreDepartments(person, departments, status = person.status) {
   const metrics = calculateAutomaticMetrics(person.feedback, departments);
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ departments, skills: metrics.skills, status }).eq("id", person.remoteId);
     if (error) throw error;
   }
@@ -793,7 +858,7 @@ async function saveDetailNotes() {
   const next = elements.notesInput.value.trim();
   if (previous === next) return;
   try {
-    if (supabaseClient && remoteUser && person.remoteId) {
+    if (supabaseClient && person.remoteId) {
       const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
       if (error) throw error;
       await refreshWorkerAudit(person);
@@ -811,7 +876,7 @@ async function saveDetailNotes() {
 }
 
 async function restoreNote(person, note) {
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ notes: note }).eq("id", person.remoteId);
     if (error) throw error;
     await refreshWorkerAudit(person);
@@ -847,8 +912,29 @@ function setTableSort(key) {
   currentSort = currentSort.key === key
     ? { key, direction: currentSort.direction === "asc" ? "desc" : "asc" }
     : { key, direction: defaultDirection };
+  saveSort();
   updateTableSortIndicators();
   render();
+}
+
+function loadSavedSort() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SORT_KEY));
+    if (saved && typeof saved.key === "string" && ["asc", "desc"].includes(saved.direction)) return saved;
+  } catch { /* poškozená hodnota – použije se výchozí řazení */ }
+  return { ...SORT_OPTIONS.name };
+}
+
+function saveSort() {
+  localStorage.setItem(SORT_KEY, JSON.stringify(currentSort));
+  elements.sortSelect.value = sortOptionValue(currentSort);
+  elements.sortSelect.syncCustomSelect?.();
+}
+
+// Řazení z hlavičky tabulky nemusí mít odpovídající položku v seznamu.
+function sortOptionValue(sort) {
+  const match = Object.entries(SORT_OPTIONS).find(([, option]) => option.key === sort.key && option.direction === sort.direction);
+  return match ? match[0] : "";
 }
 
 function updateTableSortIndicators() {
@@ -877,70 +963,6 @@ function updateSalesSortIndicators() {
   });
 }
 
-async function processSession(session) {
-  if (!session?.user) return handleSession(session);
-  if (sessionLoadPromise) return sessionLoadPromise;
-  const currentLoad = handleSession(session);
-  sessionLoadPromise = currentLoad;
-  try {
-    return await currentLoad;
-  } finally {
-    if (sessionLoadPromise === currentLoad) sessionLoadPromise = null;
-  }
-}
-
-async function handleSession(session) {
-  if (!session?.user) {
-    hideAppLoader();
-    remoteUser = null;
-    hasAutoSynced = false;
-    elements.authGate.hidden = false;
-    elements.appContent.forEach(element => { element.hidden = true; });
-    return;
-  }
-  showAppLoader("Ověřuji přístup…");
-  remoteUser = session.user;
-  const { data: membership, error: membershipError } = await supabaseClient
-    .from("app_members")
-    .select("email")
-    .eq("email", remoteUser.email.toLocaleLowerCase())
-    .maybeSingle();
-  if (membershipError) {
-    hideAppLoader();
-    showAuthMessage(`Databáze ještě není připravená: ${membershipError.message}`, true);
-    return;
-  }
-  if (!membership) {
-    hideAppLoader();
-    showAuthMessage("Tento e-mail není na seznamu povolených vedoucích.", true);
-    await supabaseClient.auth.signOut();
-    return;
-  }
-  elements.authGate.hidden = true;
-  elements.appContent.forEach(element => { element.hidden = true; });
-  elements.signedInUser.textContent = remoteUser.email;
-  try {
-    updateAppLoader("Načítám profily brigádníků…");
-    await loadRemoteState();
-    render();
-    if (!hasAutoSynced) {
-      hasAutoSynced = true;
-      updateAppLoader("Synchronizuji docházku…");
-      await syncGoogleSheets(true);
-    }
-    render();
-    elements.appContent.forEach(element => { element.hidden = false; });
-    updateAppLoader("Přehled je připravený");
-    await waitForAppPaint();
-    hideAppLoader();
-  } catch (error) {
-    hideAppLoader();
-    elements.authGate.hidden = false;
-    elements.appContent.forEach(element => { element.hidden = true; });
-    showAuthMessage(error.message, true);
-  }
-}
-
 function waitForAppPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
@@ -963,25 +985,19 @@ function hideAppLoader() {
   loaderHideTimer = setTimeout(() => { elements.appLoader.hidden = true; }, 240);
 }
 
-function showAuthMessage(text, error = false) {
-  elements.authMessage.textContent = text;
-  elements.authMessage.classList.toggle("error", error);
-}
 
 async function loadRemoteState() {
   const workersResult = await supabaseClient.from("workers").select("*").eq("active", true).order("full_name");
   if (workersResult.error) throw workersResult.error;
   const workerIds = workersResult.data.map(worker => worker.id);
   const latestPeriod = firstDayOfMonth(new Date());
-  const salesCutoff = new Date();
-  salesCutoff.setMonth(salesCutoff.getMonth() - 12);
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
   const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult] = await Promise.all([
     scoped(supabaseClient.from("attendance_totals").select("worker_id, period, hours")).eq("period", latestPeriod),
     scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).order("created_at"),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
-    scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", dateKey(salesCutoff)).order("shift_date", { ascending: false }),
+    scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", salesCutoffKey()).order("shift_date", { ascending: false }),
     scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed, updated_by_email, updated_at"))
   ]);
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
@@ -1016,7 +1032,7 @@ async function loadRemoteState() {
     auditByWorker.get(item.worker_id).push({
       id: item.id,
       changedAt: item.changed_at,
-      changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+      changedBy: item.changed_by_email || "Dřívější uživatel",
       operation: item.operation,
       before: item.before_data,
       after: item.after_data
@@ -1101,7 +1117,8 @@ async function syncGoogleSheets(automatic = false) {
   elements.syncStatusMeta.textContent = "Kontroluji aktuální data v Google Sheets";
   setMessage("");
   try {
-    const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`${GOOGLE_SHEET_EXPORT_URL}&cache=${Date.now()}`, { cache: "no-store" })
+      .catch(() => { throw new Error("Google tabulku se nepodařilo stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu."); });
     if (!response.ok) throw new Error(`Google Sheets vrátil chybu ${response.status}.`);
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("text/html")) throw new Error("Tabulka není dostupná bez přihlášení. Nastavte sdílení na Kdokoli s odkazem – čtenář.");
@@ -1169,38 +1186,27 @@ function mapSalesDay(row) {
 }
 
 async function syncSalesExpectations(workbook) {
-  if (!salesDaysTableAvailable || !supabaseClient || !remoteUser) return;
+  if (!salesDaysTableAvailable || !supabaseClient) return;
   const totals = new Map();
-  const scannedDates = [];
+  const scannedDates = new Set();
+  const today = startOfDay(new Date());
   workbook.SheetNames.forEach(sheetName => {
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
-    for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
-      if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
-      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
+    forEachShiftCell(sheetMatrix(workbook.Sheets[sheetName]), ({ date, slot, text, assignment }) => {
       // Upozornění vzniká až po skončení dne. Dnešní směna ještě nemusí být
       // dokončená a její report tedy nemá být označený jako chybějící.
-      if (!date || date >= startOfDay(new Date())) continue;
-      scannedDates.push(dateKey(date));
-      const assignments = matrix[rowIndex + 1].slice(1, 7).map(normalize);
-      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
-        const row = matrix[shiftRow];
-        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
-        if (!/^\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*h?$/.test(normalize(row[0]))) continue;
-        row.slice(1, 7).forEach((cell, column) => {
-          // Popisky v tabulce obsahují šipky a více variant názvu, například
-          // „↓ Prodej ↓“, „Prodej / Výdej“ nebo „Prodej (Lenovo)“.
-          if (!assignments[column].includes("prodej")) return;
-          const rawWorkerName = String(cell || "").trim();
-          const worker = findActiveWorker(rawWorkerName)
-            || findActiveWorker(rawWorkerName.replace(/\s+\d{1,2}:\d{2}\s*$/, ""));
-          if (!worker?.remoteId) return;
-          const key = `${worker.remoteId}|${dateKey(date)}`;
-          totals.set(key, { worker_id: worker.remoteId, shift_date: dateKey(date), planned_hours: (totals.get(key)?.planned_hours || 0) + 1 });
-        });
-      }
-    }
+      if (!date || date >= today) return;
+      scannedDates.add(dateKey(date));
+      // Popisky v tabulce obsahují šipky a více variant názvu, například
+      // „↓ Prodej ↓“, „Prodej / Výdej“ nebo „Prodej (Lenovo)“.
+      if (!normalize(assignment).includes("prodej")) return;
+      workersInShiftCell(text).forEach(worker => {
+        if (!worker.remoteId) return;
+        const key = `${worker.remoteId}|${dateKey(date)}`;
+        totals.set(key, { worker_id: worker.remoteId, shift_date: dateKey(date), planned_hours: (totals.get(key)?.planned_hours || 0) + slot.hours });
+      });
+    });
   });
-  if (!scannedDates.length) return;
+  if (!scannedDates.size) return;
   const { error } = totals.size
     ? await supabaseClient.from("sales_days").upsert([...totals.values()], { onConflict: "worker_id,shift_date" })
     : { error: null };
@@ -1210,12 +1216,34 @@ async function syncSalesExpectations(workbook) {
     .eq("status", "pending").gte("shift_date", orderedDates[0]).lte("shift_date", orderedDates[orderedDates.length - 1]);
   const staleIds = (pendingRows || []).filter(row => !totals.has(`${row.worker_id}|${row.shift_date}`)).map(row => row.id);
   if (staleIds.length) await supabaseClient.from("sales_days").delete().in("id", staleIds).eq("status", "pending");
-  const { data } = await supabaseClient.from("sales_days").select("*").gte("shift_date", dateKey(new Date(new Date().setMonth(new Date().getMonth() - 12)))).order("shift_date", { ascending: false });
+  const { data } = await supabaseClient.from("sales_days").select("*").gte("shift_date", salesCutoffKey()).order("shift_date", { ascending: false });
   if (data) salesDays = data.map(mapSalesDay);
   renderSalesDashboard(); renderAlerts();
 }
 
-function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
+function salesCutoffKey() {
+  return dateKey(addMonths(new Date(), -12));
+}
+
+// sheet_to_json je u celého ročního sešitu drahé a stejný list se čte
+// několikrát (hodiny za 60 dní, další směny, prodejní směny), proto výsledek ukládáme.
+const sheetMatrixCache = new WeakMap();
+function sheetMatrix(sheet) {
+  if (!sheetMatrixCache.has(sheet)) sheetMatrixCache.set(sheet, XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" }));
+  return sheetMatrixCache.get(sheet);
+}
+
+// Jedna buňka rozpisu může obsahovat více jmen (oddělených novým řádkem,
+// čárkou nebo středníkem) a za jménem může být uvedený čas příchodu.
+function workersInShiftCell(text) {
+  const found = new Map();
+  const add = worker => { if (worker) found.set(worker.id, worker); };
+  const whole = findActiveWorker(text) || findActiveWorker(stripTrailingTime(text));
+  if (whole) return [whole];
+  String(text).split(/[\n,;]+/).forEach(part => add(findActiveWorker(part.trim()) || findActiveWorker(stripTrailingTime(part))));
+  return [...found.values()];
+}
+
 
 function renderMonthPicker(months) {
   elements.monthPickerValue.textContent = elements.sheetSelect.value || "Vyberte měsíc";
@@ -1249,28 +1277,13 @@ function applyRolling60Hours(workbook) {
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() - 59);
   const totals = new Map();
-
   workbook.SheetNames.forEach(sheetName => {
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
-    for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
-      const nextRowLabel = normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "");
-      if (nextRowLabel !== "urceni") continue;
-      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
-      if (!date || date < cutoff || date > today) continue;
-      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
-        const row = matrix[shiftRow];
-        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
-        if (!/^\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*h?$/.test(normalize(row[0]))) continue;
-        row.slice(1, 7).forEach(cell => {
-          const worker = findActiveWorker(String(cell || "").trim());
-          if (!worker) return;
-          totals.set(worker.id, (totals.get(worker.id) || 0) + 1);
-        });
-      }
-    }
+    forEachShiftCell(sheetMatrix(workbook.Sheets[sheetName]), ({ date, slot, text }) => {
+      if (!date || date < cutoff || date > today) return;
+      workersInShiftCell(text).forEach(worker => totals.set(worker.id, (totals.get(worker.id) || 0) + slot.hours));
+    });
   });
-
-  Object.values(state.people).forEach(person => { person.hours60 = totals.get(person.id) || 0; });
+  Object.values(state.people).forEach(person => { person.hours60 = Math.round((totals.get(person.id) || 0) * 100) / 100; });
   saveState();
   render();
 }
@@ -1278,45 +1291,22 @@ function applyRolling60Hours(workbook) {
 function applyNextShifts(workbook) {
   const today = startOfDay(new Date());
   const shifts = new Map();
-
   workbook.SheetNames.forEach(sheetName => {
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
-    for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
-      if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
-      const date = excelCellDate(matrix[rowIndex].slice(0, 8));
-      if (!date || date < today) continue;
-      const assignments = matrix[rowIndex + 1].slice(1, 7).map(formatShiftDepartment);
-
-      for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
-        const row = matrix[shiftRow];
-        if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
-        const slot = parseShiftSlot(row[0]);
-        if (!slot) continue;
-        row.slice(1, 7).forEach((cell, column) => {
-          const rawName = String(cell || "").trim();
-          const worker = findActiveWorker(rawName)
-            || findActiveWorker(rawName.replace(/\s+\d{1,2}:\d{2}\s*$/, ""));
-          if (!worker) return;
-          const department = assignments[column] || "Oddělení neuvedeno";
-          const key = `${worker.id}|${dateKey(date)}|${department}`;
-          const existing = shifts.get(key);
-          if (existing) {
-            if (slot.startMinutes < existing.startMinutes) {
-              existing.startMinutes = slot.startMinutes;
-              existing.start = slot.start;
-            }
-            if (slot.endMinutes > existing.endMinutes) {
-              existing.endMinutes = slot.endMinutes;
-              existing.end = slot.end;
-            }
-          } else {
-            shifts.set(key, { personId: worker.id, date, department, ...slot });
-          }
-        });
-      }
-    }
+    forEachShiftCell(sheetMatrix(workbook.Sheets[sheetName]), ({ date, slot, text, assignment }) => {
+      if (!date || date < today) return;
+      const department = formatShiftDepartment(assignment) || "Oddělení neuvedeno";
+      workersInShiftCell(text).forEach(worker => {
+        const key = `${worker.id}|${dateKey(date)}|${department}`;
+        const existing = shifts.get(key);
+        if (!existing) {
+          shifts.set(key, { personId: worker.id, date, department, ...slot });
+          return;
+        }
+        if (slot.startMinutes < existing.startMinutes) Object.assign(existing, { startMinutes: slot.startMinutes, start: slot.start });
+        if (slot.endMinutes > existing.endMinutes) Object.assign(existing, { endMinutes: slot.endMinutes, end: slot.end });
+      });
+    });
   });
-
   nextShiftsByPerson.clear();
   [...shifts.values()]
     .sort((a, b) => a.date - b.date || a.startMinutes - b.startMinutes)
@@ -1326,61 +1316,10 @@ function applyNextShifts(workbook) {
   render();
 }
 
-function parseShiftSlot(value) {
-  const match = String(value || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*-\s*(\d{1,2})(?::(\d{2}))?\s*h?$/i);
-  if (!match) return null;
-  const startMinutes = Number(match[1]) * 60 + Number(match[2] || 0);
-  const endMinutes = Number(match[3]) * 60 + Number(match[4] || 0);
-  const clock = minutes => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
-  return { startMinutes, endMinutes, start: clock(startMinutes), end: clock(endMinutes) };
-}
 
-function calculateFreeShiftHours(sheet) {
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
-  let freeHours = 0;
-  for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
-    if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
-    for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
-      const row = matrix[shiftRow];
-      if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
-      const slot = parseShiftSlot(row[0]);
-      if (!slot) continue;
-      const duration = Math.max(0, slot.endMinutes - slot.startMinutes) / 60;
-      row.slice(1, 7).forEach(cell => {
-        if (normalize(cell).includes("volna smena")) freeHours += duration;
-      });
-    }
-  }
-  return Math.round(freeHours * 100) / 100;
-}
 
-function formatShiftDepartment(value) {
-  return String(value || "")
-    .replace(/[\u2190-\u21ff\u25b2-\u25ff]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/(^|\s)\S/g, letter => letter.toUpperCase());
-}
 
-function excelCellDate(cells) {
-  for (const value of cells) {
-    if (value instanceof Date && !Number.isNaN(value.valueOf())) return startOfDay(value);
-    if (typeof value === "number" && value > 30000 && value < 70000) {
-      const parsed = XLSX.SSF.parse_date_code(value);
-      if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
-    }
-    if (typeof value === "string" && /^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/.test(value.trim())) {
-      const [day, month, rawYear] = value.trim().split(/[./]/).map(Number);
-      const year = rawYear < 100 ? 2000 + rawYear : rawYear;
-      return new Date(year, month - 1, day);
-    }
-  }
-  return null;
-}
 
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
 
 function findWorkbookHeader(sheet) {
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
@@ -1409,7 +1348,7 @@ async function importWorkbookSheet(sheetName) {
       rows.push({ Jméno: name, Hodiny: hours });
     }
     state.plannedHours = findWorkbookSummaryValue(match.matrix, ["plánované hodiny", "planovane hodiny"]);
-    state.freeHours = calculateFreeShiftHours(sheet);
+    state.freeHours = calculateFreeShiftHours(sheetMatrix(sheet));
     currentImportPeriod = periodFromSheetName(sheetName) || firstDayOfMonth(new Date());
     await importRows(rows, `${pendingWorkbookName} — ${sheetName}`, shiftNewcomers, shiftRosterNames);
     return true;
@@ -1486,7 +1425,7 @@ async function importRows(rows, sourceName, precreatedNewcomers = [], shiftRoste
   });
 
   state.lastImport = new Date().toISOString();
-  if (supabaseClient && remoteUser) await saveAttendanceRemote(totals, sourceName);
+  if (supabaseClient) await saveAttendanceRemote(totals, sourceName);
   saveState();
   render();
   setImportCollapsed(true);
@@ -1500,38 +1439,22 @@ async function importRows(rows, sourceName, precreatedNewcomers = [], shiftRoste
 }
 
 async function ensureWorkersFromShiftSheet(sheet) {
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < matrix.length - 2; rowIndex += 1) {
-    if (normalize(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
-    for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
-      const row = matrix[shiftRow];
-      if (row.some(cell => normalize(cell).startsWith("celkem hod"))) break;
-      if (!parseShiftSlot(row[0])) continue;
-      row.slice(1, 7).forEach(cell => {
-        String(cell || "").split(/[\n,;]+/).forEach(value => {
-          const name = value.trim().replace(/\s+\d{1,2}:\d{2}\s*$/, "").trim();
-          if (isLikelyWorkerName(name)) rows.push({ Jméno: name });
-        });
-      });
-    }
-  }
+  const names = new Set();
+  forEachShiftCell(sheetMatrix(sheet), ({ text }) => {
+    text.split(/[\n,;]+/).forEach(value => {
+      const name = stripTrailingTime(value);
+      if (isLikelyWorkerName(name)) names.add(name);
+    });
+  });
+  const rows = [...names].map(name => ({ Jméno: name }));
   const newcomers = await ensureImportedWorkers(rows, "Jméno", null);
-  const rosterNames = [...new Set(rows.map(row => row.Jméno))];
-  return { newcomers, rosterNames };
+  return { newcomers, rosterNames: [...names] };
 }
 
-function isLikelyWorkerName(value) {
-  const name = String(value || "").trim();
-  return !isIgnoredShiftLabel(name) && /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(name);
-}
 
-function isIgnoredShiftLabel(value) {
-  return normalize(value) === "volna smena";
-}
 
 async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
-  if (!supabaseClient || !remoteUser) return [];
+  if (!supabaseClient) return [];
   const imported = new Map();
   rows.forEach(row => {
     const name = String(row[nameColumn] || "").trim();
@@ -1567,7 +1490,7 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
     return canonical && canonical.id !== worker.id && !String(canonical.external_user_id).startsWith("AUTO_");
   }).map(worker => worker.id);
   const ignoredLabelIds = orderedWorkers
-    .filter(worker => worker.active && String(worker.external_user_id).startsWith("AUTO_") && isIgnoredShiftLabel(worker.full_name))
+    .filter(worker => worker.active && String(worker.external_user_id).startsWith("AUTO_") && isIgnoredShiftName(worker.full_name))
     .map(worker => worker.id);
   const cleanupIds = [...new Set([...duplicateIds, ...ignoredLabelIds])];
   if (cleanupIds.length) {
@@ -1615,14 +1538,6 @@ async function ensureImportedWorkers(rows, nameColumn, emailColumn) {
   return newcomers;
 }
 
-function automaticWorkerId(key) {
-  let hash = 2166136261;
-  for (const character of key) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `AUTO_${key.toUpperCase().replace(/-/g, "_")}_${(hash >>> 0).toString(36).toUpperCase()}`;
-}
 
 async function saveAttendanceRemote(totals, sourceName) {
   const rows = [...totals.values()].flatMap(imported => {
@@ -1632,7 +1547,7 @@ async function saveAttendanceRemote(totals, sourceName) {
       period: currentImportPeriod,
       hours: imported.hours,
       source_name: sourceName,
-      imported_by: remoteUser.id,
+      imported_by: null,
       imported_at: new Date().toISOString()
     }] : [];
   });
@@ -1653,32 +1568,10 @@ async function saveAttendanceRemote(totals, sourceName) {
     return !Number.isFinite(saved) || Math.abs(saved - Number(row.hours)) > 0.001;
   });
   if (mismatches.length) throw new Error(`Kontrola zápisu selhala u ${mismatches.length} brigádníků. Data nebyla potvrzena jako správná.`);
+  // Historie docházky v profilu se při příštím otevření načte znovu.
+  Object.values(state.people).forEach(person => { if (savedByWorker.has(person.remoteId)) person.attendanceLoaded = false; });
 }
 
-function parseCsv(text) {
-  const firstLine = text.split(/\r?\n/, 1)[0] || "";
-  const delimiter = firstLine.split(";").length > firstLine.split(",").length ? ";" : ",";
-  const records = [];
-  let row = [], value = "", quoted = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    if (char === '"') {
-      if (quoted && text[i + 1] === '"') { value += '"'; i += 1; }
-      else quoted = !quoted;
-    } else if (char === delimiter && !quoted) {
-      row.push(value); value = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && text[i + 1] === "\n") i += 1;
-      row.push(value); value = "";
-      if (row.some(cell => cell.trim())) records.push(row);
-      row = [];
-    } else value += char;
-  }
-  if (value || row.length) { row.push(value); records.push(row); }
-  if (records.length < 2) return [];
-  const headers = records[0].map(header => header.trim().replace(/^\uFEFF/, ""));
-  return records.slice(1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() || ""])));
-}
 
 function findColumn(columns, aliases, required = true) {
   const normalized = new Map(columns.map(column => [normalize(column), column]));
@@ -1694,11 +1587,6 @@ function slugify(value) {
   return slugFromName(value);
 }
 
-function parseHours(value) {
-  const normalized = String(value || "0").replace(",", ".").replace(/[^0-9.-]/g, "");
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : 0;
-}
 
 function render() {
   renderTeam();
@@ -1713,11 +1601,13 @@ function scheduleTeamRender() {
 }
 
 function renderTeam() {
-  const query = normalize(elements.searchInput.value);
+  const query = elements.searchInput.value;
   const selectedDepartments = elements.departmentFilters.filter(input => input.checked).map(input => input.value);
   const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
   const people = allPeople.filter(person => {
-    if (!normalize(person.name).includes(query)) return false;
+    if (!matchesSearch(person, query)) return false;
+    if (activeQuickFilters.has("newcomer") && !isNewcomer(person)) return false;
+    if (activeQuickFilters.has("onboarding") && !incompleteOnboardingTasks(person.onboarding).length) return false;
     if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
     if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
     if (activeQuickFilters.has("negative") && feedbackCount(person, "negative") === 0) return false;
@@ -1734,6 +1624,8 @@ function renderTeam() {
   });
   updateTableSortIndicators();
 
+  visibleTeamPeople = people;
+  elements.exportTeamButton.disabled = people.length === 0;
   elements.peopleGrid.replaceChildren(...people.map(createCard));
   renderPeopleTable(people);
   elements.skeletonGrid.hidden = true;
@@ -1756,8 +1648,8 @@ function renderTeam() {
   updateQuickFilterCounts(allPeople);
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
-    elements.emptyStateText.textContent = query
-      ? `Pro hledání „${elements.searchInput.value.trim()}“ nebyl nalezen žádný brigádník.`
+    elements.emptyStateText.textContent = query.trim()
+      ? `Pro hledání „${query.trim()}“ nebyl nalezen žádný brigádník.`
       : "Aktivní filtry neodpovídají žádnému brigádníkovi.";
   }
 }
@@ -1769,6 +1661,8 @@ function averageMetric(people, key) {
 
 function updateQuickFilterCounts(people) {
   const counts = {
+    newcomer: people.filter(isNewcomer).length,
+    onboarding: people.filter(person => incompleteOnboardingTasks(person.onboarding).length).length,
     "no-training": people.filter(person => !(person.departments || []).length).length,
     "no-note": people.filter(person => !String(person.notes || "").trim()).length,
     negative: people.filter(person => feedbackCount(person, "negative") > 0).length,
@@ -1780,6 +1674,10 @@ function updateQuickFilterCounts(people) {
   });
 }
 
+function isNewcomer(person) {
+  return normalize(person.status) === "novacek";
+}
+
 function resetAllFilters() {
   elements.searchInput.value = "";
   elements.clearSearchButton.hidden = true;
@@ -1788,11 +1686,13 @@ function resetAllFilters() {
   elements.clearQuickFilters.hidden = true;
   elements.departmentFilters.forEach(input => { input.checked = false; });
   elements.departmentMatchMode.value = "all";
+  elements.departmentMatchMode.syncCustomSelect?.();
   render();
 }
 
 function comparePeople(a, b, key) {
   if (key === "hours") return Number(a.hours || 0) - Number(b.hours || 0);
+  if (key === "hours60") return Number(a.hours60 || 0) - Number(b.hours60 || 0);
   if (key === "skills") return Number(a.skills || 0) - Number(b.skills || 0);
   if (key === "reliability") return Number(a.reliability || 0) - Number(b.reliability || 0);
   if (key === "departments") return (a.departments || []).length - (b.departments || []).length;
@@ -1857,8 +1757,7 @@ function metricCell(value, type) {
 
 function renderAlerts() {
   const people = Object.values(state.people).filter(isPersonInSelectedMonth);
-  const workedHours = people.map(person => Number(person.hours || 0)).filter(hours => hours > 0).sort((a, b) => a - b);
-  const medianHours = workedHours.length ? workedHours[Math.floor(workedHours.length / 2)] : 0;
+  const medianHours = median(people.map(person => Number(person.hours || 0)).filter(hours => hours > 0));
   const alerts = [];
 
   people.forEach(person => {
@@ -1985,6 +1884,9 @@ function setAlertsOpen(open) {
 
 function isPersonInSelectedMonth(person) {
   if (!monthRosterKnown) return true;
+  // Nováček přidaný ručně ještě nemusí mít směnu v rozpisu, ale jeho nástup
+  // je potřeba dotáhnout, proto zůstává v přehledu viditelný.
+  if (isNewcomer(person)) return true;
   return monthRosterPersonIds.has(person.id) || (person.remoteId && monthRosterRemoteIds.has(person.remoteId));
 }
 
@@ -2019,7 +1921,10 @@ function renderSalesDashboard() {
   const now = new Date();
   syncSalesMonthOptions();
   const selectedMonth = elements.salesPeriodFilter.value;
-  const periodRows = salesDays.filter(day => selectedMonth === "all" || String(day.date).startsWith(`${selectedMonth}-`));
+  syncSalesPersonOptions();
+  const selectedPerson = elements.salesPersonFilter.value;
+  const periodRows = salesDays.filter(day => (selectedMonth === "all" || String(day.date).startsWith(`${selectedMonth}-`))
+    && (selectedPerson === "all" || day.workerId === selectedPerson));
   let rows = [...periodRows];
   const status = elements.salesStatusFilter.value;
   if (status === "pending") rows = rows.filter(day => day.status === "pending");
@@ -2032,34 +1937,46 @@ function renderSalesDashboard() {
       || String(b.date).localeCompare(String(a.date));
   });
   updateSalesSortIndicators();
-  const reported = rows.filter(day => day.status === "reported");
-  const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
-  const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
-  const hardware = reported.reduce((sum, day) => sum + day.hardware, 0);
-  const services = reported.reduce((sum, day) => sum + day.services, 0);
-  const asr = hours ? revenue / hours : 0;
-  const aros = hardware > 0 ? services / hardware * 100 : null;
+  const { revenue, hours, asr, aros, targetPercent } = summarizeSales(rows);
   const missing = periodRows.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   const globalMissing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   elements.salesRevenueKpi.textContent = formatCurrency(revenue);
   elements.salesHoursKpi.textContent = `${formatNumber(hours)} h`;
   elements.salesAsrKpi.textContent = `${formatCurrency(asr)}/h`;
   elements.salesArosKpi.textContent = formatAros(aros);
-  elements.salesTargetKpi.textContent = `${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %`;
+  elements.salesTargetKpi.textContent = `${Math.round(targetPercent || 0)} %`;
   elements.salesMissingKpi.textContent = missing;
   elements.salesPendingBadge.hidden = globalMissing === 0;
   elements.salesPendingBadge.textContent = globalMissing;
   elements.salesEmpty.hidden = rows.length > 0;
+  elements.exportSalesButton.disabled = rows.length === 0;
+  visibleSalesRows = rows;
   elements.salesTableBody.replaceChildren(...rows.map(day => {
     const person = personByRemoteId(day.workerId);
     const row = document.createElement("tr");
     const percent = salesTargetPercent(day);
     const stateLabel = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
-    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td>${day.updatedByEmail || ""}</td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
+    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td class="sales-author"></td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
     row.querySelector("strong").textContent = person?.name || "Neznámý brigádník";
+    row.querySelector(".sales-author").textContent = day.updatedByEmail || "";
     row.querySelector("button").addEventListener("click", () => openSalesReport(day));
     return row;
   }));
+}
+
+function syncSalesPersonOptions() {
+  const select = elements.salesPersonFilter;
+  const people = [...new Set(salesDays.map(day => day.workerId))]
+    .map(id => ({ id, name: personByRemoteId(id)?.name }))
+    .filter(person => person.name)
+    .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  const signature = people.map(person => person.id).join("|");
+  if (select.dataset.signature === signature) return;
+  const previous = select.value;
+  select.replaceChildren(new Option("Všichni brigádníci", "all"), ...people.map(person => new Option(person.name, person.id)));
+  select.value = people.some(person => person.id === previous) ? previous : "all";
+  select.dataset.signature = signature;
+  select.syncCustomSelect?.();
 }
 
 function syncSalesMonthOptions() {
@@ -2116,14 +2033,8 @@ function openSalesForPerson(person) {
 
 function renderProfileSales(person) {
   const rows = salesDays.filter(day => day.workerId === person.remoteId);
-  const reported = rows.filter(day => day.status === "reported");
-  const hours = reported.reduce((sum, day) => sum + day.salesHours, 0);
-  const revenue = reported.reduce((sum, day) => sum + salesRevenue(day), 0);
-  const hardware = reported.reduce((sum, day) => sum + day.hardware, 0);
-  const services = reported.reduce((sum, day) => sum + day.services, 0);
-  const asr = hours ? revenue / hours : 0;
-  const aros = hardware > 0 ? services / hardware * 100 : null;
-  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>ARoS</span><strong>${formatAros(aros)}</strong></article><article><span>Plnění TGT</span><strong>${Math.round(asr / SALES_ASR_TARGET * 100 || 0)} %</strong></article>`;
+  const { revenue, hours, asr, aros, targetPercent } = summarizeSales(rows);
+  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>ARoS</span><strong>${formatAros(aros)}</strong></article><article><span>Plnění TGT</span><strong>${Math.round(targetPercent || 0)} %</strong></article>`;
   if (!rows.length) { elements.profileSalesHistory.innerHTML = '<p class="no-feedback">Zatím bez prodejních směn.</p>'; return; }
   elements.profileSalesHistory.replaceChildren(...rows.map(day => {
     const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
@@ -2141,7 +2052,7 @@ function openSalesReport(day) {
   elements.salesReportDate.textContent = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "full" }).format(new Date(`${day.date}T00:00:00`));
   elements.salesReportHours.value = day.salesHours || day.plannedHours || "";
   elements.salesReportHardware.value = day.hardware || ""; elements.salesReportServices.value = day.services || ""; elements.salesReportNote.value = day.note || "";
-  elements.salesReportStatus.textContent = ""; updateSalesReportPreview(); elements.salesReportDialog.showModal();
+  setDialogStatus(elements.salesReportStatus, ""); updateSalesReportPreview(); elements.salesReportDialog.showModal();
 }
 
 function updateSalesReportPreview() {
@@ -2153,18 +2064,52 @@ function updateSalesReportPreview() {
 }
 
 async function saveSalesReport(event) {
-  event.preventDefault(); const day = salesDays.find(item => item.id === elements.salesReportId.value); if (!day) return;
-  const payload = { sales_hours: Number(elements.salesReportHours.value), hardware_revenue: Number(elements.salesReportHardware.value), services_revenue: Number(elements.salesReportServices.value), status: "reported", note: elements.salesReportNote.value.trim(), updated_by: remoteUser.id, updated_by_email: remoteUser.email.toLowerCase() };
-  const { data, error } = await supabaseClient.from("sales_days").update(payload).eq("id", day.id).select("*").single();
-  if (error) { elements.salesReportStatus.textContent = error.message; elements.salesReportStatus.classList.add("error"); return; }
-  Object.assign(day, mapSalesDay(data)); elements.salesReportDialog.close(); renderSalesDashboard(); renderAlerts(); const person = personByRemoteId(day.workerId); if (person) renderProfileSales(person); setMessage("Prodejní report byl uložen.");
+  event.preventDefault();
+  await updateSalesDay({
+    sales_hours: Number(elements.salesReportHours.value),
+    hardware_revenue: Number(elements.salesReportHardware.value),
+    services_revenue: Number(elements.salesReportServices.value),
+    status: "reported",
+    note: elements.salesReportNote.value.trim()
+  }, "Prodejní report byl uložen.");
 }
 
 async function markSalesDayNotSales() {
-  const day = salesDays.find(item => item.id === elements.salesReportId.value); if (!day) return;
-  const { data, error } = await supabaseClient.from("sales_days").update({ status: "not_sales", sales_hours: null, hardware_revenue: null, services_revenue: null, updated_by: remoteUser.id, updated_by_email: remoteUser.email.toLowerCase() }).eq("id", day.id).select("*").single();
-  if (error) { elements.salesReportStatus.textContent = error.message; return; }
-  Object.assign(day, mapSalesDay(data)); elements.salesReportDialog.close(); renderSalesDashboard(); renderAlerts(); setMessage("Směna byla označena jako Nebyl na prodeji.");
+  await updateSalesDay({
+    status: "not_sales",
+    sales_hours: null,
+    hardware_revenue: null,
+    services_revenue: null,
+    note: elements.salesReportNote.value.trim()
+  }, "Směna byla označena jako Nebyl na prodeji.");
+}
+
+async function updateSalesDay(changes, successMessage) {
+  const day = salesDays.find(item => item.id === elements.salesReportId.value);
+  if (!day || !supabaseClient) return;
+  const buttons = [...elements.salesReportForm.querySelectorAll("button")];
+  if (buttons.some(button => button.disabled)) return;
+  buttons.forEach(button => { button.disabled = true; });
+  setDialogStatus(elements.salesReportStatus, "Ukládám…");
+  try {
+    const { data, error } = await supabaseClient.from("sales_days")
+      .update({ ...changes, updated_by: null, updated_by_email: editorLabel() })
+      .eq("id", day.id).select("*").single();
+    if (error) {
+      setDialogStatus(elements.salesReportStatus, `Report se nepodařilo uložit: ${error.message}`, true);
+      return;
+    }
+    Object.assign(day, mapSalesDay(data));
+    elements.salesReportDialog.close();
+    renderSalesDashboard();
+    renderAlerts();
+    renderTeam();
+    const person = personByRemoteId(day.workerId);
+    if (person && elements.dialog.open && elements.personId.value === person.id) renderProfileSales(person);
+    setMessage(successMessage);
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
+  }
 }
 
 function createCard(person, index = 0) {
@@ -2195,10 +2140,7 @@ function createCard(person, index = 0) {
   setupInlineNote(card.querySelector(".inline-note"), person);
   const personSales = salesDays.filter(day => day.workerId === person.remoteId);
   const pendingSales = personSales.filter(day => day.status === "pending" && day.date < dateKey(new Date())).length;
-  const reportedSales = personSales.filter(day => day.status === "reported");
-  const totalSalesHours = reportedSales.reduce((sum, day) => sum + day.salesHours, 0);
-  const totalSalesRevenue = reportedSales.reduce((sum, day) => sum + day.hardware + day.services, 0);
-  const asr = totalSalesHours ? totalSalesRevenue / totalSalesHours : 0;
+  const { asr } = summarizeSales(personSales);
   const salesStatus = card.querySelector(".sales-card-status");
   salesStatus.textContent = pendingSales ? `Chybí ${pendingSales} report${pendingSales > 1 ? "y" : ""}` : (asr ? `ASR ${formatCurrency(asr)}/h` : "Bez prodejních dat");
   salesStatus.classList.toggle("pending", pendingSales > 0);
@@ -2223,6 +2165,77 @@ function createCard(person, index = 0) {
   scoreElement.classList.toggle("positive-score", currentScore > 0);
   scoreElement.classList.toggle("negative-score", currentScore < 0);
   return card;
+}
+
+function downloadCsv(fileName, headers, rows) {
+  const blob = new Blob([toCsv(headers, rows)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportFileStamp() {
+  return dateKey(new Date());
+}
+
+function exportTeamCsv() {
+  if (!visibleTeamPeople.length) return;
+  const period = elements.sheetSelect.value || currentImportPeriod.slice(0, 7);
+  downloadCsv(`brigadnici-${slugify(period) || exportFileStamp()}.csv`,
+    ["Jméno", "Interní ID", "E-mail", "Stav", "Hodiny v měsíci", "Hodiny za 60 dní", "Schopnosti %", "Docházková morálka %", "Zaškolení", "👍", "👎", "Skóre", "Nedokončený nástup", "Další směna", "Poznámka"],
+    visibleTeamPeople.map(person => {
+      const shift = nextShiftsByPerson.get(person.id);
+      return [
+        person.name,
+        person.userId || "",
+        person.email || "",
+        person.status || "",
+        Number(person.hours || 0),
+        Number(person.hours60 || 0),
+        clampMetric(person.skills),
+        clampMetric(person.reliability),
+        (person.departments || []).join(", "),
+        feedbackCount(person, "positive"),
+        feedbackCount(person, "negative"),
+        score(person),
+        incompleteOnboardingTasks(person.onboarding).join(", "),
+        shift ? `${new Intl.DateTimeFormat("cs-CZ").format(shift.date)} ${shift.start}–${shift.end} ${shift.department}` : "",
+        person.notes || ""
+      ];
+    }));
+  setMessage(`Exportováno ${visibleTeamPeople.length} brigádníků.`);
+}
+
+function exportSalesCsv() {
+  if (!visibleSalesRows.length) return;
+  const month = elements.salesPeriodFilter.value;
+  downloadCsv(`prodejni-vykon-${month === "all" ? "vse" : month}.csv`,
+    ["Brigádník", "Datum", "Stav", "Plánované hodiny", "Prodejní hodiny", "Železo Kč", "Služby Kč", "Celkem Kč", "ASR Kč/h", "ARoS %", "Plnění TGT %", "Poznámka", "Upravil"],
+    visibleSalesRows.map(day => {
+      const reported = day.status === "reported";
+      const aros = salesAros(day);
+      return [
+        personByRemoteId(day.workerId)?.name || "Neznámý brigádník",
+        new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`)),
+        day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : "Vyplněno",
+        Number(day.plannedHours || 0),
+        reported ? day.salesHours : "",
+        reported ? day.hardware : "",
+        reported ? day.services : "",
+        reported ? salesRevenue(day) : "",
+        reported ? Math.round(salesAsr(day)) : "",
+        reported && Number.isFinite(aros) ? Math.round(aros * 10) / 10 : "",
+        reported ? Math.round(salesTargetPercent(day)) : "",
+        day.note || "",
+        day.updatedByEmail || ""
+      ];
+    }));
+  setMessage(`Exportováno ${visibleSalesRows.length} prodejních dní.`);
 }
 
 function setupNextShiftTooltip(nameElement, person) {
@@ -2270,7 +2283,7 @@ async function saveInlineNote(person, input) {
   if (next === previous) return;
   input.classList.add("is-saving");
   input.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update({ notes: next }).eq("id", person.remoteId);
     if (error) {
       input.value = previous;
@@ -2344,21 +2357,7 @@ function feedbackCount(person, type) {
   return legacy + recorded;
 }
 
-function calculateAutomaticMetrics(feedback = [], departments = []) {
-  const net = category => feedback.reduce((total, item) => {
-    if ((item.category || "general") !== category) return total;
-    return total + (item.type === "positive" ? 1 : -1);
-  }, 0);
-  const trainedDepartments = new Set(departments.filter(department => DEPARTMENTS.includes(department))).size;
-  return {
-    skills: Math.round((trainedDepartments / DEPARTMENTS.length) * 100),
-    reliability: clampMetric(100 + net("attendance") * 5)
-  };
-}
 
-function clampMetric(value) {
-  return Math.min(100, Math.max(0, Number(value)));
-}
 
 function score(person) { return feedbackCount(person, "positive") - feedbackCount(person, "negative"); }
 
@@ -2390,6 +2389,7 @@ async function openPerson(id) {
   renderWorkerNotes(person);
   renderDetailNoteAttribution(person);
   renderProfileSales(person);
+  renderAttendanceHistory(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
   elements.dialog.showModal();
@@ -2398,16 +2398,88 @@ async function openPerson(id) {
   if (elements.dialog.open && elements.personId.value === person.id) {
     renderWorkerNotes(person);
     renderDetailNoteAttribution(person);
+    renderAttendanceHistory(person);
     renderAuditHistory(person);
   }
 }
 
+function renderAttendanceHistory(person) {
+  const chart = elements.attendanceHistoryChart;
+  const stats = elements.attendanceHistoryStats;
+  if (!person.attendanceLoaded) {
+    chart.innerHTML = '<p class="no-feedback">Načítám historii docházky…</p>';
+    stats.replaceChildren();
+    return;
+  }
+  const periods = recentPeriods(new Date(), 12);
+  const byPeriod = new Map((person.attendanceHistory || []).map(row => [row.period, row.hours]));
+  const values = periods.map(period => ({ period, hours: byPeriod.has(period) ? byPeriod.get(period) : null }));
+  const known = values.filter(item => item.hours !== null);
+  const max = Math.max(1, ...known.map(item => item.hours));
+  const total = known.reduce((sum, item) => sum + item.hours, 0);
+  const worked = known.filter(item => item.hours > 0);
+  const average = worked.length ? total / worked.length : 0;
+  const best = worked.reduce((top, item) => (!top || item.hours > top.hours ? item : top), null);
+  const monthLabel = period => {
+    const [year, month] = period.split("-").map(Number);
+    return new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(new Date(year, month - 1, 1)).replace(".", "");
+  };
+  const longMonth = period => {
+    const [year, month] = period.split("-").map(Number);
+    return new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+  };
+  stats.replaceChildren(...[
+    ["Celkem", `${formatNumber(Math.round(total * 10) / 10)} h`],
+    ["Průměr na odpracovaný měsíc", `${formatNumber(Math.round(average * 10) / 10)} h`],
+    ["Nejsilnější měsíc", best ? `${longMonth(best.period)} · ${formatNumber(best.hours)} h` : "—"]
+  ].map(([label, value]) => {
+    const item = document.createElement("span");
+    const small = document.createElement("small");
+    small.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    item.append(small, strong);
+    return item;
+  }));
+  if (!known.some(item => item.hours > 0)) {
+    chart.innerHTML = '<p class="no-feedback">Za posledních 12 měsíců zatím bez zapsaných hodin.</p>';
+    return;
+  }
+  chart.replaceChildren(...values.map(item => {
+    const column = document.createElement("div");
+    column.className = "attendance-bar";
+    column.classList.toggle("is-current", item.period === periods[periods.length - 1]);
+    column.classList.toggle("is-empty", item.hours === null);
+    column.title = item.hours === null ? `${longMonth(item.period)}: bez záznamu` : `${longMonth(item.period)}: ${formatNumber(item.hours)} h`;
+    const value = document.createElement("span");
+    value.className = "attendance-bar-value";
+    value.textContent = item.hours === null ? "" : formatNumber(Math.round(item.hours));
+    const track = document.createElement("span");
+    track.className = "attendance-bar-track";
+    const fill = document.createElement("b");
+    fill.style.height = `${item.hours ? Math.max(3, item.hours / max * 100) : 0}%`;
+    track.append(fill);
+    const label = document.createElement("span");
+    label.className = "attendance-bar-label";
+    label.textContent = monthLabel(item.period);
+    column.append(value, track, label);
+    return column;
+  }));
+  chart.setAttribute("aria-label", `Odpracované hodiny za posledních 12 měsíců, celkem ${formatNumber(Math.round(total))} hodin`);
+}
+
 async function loadWorkerDetails(person) {
-  if (!supabaseClient || !person.remoteId || (person.notesLoaded && person.auditLoaded)) return;
-  const [notesResult, auditResult] = await Promise.all([
+  if (!supabaseClient || !person.remoteId || (person.notesLoaded && person.auditLoaded && person.attendanceLoaded)) return;
+  const periods = recentPeriods(new Date(), 12);
+  const [notesResult, auditResult, attendanceResult] = await Promise.all([
     supabaseClient.from("worker_notes").select("id, body, created_by, created_by_email, created_at").eq("worker_id", person.remoteId).order("created_at", { ascending: false }).limit(100),
-    supabaseClient.from("worker_audit").select("*").eq("worker_id", person.remoteId).order("changed_at", { ascending: false }).limit(50)
+    supabaseClient.from("worker_audit").select("*").eq("worker_id", person.remoteId).order("changed_at", { ascending: false }).limit(50),
+    supabaseClient.from("attendance_totals").select("period, hours").eq("worker_id", person.remoteId).gte("period", periods[0]).order("period")
   ]);
+  if (!attendanceResult.error) {
+    person.attendanceHistory = attendanceResult.data.map(row => ({ period: row.period, hours: Number(row.hours) }));
+    person.attendanceLoaded = true;
+  }
   workerNotesTableAvailable = !notesResult.error;
   if (!notesResult.error) {
     person.workerNotes = notesResult.data.map(item => ({ id: item.id, body: item.body, createdBy: item.created_by, createdByEmail: item.created_by_email, createdAt: item.created_at }));
@@ -2437,16 +2509,16 @@ async function addWorkerNote() {
   const note = {
     id: crypto.randomUUID(),
     body,
-    createdBy: remoteUser?.id || "local",
-    createdByEmail: remoteUser?.email || "",
+    createdBy: null,
+    createdByEmail: editorLabel(),
     createdAt: new Date().toISOString()
   };
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { data, error } = await supabaseClient.from("worker_notes").insert({
       worker_id: person.remoteId,
       body,
-      created_by: remoteUser.id,
-      created_by_email: remoteUser.email.toLowerCase()
+      created_by: null,
+      created_by_email: editorLabel()
     }).select("id, body, created_by, created_by_email, created_at").single();
     if (error) {
       elements.addWorkerNoteButton.disabled = false;
@@ -2507,7 +2579,7 @@ function renderWorkerNotes(person) {
 async function deleteWorkerNote(person, note, button) {
   if (!confirm("Opravdu chcete tuto poznámku smazat?")) return;
   button.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("worker_notes").delete().eq("id", note.id).eq("worker_id", person.remoteId);
     if (error) {
       button.disabled = false;
@@ -2569,7 +2641,7 @@ function renderFeedbackHistory(person) {
 async function deleteFeedback(person, item, button) {
   if (!confirm("Opravdu chcete toto hodnocení smazat?")) return;
   button.disabled = true;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("feedback").delete().eq("id", item.id).eq("worker_id", person.remoteId);
     if (error) {
       button.disabled = false;
@@ -2581,7 +2653,7 @@ async function deleteFeedback(person, item, button) {
   const metrics = calculateAutomaticMetrics(person.feedback, person.departments);
   person.skills = metrics.skills;
   person.reliability = metrics.reliability;
-  if (supabaseClient && remoteUser && person.remoteId) {
+  if (supabaseClient && person.remoteId) {
     const { error } = await supabaseClient.from("workers").update(metrics).eq("id", person.remoteId);
     if (error) setMessage(`Hodnocení je smazané, ale ukazatele se nepodařilo přepočítat: ${error.message}`, true);
     else await refreshWorkerAudit(person);
@@ -2683,7 +2755,7 @@ async function refreshWorkerAudit(person) {
   person.audit = data.map(item => ({
     id: item.id,
     changedAt: item.changed_at,
-    changedBy: item.changed_by_email || (item.changed_by === remoteUser.id ? remoteUser.email : "Dřívější uživatel"),
+    changedBy: item.changed_by_email || "Dřívější uživatel",
     operation: item.operation,
     before: item.before_data,
     after: item.after_data
@@ -2693,7 +2765,7 @@ async function refreshWorkerAudit(person) {
 async function submitAppFeedback(event) {
   event.preventDefault();
   const message = elements.appFeedbackMessage.value.trim();
-  if (!message || !supabaseClient || !remoteUser) return;
+  if (!message || !supabaseClient) return;
   elements.sendAppFeedback.disabled = true;
   elements.sendAppFeedback.textContent = "Odesílám…";
   elements.appFeedbackStatus.textContent = "";
@@ -2702,8 +2774,8 @@ async function submitAppFeedback(event) {
     category: elements.appFeedbackCategory.value,
     message,
     page_url: window.location.href,
-    created_by: remoteUser.id,
-    created_by_email: remoteUser.email.toLocaleLowerCase()
+    created_by: null,
+    created_by_email: editorLabel()
   });
   elements.sendAppFeedback.disabled = false;
   elements.sendAppFeedback.textContent = "Odeslat zpětnou vazbu";
@@ -2745,23 +2817,14 @@ function initials(name) { return name.split(/\s+/).slice(0, 2).map(part => part[
 function formatNumber(value) { return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(value); }
 function safeCssUrl(value) { return String(value).replace(/["\\\n\r]/g, ""); }
 
-function firstDayOfMonth(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
-}
 
-function periodFromSheetName(sheetName) {
-  const match = normalize(sheetName).match(/^(leden|unor|brezen|duben|kveten|cerven|cervenec|srpen|zari|rijen|listopad|prosinec)(\d{2}|\d{4})$/);
-  if (!match) return null;
-  const months = ["leden", "unor", "brezen", "duben", "kveten", "cerven", "cervenec", "srpen", "zari", "rijen", "listopad", "prosinec"];
-  const year = match[2].length === 2 ? 2000 + Number(match[2]) : Number(match[2]);
-  return `${year}-${String(months.indexOf(match[1]) + 1).padStart(2, "0")}-01`;
-}
 
 function initializeCustomSelects() {
   [
     [elements.sortSelect, false],
     [elements.departmentMatchMode, false],
     [elements.salesPeriodFilter, true],
+    [elements.salesPersonFilter, false],
     [elements.salesStatusFilter, false]
   ].forEach(([select, monthGrid]) => enhanceSelect(select, monthGrid));
 
@@ -2800,7 +2863,7 @@ function enhanceSelect(select, monthGrid = false) {
   const sync = () => {
     const selected = select.options[select.selectedIndex];
     value.textContent = selected?.textContent || "Vyberte…";
-    menu.replaceChildren(...[...select.options].map(option => {
+    menu.replaceChildren(...[...select.options].filter(option => !option.hidden).map(option => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "custom-select-option";

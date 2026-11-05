@@ -16,6 +16,21 @@ Jednoduchý přehled brigádníků připravený pro GitHub Pages.
 - evidovat zaškolení pro Výdej, Prodej, Lego, Pokladny, Upsell, MV, LOG a PS,
 - filtrovat karty podle jednoho nebo více oddělení v režimu „alespoň jedno“ nebo „všechna vybraná“,
 - ukládat poznámky,
+- hledat podle jména, e-mailu, interního ID i přezdívky (bez ohledu na diakritiku),
+- rychle vyfiltrovat nováčky a lidi s nedokončeným nástupem,
+- zobrazit v profilu odpracované hodiny za posledních 12 měsíců,
+- exportovat zobrazené brigádníky i prodejní výkon do CSV pro Excel,
+- filtrovat prodejní výkon podle brigádníka.
+
+## Vývoj
+
+Čistá logika (parsování rozpisu směn, CSV, výpočty ukazatelů) je v `logic.mjs` a je pokrytá testy:
+
+```powershell
+npm test
+```
+
+Při každém nasazení zvyšte číslo verze v `index.html` (`app.js?v=`, `styles.css?v=`, podpis `vNN`) a v importu `logic.mjs?v=` v `app.js`, aby prohlížeče nenačítaly starou verzi z mezipaměti. Test to hlídá.
 
 ## Formát docházky
 
@@ -45,4 +60,4 @@ Profily, docházka, hodnocení, poznámky a prodejní reporty se ukládají v Su
 
 ## Připravený databázový backend
 
-Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. Aplikace používá přihlášení e-mailem a heslem pro povolené účty a bez platného členství nezobrazí žádná osobní data.
+Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. **Od 28. 10. 2026 je aplikace veřejná bez přihlášení.** Kdokoli s odkazem může data číst i měnit. Jméno u změn se bere z pole „Podepisovat jako“ (uložené jen v prohlížeči), takže ho nelze ověřit. Databázová pravidla jsou v `supabase/2026-10-28-public-access.sql`. Přihlášení vrátíte spuštěním `supabase/2026-10-28-public-access-revert.sql` a nasazením verze v86.
