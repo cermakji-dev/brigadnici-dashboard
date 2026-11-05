@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=92";
+} from "./logic.mjs?v=93";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -350,7 +350,7 @@ document.addEventListener("click", event => {
 // Detail brigádníka je boční panel (nemodální dialog): seznam zůstává vidět
 // a kliknutím na jinou kartu se detail přepne.
 elements.dialog.addEventListener("close", () => {
-  document.body.classList.remove("detail-open");
+  setDetailLayout(false, elements.personId.value);
   markSelectedPerson(null);
 });
 document.addEventListener("keydown", event => {
@@ -2184,7 +2184,7 @@ function openSalesForPerson(person) {
 function renderProfileSales(person) {
   const rows = salesDays.filter(day => day.workerId === person.remoteId);
   const { revenue, hours, asr, aros, targetPercent } = summarizeSales(rows);
-  elements.profileSalesSummary.innerHTML = `<article><span>Obrat</span><strong>${formatCurrency(revenue)}</strong></article><article><span>Hodiny</span><strong>${formatNumber(hours)} h</strong></article><article><span>ASR</span><strong>${formatCurrency(asr)}/h</strong></article><article><span>ARoS</span><strong>${formatAros(aros)}</strong></article><article><span>Plnění TGT</span><strong>${Math.round(targetPercent || 0)} %</strong></article>`;
+  elements.profileSalesSummary.innerHTML = `<div class="profile-stat"><strong>${formatNumber(Math.round(asr))}</strong><span>ASR (Kč/h)</span></div><div class="profile-stat"><strong>${Math.round(targetPercent || 0)} %</strong><span>plnění TGT</span></div><div class="profile-stat"><strong>${formatAros(aros)}</strong><span>ARoS</span></div><div class="profile-stat"><strong>${formatCurrency(revenue)}</strong><span>obrat · ${formatNumber(hours)} h</span></div>`;
   if (!rows.length) { elements.profileSalesHistory.innerHTML = '<p class="no-feedback">Zatím bez prodejních směn.</p>'; return; }
   elements.profileSalesHistory.replaceChildren(...rows.map(day => {
     const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
@@ -2329,8 +2329,8 @@ function createCard(person, index = 0) {
   // Co vyžaduje akci – jediná barevně zvýrazněná místa na kartě.
   const flags = [];
   const onboarding = incompleteOnboardingTasks(person.onboarding);
-  if (onboarding.length) flags.push(["onboarding", `Nástup: ${onboarding.length} ${onboarding.length === 1 ? "úkol" : "úkoly"}`, onboarding.join(", ")]);
-  if (pendingSales) flags.push(["sales", `Chybí ${pendingSales} ${pendingSales === 1 ? "report" : pendingSales < 5 ? "reporty" : "reportů"}`, "Doplnit prodejní reporty"]);
+  if (onboarding.length) flags.push(["onboarding", `Nástup ${3 - onboarding.length}/3`, `Zbývá: ${onboarding.join(", ")}`]);
+  if (pendingSales) flags.push(["sales", `${pendingSales} ${pendingSales === 1 ? "report chybí" : pendingSales < 5 ? "reporty chybí" : "reportů chybí"}`, "Doplnit prodejní reporty"]);
   const flagsElement = card.querySelector(".card-flags");
   flagsElement.hidden = !flags.length;
   flagsElement.replaceChildren(...flags.map(([type, text, title]) => {
@@ -2889,13 +2889,7 @@ function reliabilityColor(value) {
 
 function renderDepartmentBadges(container, departments) {
   const trained = Array.isArray(departments) ? departments.filter(item => DEPARTMENTS.includes(item)) : [];
-  if (!trained.length) {
-    const empty = document.createElement("span");
-    empty.className = "department-badge empty";
-    empty.textContent = "Zaškolení nezadané";
-    container.append(empty);
-    return;
-  }
+  if (!trained.length) return;
   trained.forEach(department => {
     const badge = document.createElement("span");
     badge.className = "department-badge";
@@ -2931,6 +2925,33 @@ function score(person) { return feedbackCount(person, "positive") - feedbackCoun
 function updateTopbarOffset() {
   const topbar = document.querySelector(".topbar");
   if (topbar) document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
+}
+
+// Otevření/zavření panelu změní šířku seznamu. Aby karty „neuskočily“,
+// zachová se počet sloupců (karty se jen zúží) a kliknutá karta zůstane
+// na obrazovce na stejném místě.
+const MIN_CARD_WIDTH_WITH_DETAIL = 220;
+function setDetailLayout(open, anchorId) {
+  const grids = [elements.peopleGrid];
+  const anchor = anchorId ? document.querySelector(`#peopleGrid [data-person-id="${CSS.escape(anchorId)}"], .people-table [data-person-id="${CSS.escape(anchorId)}"]`) : null;
+  const anchorTop = anchor?.getBoundingClientRect().top;
+  if (open) {
+    const columns = getComputedStyle(elements.peopleGrid).gridTemplateColumns.split(" ").filter(Boolean).length;
+    document.body.classList.add("detail-open");
+    const gap = parseFloat(getComputedStyle(elements.peopleGrid).columnGap) || 0;
+    const width = elements.peopleGrid.clientWidth;
+    // Co nejvíc sloupců (nejvýš tolik, kolik bylo), aby se karty přeskládaly co nejméně.
+    const fitting = Math.max(1, Math.floor((width + gap) / (MIN_CARD_WIDTH_WITH_DETAIL + gap)));
+    const keep = Math.min(columns, fitting);
+    grids.forEach(grid => { grid.style.gridTemplateColumns = keep > 1 ? `repeat(${keep}, minmax(0, 1fr))` : ""; });
+  } else {
+    document.body.classList.remove("detail-open");
+    grids.forEach(grid => { grid.style.gridTemplateColumns = ""; });
+  }
+  if (anchor && Number.isFinite(anchorTop)) {
+    const shift = anchor.getBoundingClientRect().top - anchorTop;
+    if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "instant" });
+  }
 }
 
 function markSelectedPerson(id) {
@@ -2978,7 +2999,7 @@ async function openPerson(id) {
   renderAuditHistory(person);
   if (!switching) {
     updateTopbarOffset();
-    document.body.classList.add("detail-open");
+    setDetailLayout(true, person.id);
     elements.dialog.show();
     elements.dialog.querySelector(".profile-tab.is-active")?.focus({ preventScroll: true });
   }
@@ -3088,17 +3109,19 @@ function renderAttendanceHistory(person) {
     const [year, month] = period.split("-").map(Number);
     return new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
   };
+  stats.classList.add("profile-stats");
   stats.replaceChildren(...[
-    ["Celkem", `${formatNumber(Math.round(total * 10) / 10)} h`],
-    ["Průměr na odpracovaný měsíc", `${formatNumber(Math.round(average * 10) / 10)} h`],
-    ["Nejsilnější měsíc", best ? `${longMonth(best.period)} · ${formatNumber(best.hours)} h` : "—"]
+    ["celkem", `${formatNumber(Math.round(total * 10) / 10)} h`],
+    ["průměr za měsíc", `${formatNumber(Math.round(average * 10) / 10)} h`],
+    [best ? `nejvíc · ${longMonth(best.period)}` : "nejsilnější měsíc", best ? `${formatNumber(best.hours)} h` : "—"]
   ].map(([label, value]) => {
-    const item = document.createElement("span");
-    const small = document.createElement("small");
-    small.textContent = label;
+    const item = document.createElement("div");
+    item.className = "profile-stat";
     const strong = document.createElement("strong");
     strong.textContent = value;
-    item.append(small, strong);
+    const small = document.createElement("span");
+    small.textContent = label;
+    item.append(strong, small);
     return item;
   }));
   if (!known.some(item => item.hours > 0)) {
@@ -3371,12 +3394,12 @@ function renderFeedbackBreakdown(feedback) {
     const positive = items.filter(item => item.type === "positive").length;
     const negative = items.filter(item => item.type === "negative").length;
     const card = document.createElement("div");
-    card.className = `feedback-breakdown-item ${category}`;
+    card.className = `profile-stat feedback-breakdown-item ${category}`;
     const label = document.createElement("span");
     label.textContent = feedbackCategoryLabel(category);
     const counts = document.createElement("strong");
-    counts.textContent = `${positive} 👍  ${negative} 👎`;
-    card.append(label, counts);
+    counts.textContent = `${positive} 👍 · ${negative} 👎`;
+    card.append(counts, label);
     return card;
   }));
 }
