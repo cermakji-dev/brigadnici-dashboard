@@ -75,3 +75,11 @@ test("nové části rozhraní existují", () => {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
 });
+
+test("profil má souhrn v hlavičce a pět záložek", () => {
+  const tabs = [...html.matchAll(/data-profile-tab="([a-z]+)"/g)].map(match => match[1]);
+  assert.deepEqual(tabs, ["overview", "attendance", "sales", "feedback", "history"]);
+  for (const id of ["profileHours", "profileHours60", "profileNextShift", "profileScore", "profileUpcomingShifts", "profileThumbUp"]) {
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  }
+});
