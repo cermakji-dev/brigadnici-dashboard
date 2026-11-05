@@ -20,7 +20,18 @@ Jednoduchý přehled brigádníků připravený pro GitHub Pages.
 - rychle vyfiltrovat nováčky a lidi s nedokončeným nástupem,
 - zobrazit v profilu odpracované hodiny za posledních 12 měsíců,
 - exportovat zobrazené brigádníky i prodejní výkon do CSV pro Excel,
-- filtrovat prodejní výkon podle brigádníka.
+- filtrovat prodejní výkon podle brigádníka,
+- vidět rozpis směn po dnech a odděleních s návrhem náhrady na volné směny,
+- vyplnit prodejní reporty za celý den najednou,
+- dát palec jedním klikem s předvyplněným důvodem.
+
+## Synchronizace s Google Sheets
+
+Data stahuje serverová funkce `supabase/functions/sync-google-sheets` každých 5 minut (pg_cron). Zapisuje docházku aktuálního měsíce, rozpis směn (2 měsíce zpět až 6 týdnů dopředu, tabulka `shifts`), očekávané prodejní reporty a karty pro nová jména. Aplikace data jen čte; tlačítko pro obnovení spustí funkci hned (nejvýš jednou za minutu).
+
+Nasazení funkce: `supabase functions deploy sync-google-sheets --no-verify-jwt`.
+
+Databáze si každou noc dělá zálohu (posledních 30 dní, schéma `private`) a maže historii synchronizací starší než 14 dní. Smazané palce a poznámky se jen skryjí (`deleted_at`) a dají se vrátit.
 
 ## Vývoj
 

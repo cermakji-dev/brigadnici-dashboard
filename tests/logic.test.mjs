@@ -23,7 +23,12 @@ test("automatické ID odpovídá formátu uloženému v databázi a je stabilní
   assert.notEqual(automaticWorkerId("Novák Pavel"), id);
 });
 
-test("čas za jménem se odstraní", () => assert.equal(stripTrailingTime("Novák Petr 14:30"), "Novák Petr"));
+test("čas za jménem se odstraní", () => {
+  assert.equal(stripTrailingTime("Novák Petr 14:30"), "Novák Petr");
+  assert.equal(stripTrailingTime("Březinová Markéta (19:30)"), "Březinová Markéta");
+  assert.equal(stripTrailingTime("Novák Petr od 9.30h"), "Novák Petr");
+  assert.equal(stripTrailingTime("Novák Petr"), "Novák Petr");
+});
 
 test("ASR a ARoS se počítají z denního reportu", () => assert.deepEqual(salesMetrics({ hours: 8, hardware: 100000, services: 10000 }), { asr: 13750, aros: 10 }));
 

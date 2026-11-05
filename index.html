@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.5.0">
+  <meta name="app-build" content="5.6.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=88">
+    <link rel="stylesheet" href="styles.css?v=89">
 </head>
 <body>
 
@@ -34,19 +34,29 @@
         <h1>Brigádníci</h1>
       </div>
     </div>
+    <nav class="app-view-tabs" aria-label="Hlavní sekce">
+      <button id="teamViewButton" class="app-view-tab is-active" type="button">Tým</button>
+      <button id="shiftsViewButton" class="app-view-tab" type="button">Směny <span id="shiftsFreeBadge" class="tab-badge tab-badge-warning" hidden>0</span></button>
+      <button id="salesViewButton" class="app-view-tab" type="button">Prodejní výkon <span id="salesPendingBadge" class="tab-badge" hidden>0</span></button>
+    </nav>
     <div class="header-actions">
-      <div class="app-view-tabs" aria-label="Hlavní sekce">
-        <button id="teamViewButton" class="app-view-tab is-active" type="button">Tým</button>
-        <button id="salesViewButton" class="app-view-tab" type="button">Prodejní výkon <span id="salesPendingBadge" hidden>0</span></button>
-      </div>
-      <a class="topbar-action topbar-action-primary" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
-        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16"/></svg> Směnová tabulka <svg class="ui-icon sheet-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
-      </a>
-      <button id="appFeedbackButton" class="topbar-action" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18"/></svg> Zpětná vazba</button>
-      <button class="topbar-action" type="button" data-theme-toggle aria-label="Přepnout barevný režim">
-        <span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span>
+      <button id="alertsToggle" class="topbar-icon-button alerts-bell" type="button" aria-expanded="false" aria-controls="alertsPanel" title="Co je potřeba vyřešit">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>
+        <span class="visually-hidden">Upozornění</span><strong id="alertsEarCount" class="alerts-bell-count">0</strong>
       </button>
       <button id="editorNameButton" class="topbar-action editor-name-action" type="button" title="Jméno, pod kterým se ukládají vaše změny"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Podepsat se</span></button>
+      <div class="topbar-menu">
+        <button id="topbarMenuButton" class="topbar-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="topbarMenu" title="Další možnosti">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg><span class="visually-hidden">Další možnosti</span>
+        </button>
+        <div id="topbarMenu" class="topbar-menu-list" role="menu" hidden>
+          <a role="menuitem" href="https://docs.google.com/spreadsheets/d/1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA/edit?gid=703112124#gid=703112124" target="_blank" rel="noopener noreferrer">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16"/></svg> Směnová tabulka v Google <svg class="ui-icon sheet-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+          </a>
+          <button id="appFeedbackButton" role="menuitem" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg> Zpětná vazba k aplikaci</button>
+          <button role="menuitem" type="button" data-theme-toggle aria-label="Přepnout barevný režim"><span class="theme-icon" aria-hidden="true"></span><span class="theme-label"></span></button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -99,7 +109,7 @@
       </div>
     </section>
 
-    <div id="alertsDrawer" class="alerts-drawer team-view-section">
+    <div id="alertsDrawer" class="alerts-drawer">
     <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
       <div class="alerts-heading">
         <div>
@@ -116,9 +126,6 @@
       <div id="alertsList" class="alerts-list"></div>
       <p id="alertsEmpty" class="alerts-empty"><strong>Všechno je vyřešené</strong><span>Aktuálně není potřeba nic řešit.</span></p>
     </aside>
-    <button id="alertsToggle" class="alerts-ear" type="button" aria-expanded="false" aria-controls="alertsPanel">
-      <span id="alertsHandleIcon" aria-hidden="true">›</span><span class="visually-hidden">Pozornost</span><strong id="alertsEarCount">0</strong>
-    </button>
     </div>
 
     <section class="overview team-view-section" aria-labelledby="overviewHeading">
@@ -233,6 +240,33 @@
       </div>
     </section>
 
+    <section id="shiftsDashboard" class="shifts-dashboard" hidden aria-labelledby="shiftsDayTitle">
+      <div class="shifts-heading">
+        <div>
+          <p class="eyebrow">Rozpis směn</p>
+          <h2 id="shiftsDayTitle">Dnes</h2>
+          <p id="shiftsDaySubtitle" class="shifts-subtitle"></p>
+        </div>
+        <div class="shifts-day-nav" role="group" aria-label="Výběr dne">
+          <button id="shiftsPrevDay" class="toolbar-action shifts-step" type="button" aria-label="Předchozí den">‹</button>
+          <button class="shifts-day-chip" type="button" data-shift-offset="-1">Včera</button>
+          <button class="shifts-day-chip" type="button" data-shift-offset="0">Dnes</button>
+          <button class="shifts-day-chip" type="button" data-shift-offset="1">Zítra</button>
+          <button id="shiftsNextDay" class="toolbar-action shifts-step" type="button" aria-label="Další den">›</button>
+          <input id="shiftsDateInput" class="shifts-date-input" type="date" aria-label="Vybrat datum">
+        </div>
+      </div>
+      <div class="shifts-kpis">
+        <article><span>Lidí na směně</span><strong id="shiftsPeopleKpi">0</strong></article>
+        <article><span>Obsazené hodiny</span><strong id="shiftsHoursKpi">0 h</strong></article>
+        <article id="shiftsFreeCard" class="attention"><span>Volné hodiny</span><strong id="shiftsFreeKpi">0 h</strong></article>
+        <article id="shiftsReportsCard"><span id="shiftsReportsLabel">Chybí prodejní report</span><strong id="shiftsReportsKpi">0</strong></article>
+      </div>
+      <div id="shiftsAttention" class="shifts-attention"></div>
+      <div id="shiftsBoard" class="shifts-board"></div>
+      <div id="shiftsEmpty" class="empty-state" hidden><strong>Na tento den není v rozpisu žádná směna</strong><span>Rozpis se načítá z Google tabulky v rozmezí 2 měsíců zpět a 6 týdnů dopředu.</span></div>
+    </section>
+
     <section id="salesDashboard" class="sales-dashboard" hidden>
       <div class="sales-dashboard-heading">
         <div><p class="eyebrow">Výkon na prodejně</p><h2>Prodejní výkon</h2><p>ASR = (železo + služby) ÷ prodejní hodiny · TGT 6 500 Kč/h</p></div>
@@ -249,6 +283,7 @@
         <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
         <select id="salesPersonFilter" aria-label="Brigádník"><option value="all">Všichni brigádníci</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
+        <button id="bulkSalesButton" class="toolbar-action toolbar-action-primary" type="button" title="Vyplnit reporty všech brigádníků za jeden den">Vyplnit den</button>
         <button id="exportSalesButton" class="toolbar-action" type="button" title="Stáhnout zobrazené řádky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
       </div>
       <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
@@ -267,10 +302,10 @@
     </section>
   </main>
 
-  <div id="importMessage" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
+  <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v87</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v88</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -451,6 +486,11 @@
       </div>
       <input id="feedbackPersonId" type="hidden">
       <input id="feedbackType" type="hidden">
+      <div class="feedback-quick">
+        <p class="feedback-quick-label">Uložit jedním klikem</p>
+        <div id="feedbackQuickReasons" class="feedback-quick-reasons"></div>
+      </div>
+      <p class="feedback-divider"><span>nebo popište vlastními slovy</span></p>
       <fieldset class="feedback-category-picker">
         <legend>Čeho se hodnocení týká?</legend>
         <div class="feedback-category-options">
@@ -462,10 +502,31 @@
       <label>Důvod hodnocení
         <textarea id="feedbackNote" rows="4" required placeholder="Popište konkrétní situaci…"></textarea>
       </label>
-      <p class="field-hint">Poznámka je povinná, aby bylo později jasné, čeho se hodnocení týkalo.</p>
       <div class="dialog-actions">
         <button id="cancelFeedbackAction" class="button button-secondary" type="button">Zrušit</button>
         <button class="button button-primary" type="submit">Uložit hodnocení</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bulkSalesDialog" class="wide-dialog">
+    <form id="bulkSalesForm">
+      <div class="dialog-heading">
+        <div><p class="step-label">Prodejní reporty za den</p><h2 id="bulkSalesTitle">Den</h2></div>
+        <button id="closeBulkSales" class="icon-button" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <label class="bulk-sales-date">Den <select id="bulkSalesDate"></select></label>
+      <p class="field-hint">Vyplňte jen řádky, které znáte. Prázdné řádky zůstanou beze změny.</p>
+      <div class="bulk-sales-wrap">
+        <table class="bulk-sales-table">
+          <thead><tr><th>Brigádník</th><th>Plán</th><th>Prodejní h</th><th>Železo Kč</th><th>Služby Kč</th><th>ASR</th><th>Nebyl na prodeji</th></tr></thead>
+          <tbody id="bulkSalesBody"></tbody>
+        </table>
+      </div>
+      <p id="bulkSalesStatus" class="dialog-status" role="status"></p>
+      <div class="dialog-actions">
+        <button id="cancelBulkSales" class="button button-secondary" type="button">Zavřít</button>
+        <button id="saveBulkSales" class="button button-primary" type="submit">Uložit vyplněné</button>
       </div>
     </form>
   </dialog>
@@ -523,27 +584,36 @@
         </div>
         <button class="icon-button edit-button" type="button" aria-label="Upravit profil">•••</button>
       </div>
-      <div class="hours-block">
-        <div><strong class="hours-value"></strong><span>hodin tento měsíc</span></div>
-        <span class="rolling-hours"><strong class="hours-60-value"></strong> za 60 dní</span>
+      <div class="card-stats">
+        <div class="card-stat"><strong class="hours-value"></strong><span>h tento měsíc</span></div>
+        <div class="card-stat"><strong class="hours-60-value"></strong><span>za 60 dní</span></div>
+        <div class="card-stat card-stat-shift"><strong class="next-shift-value">—</strong><span class="next-shift-caption">další směna</span></div>
       </div>
       <div class="department-badges" aria-label="Zaškolení"></div>
-      <div class="metric">
-        <div><span>Schopnosti</span><strong class="skills-value"></strong></div>
-        <div class="bar"><span class="skills-bar"></span></div>
+      <div class="card-metrics">
+        <div class="metric">
+          <div><span>Schopnosti</span><strong class="skills-value"></strong></div>
+          <div class="bar"><span class="skills-bar"></span></div>
+        </div>
+        <div class="metric">
+          <div><span>Docházka</span><strong class="reliability-value"></strong></div>
+          <div class="bar"><span class="reliability-bar"></span></div>
+        </div>
       </div>
-      <div class="metric">
-        <div><span>Docházková morálka</span><strong class="reliability-value"></strong></div>
-        <div class="bar"><span class="reliability-bar"></span></div>
-      </div>
-      <div class="card-note">
+      <div class="card-flags"></div>
+      <div class="card-note" hidden>
         <textarea class="note-preview inline-note" rows="2" placeholder="Poznámka v přehledu…" aria-label="Poznámka v přehledu"></textarea>
       </div>
-      <div class="sales-card-row"><span class="sales-card-status"></span><button class="sales-card-button" type="button">Report prodejů</button></div>
-      <div class="feedback-row">
-        <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
-        <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
-        <strong class="score"></strong>
+      <div class="card-footer">
+        <div class="feedback-row">
+          <button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button>
+          <button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button>
+          <strong class="score"></strong>
+        </div>
+        <div class="card-footer-actions">
+          <button class="card-link add-note-button" type="button">+ Poznámka</button>
+          <button class="card-link sales-card-button" type="button"><span class="sales-card-status"></span></button>
+        </div>
       </div>
     </article>
   </template>
@@ -551,6 +621,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=87"></script>
+  <script type="module" src="app.js?v=88"></script>
 </body>
 </html>
