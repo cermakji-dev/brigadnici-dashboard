@@ -2256,13 +2256,16 @@ function createCard(person, index = 0) {
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
   card.querySelector(".hours-60-value").textContent = formatNumber(person.hours60 || 0);
   const nextShift = nextShiftsByPerson.get(person.id);
-  const nextShiftValue = card.querySelector(".next-shift-value");
+  const nextShiftElement = card.querySelector(".card-next-shift");
   if (nextShift) {
     const label = shiftDayLabel(nextShift.date);
-    nextShiftValue.textContent = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(nextShift.date);
-    card.querySelector(".next-shift-caption").textContent = `${nextShift.start}–${nextShift.end}`;
-    card.querySelector(".card-stat-shift").title = `${nextShift.department}`;
-    card.querySelector(".card-stat-shift").classList.toggle("is-soon", Boolean(label) && label !== "Včera");
+    const day = label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(nextShift.date);
+    nextShiftElement.textContent = `Další směna ${label ? day.toLocaleLowerCase("cs") : day} ${nextShift.start}–${nextShift.end}`;
+    nextShiftElement.title = nextShift.department;
+    nextShiftElement.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
+  } else {
+    nextShiftElement.textContent = "Bez další směny";
+    nextShiftElement.classList.add("is-empty");
   }
   const departmentBadges = card.querySelector(".department-badges");
   renderDepartmentBadges(departmentBadges, person.departments);

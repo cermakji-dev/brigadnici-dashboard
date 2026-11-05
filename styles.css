@@ -958,3 +958,37 @@ button.shift-name:hover { text-decoration: underline; }
 .shift-avatar { display: none; }
 .shift-name { white-space: normal; line-height: 1.25; }
 .shifts-step { display: inline-grid; place-items: center; line-height: 1; }
+
+/* ==========================================================================
+   Karty v89 – jasná hierarchie: jméno → hodiny → jeden řádek doplňků → zaškolení
+   ========================================================================== */
+.person-card { padding: 18px 18px 14px; gap: 0; }
+.person-card-top { grid-template-columns: 40px 1fr auto; gap: 12px; }
+.person-card .avatar { width: 40px; height: 40px; }
+.person-card h3 { font-size: 1rem; }
+.card-hours { display: flex; align-items: baseline; gap: 7px; margin-top: 16px; }
+.card-hours strong { font-size: 2rem; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; }
+.card-hours span { color: var(--muted); font-size: .82rem; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 2px 0; margin: 7px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+.card-meta-item + .card-meta-item::before { margin: 0 7px; color: var(--border); content: "•"; }
+.card-meta strong { color: var(--text); font-weight: 650; }
+.card-next-shift.is-soon { color: color-mix(in srgb, var(--skills-color) 82%, var(--text)); font-weight: 650; }
+.person-card .department-badges { margin: 14px 0 0; gap: 5px; }
+.person-card .department-badges:empty { display: none; }
+.card-flags { margin-top: 12px; }
+.card-footer { margin-top: auto; padding-top: 14px; }
+
+/* Varianta A „Vzdušná“: bez ukazatelů (procenta jsou v profilu, nízká docházka je štítek) */
+.people-grid.cards-airy .card-metrics { display: none; }
+
+/* Varianta B „S ukazateli“: schopnosti a docházka pod sebou přes celou šířku */
+.people-grid.cards-classic .card-metrics { display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 14px; }
+.people-grid.cards-classic .card-metrics .metric > div:first-child { font-size: .76rem; }
+.people-grid.cards-classic .card-metrics .bar { height: 6px; }
+.card-footer { flex-wrap: nowrap; }
+.person-card .feedback-button { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.person-card .feedback-row { flex: none; }
+.card-footer-actions { min-width: 0; overflow: hidden; }
+.person-card .card-note { margin-top: 12px; padding: 0; background: transparent; border: 0; }
+.person-card .card-note .inline-note { min-height: 0; height: auto; padding: 8px 10px; background: color-mix(in srgb, var(--brand-soft) 60%, transparent); border: 1px solid transparent; border-left: 3px solid var(--border); border-radius: 0 8px 8px 0; font-size: .8rem; line-height: 1.4; resize: none; field-sizing: content; }
+.person-card .card-note .inline-note:focus { min-height: 60px; border-color: var(--border); border-left-color: var(--brand-blue); outline: none; }
