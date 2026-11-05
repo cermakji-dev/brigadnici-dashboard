@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.8.0">
+  <meta name="app-build" content="5.8.1">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=92">
+    <link rel="stylesheet" href="styles.css?v=93">
 </head>
 <body>
 
@@ -305,7 +305,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v91</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v92</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -326,11 +326,11 @@
       </div>
 
       <input id="personId" type="hidden">
-      <div class="profile-summary">
-        <div><strong id="profileHours">0</strong><span>h tento měsíc</span></div>
-        <div><strong id="profileHours60">0</strong><span>h za posledních 60 dní</span></div>
-        <div><strong id="profileNextShift">—</strong><span id="profileNextShiftMeta">další směna</span></div>
-        <div><strong id="profileScore">0</strong><span id="profileScoreMeta">palce</span></div>
+      <div class="profile-summary profile-stats">
+        <div class="profile-stat"><strong><span id="profileHours">0</span> h</strong><span>tento měsíc</span></div>
+        <div class="profile-stat"><strong><span id="profileHours60">0</span> h</strong><span>za 60 dní</span></div>
+        <div class="profile-stat profile-next-shift"><strong id="profileNextShift">—</strong><span id="profileNextShiftMeta">další směna</span></div>
+        <div class="profile-stat"><strong id="profileScore">0</strong><span id="profileScoreMeta">palce</span></div>
       </div>
       <nav class="profile-tabs" aria-label="Sekce profilu" role="tablist">
         <button class="profile-tab is-active" type="button" role="tab" data-profile-tab="overview">Přehled</button>
@@ -632,6 +632,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=91"></script>
+  <script type="module" src="app.js?v=92"></script>
 </body>
 </html>
