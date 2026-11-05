@@ -326,13 +326,11 @@
       </div>
 
       <input id="personId" type="hidden">
-      <div class="profile-summary">
-        <div class="card-hours"><strong id="profileHours">0</strong><span>h tento měsíc</span></div>
-        <p class="card-meta profile-meta">
-          <span class="card-meta-item"><strong id="profileHours60">0</strong> h za 60 dní</span>
-          <span class="card-meta-item profile-next-shift"><strong id="profileNextShift">—</strong> <span id="profileNextShiftMeta"></span></span>
-          <span class="card-meta-item"><strong id="profileScore">0</strong> <span id="profileScoreMeta">palce</span></span>
-        </p>
+      <div class="profile-summary profile-stats">
+        <div class="profile-stat"><strong><span id="profileHours">0</span> h</strong><span>tento měsíc</span></div>
+        <div class="profile-stat"><strong><span id="profileHours60">0</span> h</strong><span>za 60 dní</span></div>
+        <div class="profile-stat profile-next-shift"><strong id="profileNextShift">—</strong><span id="profileNextShiftMeta">další směna</span></div>
+        <div class="profile-stat"><strong id="profileScore">0</strong><span id="profileScoreMeta">palce</span></div>
       </div>
       <nav class="profile-tabs" aria-label="Sekce profilu" role="tablist">
         <button class="profile-tab is-active" type="button" role="tab" data-profile-tab="overview">Přehled</button>

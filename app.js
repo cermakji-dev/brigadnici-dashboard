@@ -3002,22 +3002,23 @@ function renderProfileSummary(person) {
   elements.profileHours.textContent = formatNumber(person.hours || 0);
   elements.profileHours60.textContent = formatNumber(person.hours60 || 0);
   const shift = nextShiftsByPerson.get(person.id);
-  const nextLine = elements.profileNextShift.closest(".profile-next-shift");
+  const nextStat = elements.profileNextShift.closest(".profile-next-shift");
   if (shift) {
     const label = shiftDayLabel(shift.date);
-    const day = label ? label.toLocaleLowerCase("cs") : new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(shift.date);
-    elements.profileNextShift.textContent = `Další směna ${day} ${shift.start}–${shift.end}`;
-    elements.profileNextShiftMeta.textContent = `· ${shift.department}`;
-    nextLine.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
+    elements.profileNextShift.textContent = `${label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(shift.date)} ${shift.start}–${shift.end}`;
+    elements.profileNextShiftMeta.textContent = `další směna · ${shift.department}`;
+    nextStat.title = `${shift.start}–${shift.end} · ${shift.department}`;
+    nextStat.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
   } else {
-    elements.profileNextShift.textContent = "Bez další směny";
-    elements.profileNextShiftMeta.textContent = "";
-    nextLine.classList.remove("is-soon");
+    elements.profileNextShift.textContent = "—";
+    elements.profileNextShiftMeta.textContent = "další směna není v rozpisu";
+    nextStat.title = "";
+    nextStat.classList.remove("is-soon");
   }
   const currentScore = score(person);
   elements.profileScore.textContent = currentScore > 0 ? `+${currentScore}` : String(currentScore);
   elements.profileScore.className = currentScore > 0 ? "positive-score" : currentScore < 0 ? "negative-score" : "";
-  elements.profileScoreMeta.textContent = `palce (${feedbackCount(person, "positive")} 👍 ${feedbackCount(person, "negative")} 👎)`;
+  elements.profileScoreMeta.textContent = `${feedbackCount(person, "positive")} 👍 · ${feedbackCount(person, "negative")} 👎`;
 
   const todayKey = dateKey(startOfDay(new Date()));
   const upcoming = mergeShiftBlocks(shiftRows.filter(item => item.workerId === person.remoteId && !item.free && item.date >= todayKey)).length;

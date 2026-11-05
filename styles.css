@@ -1185,3 +1185,15 @@ body.detail-open main.app-content { margin-right: calc(var(--detail-w) + var(--d
 #personDialog .profile-summary .card-hours { align-items: baseline; gap: 7px; }
 #personDialog .department-editor, #personDialog .onboarding-editor { margin: 0; padding: 0; min-width: 0; }
 #personDialog [data-profile-panel="overview"] .department-editor { padding: 0; }
+
+/* Souhrn v panelu: čtyři údaje v jednom řádku se stejnou typografií */
+#personDialog .profile-stats { display: grid; grid-template-columns: .8fr .8fr 1.5fr .8fr; gap: 0; margin: 14px 18px 16px; padding: 12px 0; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 12px; }
+#personDialog .profile-stat { display: grid; min-width: 0; align-content: start; gap: 3px; padding: 0 14px; background: transparent; border-radius: 0; }
+#personDialog .profile-stat + .profile-stat { border-left: 1px solid var(--border); }
+#personDialog .profile-stat > strong { overflow: hidden; font-size: 1.05rem; font-variant-numeric: tabular-nums; font-weight: 750; letter-spacing: -.01em; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+#personDialog .profile-stat > strong span { font-size: inherit; color: inherit; }
+#personDialog .profile-stat > span { overflow: hidden; color: var(--muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+#personDialog .profile-stat.is-soon > strong { color: color-mix(in srgb, var(--skills-color) 82%, var(--text)); }
+#personDialog .profile-stat .positive-score { color: var(--positive); }
+#personDialog .profile-stat .negative-score { color: var(--negative); }
+#personDialog .profile-summary > .profile-stat { display: grid; align-content: start; gap: 3px; padding: 0 14px; }
