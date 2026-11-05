@@ -1107,3 +1107,81 @@ body.detail-open .app-signature { display: none; }
 /* Karta: doplňkové údaje na dvou řádcích bez oddělovačů */
 .card-meta { flex-direction: column; gap: 1px; }
 .card-meta-item + .card-meta-item::before { content: none; }
+
+/* ==========================================================================
+   Panel v92 – stejný vizuální jazyk jako karty a horní přepínač
+   ========================================================================== */
+:root { --detail-gap: 20px; }
+#personDialog {
+  top: calc(var(--topbar-h) + var(--detail-gap));
+  right: var(--detail-gap);
+  bottom: var(--detail-gap);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 14px 40px rgba(17, 24, 39, .12);
+}
+:root[data-theme="dark"] #personDialog { box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+body.detail-open main.app-content { margin-right: calc(var(--detail-w) + var(--detail-gap) * 2); margin-left: var(--detail-gap); }
+
+/* Hlavička jako horní část karty */
+#personDialog .profile-heading { padding: 18px 18px 0; background: transparent; }
+#personDialog .profile-avatar { width: 44px; height: 44px; font-size: .9rem; }
+#personDialog .profile-name-row { gap: 8px; }
+#personDialog .profile-name-row h2 { font-size: 1.2rem; letter-spacing: -.01em; }
+#personDialog .profile-sub { margin-top: 2px; font-size: .78rem; }
+#personDialog .profile-status { padding: 2px 8px; font-size: .68rem; }
+#personDialog .profile-thumb { min-height: 32px; padding: 0 9px; background: var(--brand-soft); border-color: transparent; border-radius: 9px; font-size: .8rem; }
+#personDialog .profile-heading-actions .icon-button { width: 32px; height: 32px; }
+
+/* Souhrn stejně jako na kartě: velké číslo + řádky pod sebou */
+#personDialog .profile-summary { display: block; padding: 14px 18px 16px; }
+#personDialog .profile-summary .card-hours { margin-top: 0; }
+#personDialog .profile-summary .card-hours strong { font-size: 2rem; }
+#personDialog .profile-meta { margin-top: 6px; }
+#personDialog .profile-next-shift.is-soon, #personDialog .profile-next-shift.is-soon strong { color: color-mix(in srgb, var(--skills-color) 82%, var(--text)); }
+#personDialog .profile-meta .positive-score { color: var(--positive); }
+#personDialog .profile-meta .negative-score { color: var(--negative); }
+
+/* Záložky jako horní přepínač sekcí */
+#personDialog .profile-tabs { display: flex; justify-content: stretch; gap: 2px; margin: 0 18px; padding: 3px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 11px; }
+#personDialog .profile-tab { flex: 1; justify-content: center; min-height: 32px; padding: 5px 6px; border-radius: 8px; color: var(--muted); font-size: .8rem; font-weight: 700; }
+#personDialog .profile-tab::after { display: none; }
+#personDialog .profile-tab:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+#personDialog .profile-tab.is-active { background: var(--brand-gradient); color: #fff; }
+#personDialog .profile-tab.is-active .profile-tab-count { background: rgba(255, 255, 255, .22); color: #fff; }
+
+/* Obsah bez rámečků navíc, oddělený jen mezerami jako na kartě */
+#personDialog .profile-tab-panel { padding: 18px; gap: 18px; }
+#personDialog [data-profile-panel="overview"] { grid-template-columns: 1fr; }
+#personDialog .profile-block { padding: 0; background: transparent; border: 0; }
+#personDialog .range-group label { margin-bottom: 6px; }
+#personDialog .range-group label > span { font-size: .8rem; }
+#personDialog .range-group output { font-size: .85rem; }
+#personDialog .range-group progress.metric-meter { height: 6px; }
+#personDialog .department-editor, #personDialog .onboarding-editor { padding: 0; border: 0; }
+#personDialog .department-editor legend, #personDialog .onboarding-editor legend { margin-bottom: 8px; padding: 0; color: var(--muted); font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#personDialog .department-options { gap: 6px; }
+#personDialog .department-options label { padding: 5px 11px; background: transparent; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .8rem; font-weight: 650; }
+#personDialog .department-options input { position: absolute; opacity: 0; pointer-events: none; }
+#personDialog .department-options label:has(input:checked) { background: var(--brand-gradient); border-color: transparent; color: #fff; }
+#personDialog .department-options label:has(input:focus-visible) { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+#personDialog .onboarding-editor > p { display: none; }
+#personDialog .onboarding-options { display: grid; grid-template-columns: 1fr; gap: 4px; }
+#personDialog .onboarding-options label { padding: 8px 10px; background: transparent; border: 1px solid var(--border); border-radius: 9px; font-size: .84rem; }
+#personDialog .onboarding-options label:has(input:checked) { background: transparent; color: var(--muted); }
+#personDialog .onboarding-options label:has(input:checked)::after { margin-left: auto; color: var(--positive); content: "Hotovo"; font-size: .72rem; font-weight: 700; }
+#personDialog .onboarding-attribution { font-size: .72rem; }
+#personDialog .notes-field .notes-label > span { color: var(--muted); font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#personDialog .notes-field .notes-label small { display: none; }
+#personDialog #notesInput { min-height: 70px; font-size: .86rem; font-weight: 400; }
+#personDialog .profile-upcoming h3, #personDialog .feedback-history h3, #personDialog .worker-notes h3, #personDialog .audit-history h3, #personDialog .attendance-history h3 { color: var(--muted); font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#personDialog .profile-upcoming-list li { background: transparent; }
+#personDialog .dialog-actions { background: transparent; border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent); }
+#personDialog .profile-summary > div { display: flex; padding: 0; background: transparent; border-radius: 0; }
+#personDialog .profile-summary .card-meta strong { overflow: visible; font-size: inherit; letter-spacing: 0; white-space: normal; }
+#personDialog .profile-summary .card-meta span { overflow: visible; font-size: inherit; white-space: normal; }
+#personDialog .profile-summary .card-hours span { font-size: .82rem; }
+#personDialog .profile-summary .card-hours { align-items: baseline; gap: 7px; }
+#personDialog .department-editor, #personDialog .onboarding-editor { margin: 0; padding: 0; min-width: 0; }
+#personDialog [data-profile-panel="overview"] .department-editor { padding: 0; }
