@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=103";
+} from "./logic.mjs?v=104";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -24,6 +24,10 @@ const SORT_OPTIONS = {
 let pendingWorkbook = null;
 let pendingWorkbookName = "";
 let currentImportPeriod = firstDayOfMonth(new Date());
+// Měsíc, za který se ukazuje přehled týmu (aktuální = aktivní tým, dřívější =
+// seznam z toho měsíčního listu). attendanceByPeriod: období → (ID → hodiny, v seznamu).
+let teamPeriod = firstDayOfMonth(new Date());
+let attendanceByPeriod = new Map();
 let supabaseClient = null;
 let messageTimer = null;
 let loaderHideTimer = null;
@@ -122,6 +126,9 @@ const elements = {
   searchInput: document.querySelector("#searchInput"),
   clearSearchButton: document.querySelector("#clearSearchButton"),
   visiblePeopleKpi: document.querySelector("#visiblePeopleKpi"),
+  teamPeriodSelect: document.querySelector("#teamPeriodSelect"), plannedHoursLabel: document.querySelector("#plannedHoursLabel"),
+  plannedHoursNote: document.querySelector("#plannedHoursNote"), profileHoursLabel: document.querySelector("#profileHoursLabel"),
+  profilePastShifts: document.querySelector("#profilePastShifts"), profilePastHeading: document.querySelector("#profilePastHeading"),
   averageSkillsKpi: document.querySelector("#averageSkillsKpi"),
   plannedHoursKpi: document.querySelector("#plannedHoursKpi"),
   freeHoursKpi: document.querySelector("#freeHoursKpi"),
@@ -272,6 +279,7 @@ elements.shiftsDayChips.forEach(chip => chip.addEventListener("click", () => set
 elements.shiftsPrevDay.addEventListener("click", () => shiftsMode === "month" ? setShiftMonth(-1) : setShiftDay(addDays(selectedShiftDay, -1)));
 elements.shiftsNextDay.addEventListener("click", () => shiftsMode === "month" ? setShiftMonth(1) : setShiftDay(addDays(selectedShiftDay, 1)));
 elements.shiftsModeButtons.forEach(button => button.addEventListener("click", () => setShiftsMode(button.dataset.shiftsMode)));
+elements.teamPeriodSelect.addEventListener("change", () => setTeamPeriod(elements.teamPeriodSelect.value));
 elements.shiftsDateInput.addEventListener("change", () => { if (elements.shiftsDateInput.value) setShiftDay(parseDateKey(elements.shiftsDateInput.value)); });
 elements.bulkSalesButton.addEventListener("click", () => openBulkSales());
 elements.bulkSalesDate.addEventListener("change", () => renderBulkSalesRows(elements.bulkSalesDate.value));
@@ -1075,14 +1083,17 @@ function hideAppLoader() {
 
 
 async function loadRemoteState() {
-  const workersResult = await supabaseClient.from("workers").select("*").eq("active", true).order("full_name");
+  // Všichni brigádníci (i neaktivní), aby šla zobrazit historie týmu po měsících.
+  const workersResult = await supabaseClient.from("workers").select("*").order("full_name");
   if (workersResult.error) throw workersResult.error;
   const workerIds = workersResult.data.map(worker => worker.id);
   const latestPeriod = firstDayOfMonth(new Date());
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
   const today = startOfDay(new Date());
   const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult, shiftsResult, syncRunResult] = await Promise.all([
-    scoped(supabaseClient.from("attendance_totals").select("worker_id, period, hours")).eq("period", latestPeriod),
+    supabaseClient.from("attendance_totals").select("worker_id, period, hours, in_list").then(result => result.error
+      ? supabaseClient.from("attendance_totals").select("worker_id, period, hours")
+      : result),
     scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at"),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
@@ -1110,6 +1121,11 @@ async function loadRemoteState() {
     if (lastSyncRun.planned_hours !== null) state.plannedHours = Number(lastSyncRun.planned_hours);
   }
 
+  attendanceByPeriod = new Map();
+  attendanceResult.data.forEach(row => {
+    if (!attendanceByPeriod.has(row.period)) attendanceByPeriod.set(row.period, new Map());
+    attendanceByPeriod.get(row.period).set(row.worker_id, { hours: Number(row.hours) || 0, inList: Boolean(row.in_list) });
+  });
   const currentAttendance = attendanceResult.data.filter(row => row.period === latestPeriod);
   monthRosterPersonIds.clear();
   monthRosterRemoteIds.clear();
@@ -1174,6 +1190,7 @@ async function loadRemoteState() {
       email: worker.email || "",
       role: worker.role,
       status: worker.status,
+      active: worker.active !== false,
       photo: worker.photo_url || "",
       hours: hoursByWorker.get(worker.id) || 0,
       hours60: state.people[id]?.hours60 || 0,
@@ -1198,6 +1215,8 @@ async function loadRemoteState() {
   });
   state.people = remotePeople;
   if (latestPeriod) currentImportPeriod = latestPeriod;
+  syncTeamPeriodOptions();
+  applyTeamPeriod();
   applyShiftSummary();
   saveState();
 }
@@ -1817,15 +1836,28 @@ function renderTeam() {
   elements.attendancePeople.textContent = allPeople.length;
   elements.attendanceHours.textContent = Number.isFinite(state.plannedHours) ? formatNumber(state.plannedHours) : "—";
   elements.visiblePeopleKpi.textContent = `${people.length} / ${allPeople.length}`;
+  document.querySelector("#visiblePeopleNote").textContent = isCurrentTeamPeriod() ? "z aktuálního týmu" : `z týmu v ${teamPeriodLabel(teamPeriod, true)}`;
   elements.averageSkillsKpi.textContent = `${averageMetric(people, "skills")} %`;
-  elements.plannedHoursKpi.textContent = Number.isFinite(state.plannedHours) ? `${formatNumber(state.plannedHours)} h` : "—";
-  elements.freeHoursKpi.textContent = Number.isFinite(state.freeHours) ? `${formatNumber(state.freeHours)} h` : "—";
-  const freeShare = Number.isFinite(state.freeHours) && Number(state.plannedHours) > 0
-    ? state.freeHours / state.plannedHours * 100
-    : null;
-  elements.freeHoursShareKpi.textContent = Number.isFinite(freeShare)
-    ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(freeShare)} % není obsazeno`
-    : "Podíl zatím není dostupný";
+  if (isCurrentTeamPeriod()) {
+    elements.plannedHoursLabel.textContent = "Plánované hodiny";
+    elements.plannedHoursNote.textContent = "celkem v měsíci";
+    elements.plannedHoursKpi.textContent = Number.isFinite(state.plannedHours) ? `${formatNumber(state.plannedHours)} h` : "—";
+    elements.freeHoursKpi.textContent = Number.isFinite(state.freeHours) ? `${formatNumber(state.freeHours)} h` : "—";
+    const freeShare = Number.isFinite(state.freeHours) && Number(state.plannedHours) > 0
+      ? state.freeHours / state.plannedHours * 100
+      : null;
+    elements.freeHoursShareKpi.textContent = Number.isFinite(freeShare)
+      ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(freeShare)} % není obsazeno`
+      : "Podíl zatím není dostupný";
+  } else {
+    // Starší měsíc: odpracováno týmem; volné hodiny se uchovávají jen pro aktuální měsíc.
+    const worked = allPeople.reduce((sum, person) => sum + Number(person.hours || 0), 0);
+    elements.plannedHoursLabel.textContent = "Odpracované hodiny";
+    elements.plannedHoursNote.textContent = `tým v ${teamPeriodLabel(teamPeriod, true)}`;
+    elements.plannedHoursKpi.textContent = `${formatNumber(worked)} h`;
+    elements.freeHoursKpi.textContent = "—";
+    elements.freeHoursShareKpi.textContent = "jen pro aktuální měsíc";
+  }
   updateQuickFilterCounts(allPeople);
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
@@ -1952,7 +1984,8 @@ function metricCell(value, type) {
 }
 
 function renderAlerts() {
-  const people = Object.values(state.people).filter(isPersonInSelectedMonth);
+  // Upozornění se týkají jen aktuálního aktivního týmu.
+  const people = Object.values(state.people).filter(person => person.active);
   const medianHours = median(people.map(person => Number(person.hours || 0)).filter(hours => hours > 0));
   const alerts = [];
 
@@ -2083,10 +2116,54 @@ function setTopbarMenuOpen(open) {
   if (open) elements.topbarMenu.querySelector("[role=menuitem]")?.focus();
 }
 
-// Přehled ukazuje celý aktivní tým (workers.active). Kdo je aktivní, se
-// spravuje mimo rozpis, proto se nefiltruje podle směn v měsíci.
-function isPersonInSelectedMonth() {
-  return true;
+// Aktuální měsíc = aktivní tým (seznam v aktuálním listu). Dřívější měsíc =
+// lidé ze seznamu toho měsíce (u starších dat bez seznamu ti s hodinami).
+function isPersonInSelectedMonth(person) {
+  if (isCurrentTeamPeriod()) return person.active;
+  const rows = attendanceByPeriod.get(teamPeriod);
+  if (!rows) return false;
+  const hasList = [...rows.values()].some(row => row.inList);
+  const row = rows.get(person.remoteId);
+  return Boolean(row && (hasList ? row.inList : row.hours > 0));
+}
+
+function isCurrentTeamPeriod() {
+  return teamPeriod === firstDayOfMonth(new Date());
+}
+
+const TEAM_MONTHS = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+const TEAM_MONTHS_LOCATIVE = ["lednu", "únoru", "březnu", "dubnu", "květnu", "červnu", "červenci", "srpnu", "září", "říjnu", "listopadu", "prosinci"];
+function teamPeriodLabel(period, locative = false) {
+  const [year, month] = period.split("-").map(Number);
+  const name = (locative ? TEAM_MONTHS_LOCATIVE : TEAM_MONTHS)[month - 1];
+  return `${locative ? name : name.charAt(0).toUpperCase() + name.slice(1)} ${year}`;
+}
+
+function syncTeamPeriodOptions() {
+  const current = firstDayOfMonth(new Date());
+  const periods = [...new Set([current, ...attendanceByPeriod.keys()])].filter(period => period <= current).sort().reverse();
+  if (!periods.includes(teamPeriod)) teamPeriod = current;
+  const select = elements.teamPeriodSelect;
+  const signature = periods.join("|");
+  if (select.dataset.signature !== signature) {
+    select.replaceChildren(...periods.map(period => new Option(period === current ? `${teamPeriodLabel(period)} · aktuální` : teamPeriodLabel(period), period)));
+    select.dataset.signature = signature;
+  }
+  select.value = teamPeriod;
+  select.syncCustomSelect?.();
+}
+
+// Hodiny na kartách podle vybraného měsíce.
+function applyTeamPeriod() {
+  const rows = attendanceByPeriod.get(teamPeriod) || new Map();
+  Object.values(state.people).forEach(person => { person.hours = rows.get(person.remoteId)?.hours || 0; });
+}
+
+function setTeamPeriod(period) {
+  teamPeriod = period;
+  applyTeamPeriod();
+  renderTeam();
+  renderAlerts();
 }
 
 function previousAuditValue(person, field) {
@@ -2688,6 +2765,7 @@ function createCard(person, index = 0) {
   if (person.photo) avatar.style.backgroundImage = `url("${safeCssUrl(person.photo)}")`;
   else avatar.textContent = initials(person.name);
   card.querySelector(".hours-value").textContent = formatNumber(person.hours || 0);
+  card.querySelector(".hours-label").textContent = isCurrentTeamPeriod() ? "h tento měsíc" : `h v ${teamPeriodLabel(teamPeriod, true)}`;
   card.querySelector(".hours-60-value").textContent = formatNumber(person.hours60 || 0);
   const nextShift = nextShiftsByPerson.get(person.id);
   const nextShiftElement = card.querySelector(".card-next-shift");
@@ -3666,6 +3744,7 @@ function renderProfileSummary(person) {
   elements.profileStatus.textContent = newcomer ? "Nováček" : (person.status || "Aktivní");
   elements.profileStatus.classList.toggle("is-newcomer", newcomer);
   elements.profileHours.textContent = formatNumber(person.hours || 0);
+  elements.profileHoursLabel.textContent = isCurrentTeamPeriod() ? "tento měsíc" : `v ${teamPeriodLabel(teamPeriod, true)}`;
   elements.profileHours60.textContent = formatNumber(person.hours60 || 0);
   const shift = nextShiftsByPerson.get(person.id);
   const nextStat = elements.profileNextShift.closest(".profile-next-shift");
@@ -3703,6 +3782,7 @@ function setTabCount(element, count, title, warning = false) {
 }
 
 function renderProfileUpcoming(person) {
+  renderProfilePast(person);
   const todayKey = dateKey(startOfDay(new Date()));
   const blocks = mergeShiftBlocks(shiftRows.filter(item => item.workerId === person.remoteId && !item.free && item.date >= todayKey)).slice(0, 8);
   if (!blocks.length) {
@@ -3724,6 +3804,36 @@ function renderProfileUpcoming(person) {
     const hours = document.createElement("small");
     hours.textContent = `${formatNumber(block.hours)} h`;
     item.classList.toggle("is-soon", label === "Dnes" || label === "Zítra");
+    item.append(day, time, department, hours);
+    return item;
+  }));
+}
+
+// Proběhlé směny ve vybraném měsíci (aktuální měsíc do včerejška), od nejnovější.
+function renderProfilePast(person) {
+  const todayKey = dateKey(startOfDay(new Date()));
+  const prefix = teamPeriod.slice(0, 7);
+  const blocks = mergeShiftBlocks(shiftRows.filter(item => item.workerId === person.remoteId && !item.free
+    && item.date.startsWith(prefix) && item.date < todayKey)).reverse();
+  const total = blocks.reduce((sum, block) => sum + block.hours, 0);
+  elements.profilePastHeading.textContent = `Proběhlé v ${teamPeriodLabel(teamPeriod, true)}${total ? ` · ${formatNumber(total)} h` : ""}`;
+  if (!blocks.length) {
+    const inWindow = teamPeriod >= firstDayOfMonth(shiftWindowStart(startOfDay(new Date())));
+    elements.profilePastShifts.innerHTML = `<li class="no-feedback">${inWindow ? "V tomto měsíci zatím žádná odpracovaná směna." : "Rozpis tohoto měsíce už se nenačítá, hodiny jsou v grafu."}</li>`;
+    return;
+  }
+  elements.profilePastShifts.replaceChildren(...blocks.map(block => {
+    const item = document.createElement("li");
+    const day = document.createElement("strong");
+    day.textContent = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(parseDateKey(block.date));
+    const time = document.createElement("span");
+    time.className = "profile-upcoming-time";
+    time.textContent = `${formatClock(block.start)}–${formatClock(block.end)}`;
+    const department = document.createElement("span");
+    department.className = "profile-upcoming-department";
+    department.textContent = block.department || "Oddělení neuvedeno";
+    const hours = document.createElement("small");
+    hours.textContent = `${formatNumber(block.hours)} h`;
     item.append(day, time, department, hours);
     return item;
   }));
