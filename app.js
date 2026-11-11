@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=101";
+} from "./logic.mjs?v=102";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2732,12 +2732,6 @@ function createCard(person, index = 0) {
   });
   const personSales = salesDays.filter(day => day.workerId === person.remoteId);
   const pendingSales = personSales.filter(day => day.status === "pending" && day.date < dateKey(new Date())).length;
-  const { asr } = summarizeSales(personSales);
-  const salesButton = card.querySelector(".sales-card-button");
-  const salesStatus = card.querySelector(".sales-card-status");
-  salesStatus.textContent = asr ? `ASR ${formatCurrency(asr)}/h` : "Prodeje";
-  salesButton.hidden = !personSales.length;
-  salesButton.addEventListener("click", event => { event.stopPropagation(); openSalesForPerson(person); });
   // Co vyžaduje akci – jediná barevně zvýrazněná místa na kartě.
   const flags = [];
   const onboarding = incompleteOnboardingTasks(person.onboarding);

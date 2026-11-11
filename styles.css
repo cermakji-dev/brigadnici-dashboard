@@ -1660,3 +1660,7 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
 :root[data-theme="dark"] .sales-day-status.is-today { color: #c4b5fd; }
 .sales-result.today { background: color-mix(in srgb, var(--brand-purple) 14%, transparent); color: var(--brand-purple); }
 :root[data-theme="dark"] .sales-result.today { color: #c4b5fd; }
+
+/* Palce vždy na stejné úrovni: patička karty je jeden řádek u spodního okraje */
+.card-footer { flex-wrap: nowrap; }
+.card-footer-actions { flex-wrap: nowrap; }

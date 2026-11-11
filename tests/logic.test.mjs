@@ -211,3 +211,11 @@ test("budoucí naplánované reporty se nepočítají jako chybějící", async 
   assert.equal(row.planned, 1);
   assert.equal(row.days, 2);
 });
+
+test("značky z rozpisu psané velkými písmeny nejsou brigádníci", () => {
+  assert.equal(isLikelyWorkerName("STÁTNÍ SVÁTEK"), false);
+  assert.equal(isLikelyWorkerName("NEPRODEJNÍ STÁTNÍ SVÁTEK"), false);
+  assert.equal(isLikelyWorkerName("Státní svátek"), false);
+  assert.equal(isLikelyWorkerName("Ho Vít"), true);
+  assert.equal(isLikelyWorkerName("Patejdl Štěpán Václav"), true);
+});

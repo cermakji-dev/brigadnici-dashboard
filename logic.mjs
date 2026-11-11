@@ -45,9 +45,15 @@ export const automaticWorkerId = name => {
   return `AUTO_${key.toUpperCase().replace(/-/g, "_")}_${(hash >>> 0).toString(36).toUpperCase()}`;
 };
 
+// Poznámky v rozpisu psané velkými písmeny („STÁTNÍ SVÁTEK“, „NEPRODEJNÍ
+// STÁTNÍ SVÁTEK“, „LOG“) nejsou jména lidí.
+const NON_PERSON_WORDS = /\b(svatek|zavreno|inventura|skoleni|porada|volno|neprodejni)\b/;
 export const isLikelyWorkerName = value => {
   const name = String(value || "").trim();
-  return !isIgnoredShiftName(name) && /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(name);
+  if (isIgnoredShiftName(name)) return false;
+  if (name === name.toLocaleUpperCase("cs") && /\p{Lu}{2}/u.test(name)) return false;
+  if (NON_PERSON_WORDS.test(normalizeText(name))) return false;
+  return /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+)+$/u.test(name);
 };
 
 // Odstraní případný čas příchodu za jménem: „Novák Petr 14:30“,
