@@ -392,7 +392,7 @@ export const departmentsForLabel = label => {
 };
 
 // Návrh náhrady na volnou směnu: zaškolení na oddělení, ten den v tu dobu
-// nepracují, přednost má méně hodin v měsíci a lepší docházka.
+// nepracují, aktivní v posledních 60 dnech, pak méně hodin v měsíci a lepší docházka.
 export const suggestReplacements = (freeBlock, people, dayShifts, limit = 3) => {
   const needed = departmentsForLabel(freeBlock.department);
   const busy = new Set(dayShifts
@@ -402,7 +402,11 @@ export const suggestReplacements = (freeBlock, people, dayShifts, limit = 3) => 
     .filter(person => person.remoteId && !busy.has(person.remoteId))
     .map(person => ({ person, trained: needed.filter(department => (person.departments || []).includes(department)).length }))
     .filter(item => !needed.length || item.trained > 0)
+    .map(item => ({ ...item, active: Number(item.person.hours60 || 0) > 0 || Number(item.person.hours || 0) > 0 }))
+    // Přednost mají lidé, kteří v posledních 60 dnech opravdu pracovali;
+    // kdo dlouho nechodí, by směnu nejspíš nevzal.
     .sort((a, b) => b.trained - a.trained
+      || Number(b.active) - Number(a.active)
       || Number(a.person.hours || 0) - Number(b.person.hours || 0)
       || Number(b.person.reliability || 0) - Number(a.person.reliability || 0)
       || a.person.name.localeCompare(b.person.name, "cs"))
@@ -422,4 +426,25 @@ export const buildWorkerLookup = workers => {
       });
     });
   return name => byName.get(slugFromName(name)) || null;
+};
+
+// Rozložení bloků v řádku časové osy: překrývající se bloky dostanou
+// vlastní pruh (lane), navazující bloky sdílí pruh.
+export const assignLanes = blocks => {
+  const laneEnds = [];
+  const placed = [...blocks].sort((a, b) => a.start - b.start || a.end - b.end).map(block => {
+    let lane = laneEnds.findIndex(end => end <= block.start);
+    if (lane < 0) { lane = laneEnds.length; laneEnds.push(block.end); }
+    else laneEnds[lane] = block.end;
+    return { ...block, lane };
+  });
+  return { blocks: placed, lanes: Math.max(1, laneEnds.length) };
+};
+
+// Rozsah osy v celých hodinách (výchozí 8–20, rozšíří se podle směn).
+export const timelineRange = (blocks, fallback = [480, 1200]) => {
+  if (!blocks.length) return fallback;
+  const start = Math.min(fallback[0], ...blocks.map(block => block.start));
+  const end = Math.max(fallback[1], ...blocks.map(block => block.end));
+  return [Math.floor(start / 60) * 60, Math.ceil(end / 60) * 60];
 };

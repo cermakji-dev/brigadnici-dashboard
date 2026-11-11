@@ -3,9 +3,9 @@ import {
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
-  summarizeSales, toCsv, addDays, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  suggestReplacements, summarizeShifts
-} from "./logic.mjs?v=93";
+  summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
+  summarizeShifts
+} from "./logic.mjs?v=94";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2422,114 +2422,146 @@ function renderShiftsDashboard() {
   const reports = salesDays.filter(item => item.date === key);
   const pendingReports = reports.filter(item => item.status === "pending");
   const past = key < todayKey;
-  elements.shiftsReportsLabel.textContent = past ? "Chybí prodejní report" : "Na prodeji";
+  elements.shiftsReportsLabel.textContent = past ? (pendingReports.length === 1 ? "chybějící report" : "chybějících reportů") : "na prodeji";
   elements.shiftsReportsKpi.textContent = past ? pendingReports.length : new Set(workBlocks.filter(block => normalize(block.department).includes("prodej")).map(block => block.workerId || block.name)).size;
   elements.shiftsReportsCard.classList.toggle("attention", past && pendingReports.length > 0);
 
   const lastSync = state.lastImport ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport)) : null;
-  elements.shiftsDaySubtitle.textContent = dayShifts.length
-    ? `${blocks.length} bloků směn${lastSync ? ` · rozpis načten v ${lastSync}` : ""}`
-    : "";
+  elements.shiftsDaySubtitle.textContent = dayShifts.length && lastSync ? `Rozpis načten v ${lastSync}` : "";
 
   renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReports });
 
   elements.shiftsEmpty.hidden = dayShifts.length > 0;
-  const columns = new Map();
-  blocks.forEach(block => {
-    const name = block.department || "Bez oddělení";
-    if (!columns.has(name)) columns.set(name, { name, order: block.column, blocks: [] });
-    const column = columns.get(name);
-    column.order = Math.min(column.order, block.column);
-    column.blocks.push(block);
-  });
-  elements.shiftsBoard.replaceChildren(...[...columns.values()].sort((a, b) => a.order - b.order).map(column => {
-    const section = document.createElement("section");
-    section.className = "shift-column";
-    const heading = document.createElement("header");
-    const title = document.createElement("h3");
-    title.textContent = column.name;
-    const count = document.createElement("span");
-    const people = column.blocks.filter(block => !block.free).length;
-    count.textContent = `${people} ${people === 1 ? "člověk" : people >= 2 && people <= 4 ? "lidé" : "lidí"}`;
-    heading.append(title, count);
-    const list = document.createElement("ul");
-    list.replaceChildren(...column.blocks.sort((a, b) => a.start - b.start || Number(a.free) - Number(b.free)).map(createShiftItem));
-    section.append(heading, list);
-    return section;
-  }));
+  renderShiftsTimeline(blocks, key === todayKey);
 }
 
-function createShiftItem(block) {
-  const item = document.createElement("li");
-  item.className = "shift-item";
-  const person = block.workerId ? personByRemoteId(block.workerId) : null;
-  const time = document.createElement("span");
-  time.className = "shift-time";
-  time.textContent = `${formatClock(block.start)}–${formatClock(block.end)}`;
-  if (block.free) {
-    item.classList.add("is-free");
-    const label = document.createElement("strong");
-    label.textContent = "Volná směna";
-    item.append(time, label);
-    return item;
+// Časová osa dne: řádek pro každé oddělení, vodorovně hodiny, směny jako pruhy.
+function renderShiftsTimeline(blocks, isToday) {
+  const board = elements.shiftsBoard;
+  if (!blocks.length) { board.replaceChildren(); board.hidden = true; return; }
+  board.hidden = false;
+  const [from, to] = timelineRange(blocks);
+  const span = to - from;
+  const position = minutes => `${((minutes - from) / span) * 100}%`;
+  const hours = span / 60;
+  board.style.setProperty("--timeline-hours", hours);
+
+  const scale = document.createElement("div");
+  scale.className = "timeline-scale";
+  scale.append(document.createElement("span"));
+  const ticks = document.createElement("div");
+  ticks.className = "timeline-ticks";
+  for (let minute = from; minute <= to; minute += 60) {
+    const tick = document.createElement("span");
+    tick.style.left = position(minute);
+    tick.textContent = `${minute / 60}:00`;
+    ticks.append(tick);
   }
-  const avatar = document.createElement("span");
-  avatar.className = "shift-avatar";
-  avatar.textContent = initials(person?.name || block.name || "?");
-  const name = document.createElement(person ? "button" : "span");
-  name.className = "shift-name";
-  name.textContent = person?.name || block.name;
-  if (person) {
-    name.type = "button";
-    name.addEventListener("click", () => openPerson(person.id));
-    if (isNewcomer(person)) item.classList.add("is-newcomer");
-  } else {
-    item.classList.add("is-unmatched");
-    name.title = "Jméno z rozpisu nemá kartu brigádníka";
-  }
-  const hours = document.createElement("span");
-  hours.className = "shift-hours";
-  hours.textContent = `${formatNumber(block.hours)} h`;
-  item.append(time, avatar, name, hours);
-  return item;
+  scale.append(ticks);
+
+  const rows = new Map();
+  blocks.forEach(block => {
+    const name = block.department || "Bez oddělení";
+    if (!rows.has(name)) rows.set(name, { name, order: block.column, blocks: [] });
+    const row = rows.get(name);
+    row.order = Math.min(row.order, block.column);
+    row.blocks.push(block);
+  });
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const rowElements = [...rows.values()].sort((a, b) => a.order - b.order).map(row => {
+    const element = document.createElement("div");
+    element.className = "timeline-row";
+    const label = document.createElement("div");
+    label.className = "timeline-label";
+    const title = document.createElement("strong");
+    title.textContent = row.name;
+    const meta = document.createElement("small");
+    const people = new Set(row.blocks.filter(block => !block.free).map(block => block.workerId || block.name)).size;
+    const free = row.blocks.filter(block => block.free).reduce((sum, block) => sum + block.hours, 0);
+    meta.textContent = `${people} ${people === 1 ? "člověk" : people >= 2 && people <= 4 ? "lidé" : "lidí"}${free ? ` · ${formatNumber(free)} h volno` : ""}`;
+    label.append(title, meta);
+    const { blocks: placed, lanes } = assignLanes(row.blocks);
+    const track = document.createElement("div");
+    track.className = "timeline-track";
+    track.style.setProperty("--lanes", lanes);
+    placed.forEach(block => track.append(createTimelineBlock(block, position, span)));
+    if (isToday && nowMinutes > from && nowMinutes < to) {
+      const line = document.createElement("span");
+      line.className = "timeline-now";
+      line.style.left = position(nowMinutes);
+      track.append(line);
+    }
+    element.append(label, track);
+    return element;
+  });
+  board.replaceChildren(scale, ...rowElements);
 }
+
+function createTimelineBlock(block, position, span) {
+  const person = block.workerId ? personByRemoteId(block.workerId) : null;
+  const element = document.createElement(block.free || person ? "button" : "div");
+  element.className = "timeline-block";
+  element.style.left = position(block.start);
+  element.style.width = `calc(${((block.end - block.start) / span) * 100}% - 3px)`;
+  element.style.setProperty("--lane", block.lane);
+  const time = `${formatClock(block.start)}–${formatClock(block.end)}`;
+  const name = document.createElement("strong");
+  const meta = document.createElement("small");
+  meta.textContent = time;
+  if (block.free) {
+    element.type = "button";
+    element.classList.add("is-free");
+    name.textContent = "Volno";
+    element.title = `Volná směna ${time} – zobrazit, kdo by ji mohl vzít`;
+    element.addEventListener("click", () => {
+      const target = document.querySelector(`[data-free-key="${block.date}|${block.start}|${block.column}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.classList.remove("is-highlighted");
+      requestAnimationFrame(() => target?.classList.add("is-highlighted"));
+    });
+  } else {
+    name.textContent = person?.name || block.name;
+    element.title = `${person?.name || block.name} · ${time} · ${formatNumber(block.hours)} h`;
+    if (person) {
+      element.type = "button";
+      element.addEventListener("click", () => openPerson(person.id));
+      if (isNewcomer(person)) element.classList.add("is-newcomer");
+    } else {
+      element.classList.add("is-unmatched");
+    }
+  }
+  element.append(name, meta);
+  return element;
+}
+
 
 function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReports }) {
   const cards = [];
   if (!past && freeBlocks.length) {
-    const activePeople = Object.values(state.people);
-    freeBlocks.forEach(block => {
-      const card = document.createElement("article");
-      card.className = "shift-alert";
-      const text = document.createElement("div");
-      const title = document.createElement("strong");
-      title.textContent = `Volná směna ${formatClock(block.start)}–${formatClock(block.end)}`;
-      const meta = document.createElement("span");
-      const trainedFor = departmentsForLabel(block.department);
-      meta.textContent = `${block.department || "Oddělení neuvedeno"} · ${formatNumber(block.hours)} h${trainedFor.length ? ` · potřeba zaškolení: ${trainedFor.join(", ")}` : ""}`;
-      text.append(title, meta);
-      const suggestions = document.createElement("div");
-      suggestions.className = "shift-suggestions";
-      const candidates = suggestReplacements(block, activePeople, dayShifts);
-      const caption = document.createElement("span");
-      caption.className = "shift-suggestions-caption";
-      caption.textContent = candidates.length ? "Mohli by vzít:" : "Nikdo vhodný volný není";
-      suggestions.append(caption, ...candidates.map(person => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "suggestion-chip";
-        button.title = `${formatNumber(person.hours || 0)} h tento měsíc · docházka ${clampMetric(person.reliability)} %`;
-        const name = document.createElement("strong");
-        name.textContent = person.name;
-        const hours = document.createElement("small");
-        hours.textContent = `${formatNumber(person.hours || 0)} h`;
-        button.append(name, hours);
-        button.addEventListener("click", () => openPerson(person.id));
-        return button;
-      }));
-      card.append(text, suggestions);
-      cards.push(card);
-    });
+    const card = document.createElement("section");
+    card.className = "free-shifts";
+    const heading = document.createElement("header");
+    const title = document.createElement("h3");
+    const total = freeBlocks.reduce((sum, block) => sum + block.hours, 0);
+    title.textContent = "Volné směny";
+    const count = document.createElement("span");
+    count.textContent = `${freeBlocks.length} ${freeBlocks.length === 1 ? "směna" : freeBlocks.length < 5 ? "směny" : "směn"} · ${formatNumber(total)} h`;
+    heading.append(title, count);
+    const list = document.createElement("ul");
+    list.replaceChildren(...[...freeBlocks].sort((a, b) => a.start - b.start).map(block => {
+      const item = document.createElement("li");
+      item.dataset.freeKey = `${block.date}|${block.start}|${block.column}`;
+      const time = document.createElement("strong");
+      time.textContent = `${formatClock(block.start)}–${formatClock(block.end)}`;
+      const department = document.createElement("span");
+      department.className = "free-shift-department";
+      department.textContent = `${block.department || "Oddělení neuvedeno"} · ${formatNumber(block.hours)} h`;
+      item.append(time, department);
+      return item;
+    }));
+    card.append(heading, list);
+    cards.push(card);
   }
   if (past && pendingReports.length) {
     const card = document.createElement("article");
