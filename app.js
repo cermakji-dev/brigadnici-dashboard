@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts
-} from "./logic.mjs?v=95";
+} from "./logic.mjs?v=96";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2116,7 +2116,7 @@ function renderSalesDashboard() {
     const row = document.createElement("tr");
     const percent = salesTargetPercent(day);
     const stateLabel = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
-    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td class="sales-author"></td><td><button class="sales-row-action" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
+    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td class="sales-author"></td><td><button class="sales-row-action${day.status === "pending" ? " is-fill" : ""}" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
     row.querySelector("strong").textContent = person?.name || "Neznámý brigádník";
     row.querySelector(".sales-author").textContent = day.updatedByEmail || "";
     row.querySelector("button").addEventListener("click", () => openSalesReport(day));
@@ -2467,7 +2467,7 @@ function renderShiftsDashboard() {
   const reports = salesDays.filter(item => item.date === key);
   const pendingReports = reports.filter(item => item.status === "pending");
   const past = key < todayKey;
-  elements.shiftsReportsLabel.textContent = past ? (pendingReports.length === 1 ? "chybějící report" : "chybějících reportů") : "na prodeji";
+  elements.shiftsReportsLabel.textContent = past ? "Chybí report" : "Na prodeji";
   elements.shiftsReportsKpi.textContent = past ? pendingReports.length : new Set(workBlocks.filter(block => normalize(block.department).includes("prodej")).map(block => block.workerId || block.name)).size;
   elements.shiftsReportsCard.classList.toggle("attention", past && pendingReports.length > 0);
 
@@ -2481,10 +2481,10 @@ function renderShiftsDashboard() {
 }
 
 function setShiftsSummaryLabels(month) {
-  elements.shiftsPeopleLabel.textContent = month ? "lidí v rozpisu" : "lidí na směně";
-  elements.shiftsHoursLabel.textContent = "obsazeno";
+  elements.shiftsPeopleLabel.textContent = month ? "Lidí v rozpisu" : "Lidí na směně";
+  elements.shiftsHoursLabel.textContent = "Obsazené hodiny";
   if (!month) {
-    elements.shiftsFreeLabel.textContent = "volných";
+    elements.shiftsFreeLabel.textContent = "Volné hodiny";
     elements.shiftsPrevDay.disabled = false;
     elements.shiftsNextDay.disabled = false;
   }
@@ -2526,11 +2526,11 @@ function renderShiftsMonth() {
   elements.shiftsPeopleKpi.textContent = people.size;
   elements.shiftsHoursKpi.textContent = `${formatNumber(workedHours)} h`;
   elements.shiftsFreeKpi.textContent = `${formatNumber(freeHours)} h`;
-  elements.shiftsFreeLabel.textContent = free.length ? `volných · ${free.length} ${free.length === 1 ? "směna" : free.length < 5 ? "směny" : "směn"}` : "volných";
+  elements.shiftsFreeLabel.textContent = free.length ? `Volné hodiny · ${free.length} ${free.length === 1 ? "směna" : free.length < 5 ? "směny" : "směn"}` : "Volné hodiny";
   elements.shiftsFreeCard.classList.toggle("attention", free.some(block => block.date >= todayKey));
   const total = workedHours + freeHours;
   elements.shiftsReportsKpi.textContent = total ? `${Math.round(workedHours / total * 100)} %` : "—";
-  elements.shiftsReportsLabel.textContent = "obsazení";
+  elements.shiftsReportsLabel.textContent = "Obsazenost";
   elements.shiftsReportsCard.classList.remove("attention");
   const lastSync = state.lastImport ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport)) : null;
   elements.shiftsDaySubtitle.textContent = monthShifts.length && lastSync ? `Rozpis načten v ${lastSync}` : "";
