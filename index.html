@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.17.0">
+  <meta name="app-build" content="5.18.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=104">
+    <link rel="stylesheet" href="styles.css?v=105">
 </head>
 <body>
 
@@ -136,6 +136,9 @@
           <p class="section-subtitle">Aktuální sestava podle vybraného měsíce</p>
         </div>
         <div class="overview-actions">
+          <label class="team-period"><span class="visually-hidden">Měsíc týmu</span>
+            <select id="teamPeriodSelect" aria-label="Měsíc týmu"></select>
+          </label>
           <details class="team-management">
             <summary>Správa týmu</summary>
             <div class="team-management-menu">
@@ -147,9 +150,9 @@
       </div>
 
       <div class="team-insights" aria-label="Souhrn aktuálního výběru">
-        <article><span>Zobrazeno</span><strong id="visiblePeopleKpi">0</strong><small>z aktuálního týmu</small></article>
+        <article><span>Zobrazeno</span><strong id="visiblePeopleKpi">0</strong><small id="visiblePeopleNote">z aktuálního týmu</small></article>
         <article><span>Průměr schopností</span><strong id="averageSkillsKpi">0 %</strong><small>podle zaškolení</small></article>
-        <article><span>Plánované hodiny</span><strong id="plannedHoursKpi">0 h</strong><small>celkem v měsíci</small></article>
+        <article><span id="plannedHoursLabel">Plánované hodiny</span><strong id="plannedHoursKpi">0 h</strong><small id="plannedHoursNote">celkem v měsíci</small></article>
         <article class="free-hours-insight"><span>Volné hodiny</span><strong id="freeHoursKpi">0 h</strong><small id="freeHoursShareKpi">0 % není obsazeno</small></article>
       </div>
 
@@ -329,7 +332,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v103</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v104</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -356,7 +359,7 @@
 
       <input id="personId" type="hidden">
       <div class="profile-summary profile-stats">
-        <div class="profile-stat"><strong><span id="profileHours">0</span> h</strong><span>tento měsíc</span></div>
+        <div class="profile-stat"><strong><span id="profileHours">0</span> h</strong><span id="profileHoursLabel">tento měsíc</span></div>
         <div class="profile-stat"><strong><span id="profileHours60">0</span> h</strong><span>za 60 dní</span></div>
         <div class="profile-stat profile-next-shift"><strong id="profileNextShift">—</strong><span id="profileNextShiftMeta">další směna</span></div>
         <div class="profile-stat"><strong id="profileScore">0</strong><span id="profileScoreMeta">palce</span></div>
@@ -410,6 +413,8 @@
         <section class="profile-upcoming" aria-labelledby="profileUpcomingHeading">
           <h3 id="profileUpcomingHeading">Nadcházející směny</h3>
           <ul id="profileUpcomingShifts" class="profile-upcoming-list"></ul>
+          <h3 id="profilePastHeading" class="profile-past-heading">Proběhlé směny</h3>
+          <ul id="profilePastShifts" class="profile-upcoming-list is-past"></ul>
         </section>
         <section class="attendance-history" aria-labelledby="attendanceHistoryHeading">
           <div class="attendance-history-heading">
@@ -625,7 +630,7 @@
         <button class="icon-button edit-button" type="button" aria-label="Upravit profil">•••</button>
       </div>
       <div class="card-hours">
-        <strong class="hours-value"></strong><span>h tento měsíc</span>
+        <strong class="hours-value"></strong><span class="hours-label">h tento měsíc</span>
       </div>
       <p class="card-meta">
         <span class="card-meta-item"><strong class="hours-60-value"></strong> h za 60 dní</span>
@@ -661,6 +666,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=103"></script>
+  <script type="module" src="app.js?v=104"></script>
 </body>
 </html>

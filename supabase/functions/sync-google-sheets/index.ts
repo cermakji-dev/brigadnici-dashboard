@@ -160,34 +160,40 @@ Deno.serve(async request => {
 
     // Hodiny za každý měsíc až po aktuální, spočítané z rozpisu daného listu
     // (zapisují se jen změněné hodnoty).
-    const attendanceRows: { worker_id: string; period: string; hours: number; source_name: string; imported_at: string }[] = [];
+    const attendanceRows: { worker_id: string; period: string; hours: number; in_list: boolean; source_name: string; imported_at: string }[] = [];
     const attendance = new Map<string, number>();
     let plannedHours: number | null = null;
     const monthSheets = workbook.SheetNames.map(name => ({ name, sheetPeriod: periodFromSheetName(name) }))
       .filter(item => item.sheetPeriod && item.sheetPeriod <= period);
     for (const { name, sheetPeriod } of monthSheets) {
-      const roster = monthlyRosterHours(matrices.get(name)!, sheetPeriod!, lookup);
+      const matrix = matrices.get(name)!;
+      const roster = monthlyRosterHours(matrix, sheetPeriod!, lookup);
       if (sheetPeriod === period) {
         roster.hours.forEach((hours, id) => attendance.set(id, hours));
         plannedHours = roster.planned;
       }
-      roster.hours.forEach((hours, worker_id) => attendanceRows.push({ worker_id, period: sheetPeriod!, hours, source_name: `Rozpis – ${name}`, imported_at: new Date().toISOString() }));
+      // Tým daného měsíce = jeho seznam „Jméno“ (historie týmu po měsících).
+      const listed = new Set((summaryNames(matrix) ?? []).map(listName => (lookup(listName) as Worker | null)?.id).filter(Boolean) as string[]);
+      new Set([...roster.hours.keys(), ...listed]).forEach(worker_id => attendanceRows.push({
+        worker_id, period: sheetPeriod!, hours: roster.hours.get(worker_id) || 0, in_list: listed.has(worker_id),
+        source_name: `Rozpis – ${name}`, imported_at: new Date().toISOString()
+      }));
     }
     const summary = [...attendance.keys()];
     let changed: typeof attendanceRows = [];
     if (attendanceRows.length) {
       const periods = [...new Set(attendanceRows.map(row => row.period))];
-      const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, period, hours").in("period", periods);
+      const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, period, hours, in_list").in("period", periods);
       if (error) throw error;
-      const old = new Map((existing ?? []).map(row => [`${row.worker_id}|${row.period}`, Number(row.hours)]));
+      const old = new Map((existing ?? []).map(row => [`${row.worker_id}|${row.period}`, `${Number(row.hours)}|${Boolean(row.in_list)}`]));
       // Kdo v rozpisu daného měsíce už není, má za ten měsíc 0 h.
       const fresh = new Set(attendanceRows.map(row => `${row.worker_id}|${row.period}`));
       (existing ?? []).forEach(row => {
-        if (!fresh.has(`${row.worker_id}|${row.period}`) && Number(row.hours) !== 0) {
-          attendanceRows.push({ worker_id: row.worker_id, period: row.period, hours: 0, source_name: "Rozpis – bez směn", imported_at: new Date().toISOString() });
+        if (!fresh.has(`${row.worker_id}|${row.period}`) && (Number(row.hours) !== 0 || row.in_list)) {
+          attendanceRows.push({ worker_id: row.worker_id, period: row.period, hours: 0, in_list: false, source_name: "Rozpis – bez směn", imported_at: new Date().toISOString() });
         }
       });
-      changed = attendanceRows.filter(row => old.get(`${row.worker_id}|${row.period}`) !== row.hours);
+      changed = attendanceRows.filter(row => old.get(`${row.worker_id}|${row.period}`) !== `${row.hours}|${row.in_list}`);
       if (changed.length && !dryRun) {
         for (let index = 0; index < changed.length; index += 500) {
           const { error: upsertError } = await supabase.from("attendance_totals").upsert(changed.slice(index, index + 500), { onConflict: "worker_id,period" });

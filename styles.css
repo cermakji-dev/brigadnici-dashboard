@@ -1664,3 +1664,12 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
 /* Palce vždy na stejné úrovni: patička karty je jeden řádek u spodního okraje */
 .card-footer { flex-wrap: nowrap; }
 .card-footer-actions { flex-wrap: nowrap; }
+
+/* v104 – měsíc v přehledu týmu, proběhlé směny v profilu */
+.overview-actions { display: flex; align-items: center; gap: 8px; }
+.team-period select { min-height: 40px; min-width: 190px; padding: 8px 40px 8px 12px; background-color: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: .88rem; font-weight: 650; }
+.team-period .custom-select { min-width: 200px; }
+.team-period .custom-select-button { min-height: 40px; }
+.profile-past-heading { margin-top: 18px !important; }
+.profile-upcoming-list.is-past li { color: var(--muted); }
+.profile-upcoming-list.is-past li strong { color: var(--text); font-weight: 600; }
