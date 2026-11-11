@@ -1691,3 +1691,46 @@ dialog .custom-select { position: relative; }
 .shifts-date-picker .ui-icon { width: 16px; height: 16px; color: var(--muted); }
 .shifts-date-picker .shifts-date-input { position: absolute; inset: 0; width: 100%; min-height: 0; padding: 0; opacity: 0; border: 0; cursor: pointer; }
 .shifts-date-picker .shifts-date-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+/* ==========================================================================
+   v107 – prodejní report a prodejní dny v profilu v novém vzhledu
+   ========================================================================== */
+.sales-report-dialog { width: min(640px, calc(100% - 32px)); border-radius: 20px; }
+.sales-report-dialog form { gap: 18px; padding: 24px 28px 22px; }
+.sales-report-dialog .dialog-heading h2 { margin: 4px 0 2px; font-size: 1.5rem; letter-spacing: -.02em; }
+.sales-report-dialog .dialog-heading .section-copy { margin: 0; color: var(--muted); font-size: .86rem; }
+.sales-report-dialog .dialog-heading .section-copy::first-letter { text-transform: uppercase; }
+.sales-report-fields { gap: 12px; }
+.sales-report-fields label, .sales-report-note { display: grid; gap: 6px; font-weight: 400; }
+.sales-report-fields label > span, .sales-report-note > span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.sales-report-note > span small { margin-left: 4px; font-weight: 600; letter-spacing: 0; text-transform: none; opacity: .8; }
+.sales-report-fields input { min-height: 44px; padding: 8px 12px; font-size: 1rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sales-report-note textarea { min-height: 70px; font-size: .9rem; }
+.sales-report-dialog .sales-report-preview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 0; padding: 12px 0; background: color-mix(in srgb, var(--brand-soft) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 12px; }
+.sales-report-preview .profile-stat { display: grid; gap: 3px; padding: 0 14px; }
+.sales-report-preview .profile-stat + .profile-stat { border-left: 1px solid var(--border); }
+.sales-report-preview .profile-stat > strong { font-size: 1rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.sales-report-preview .profile-stat > span { color: var(--muted); font-size: .72rem; }
+.sales-report-preview .sales-result { font-size: .74rem; }
+.sales-report-dialog .dialog-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.sales-report-dialog .dialog-actions-spacer { flex: 1; }
+.sales-report-dialog #markNotSalesButton { background: transparent; border-color: transparent; color: var(--muted); }
+.sales-report-dialog #markNotSalesButton:hover { color: var(--text); background: var(--brand-soft); }
+
+/* Prodejní dny v profilu: řádky jako v tabulce prodejů */
+.profile-sales-history { display: grid; gap: 0; border-top: 1px solid var(--border); }
+#personDialog .profile-sales-day { display: grid; grid-template-columns: 136px minmax(0, 1fr) 118px 76px; justify-content: stretch; align-items: center; gap: 14px; width: 100%; padding: 11px 4px; background: transparent; color: var(--text); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; cursor: pointer; font: inherit; text-align: left; }
+#personDialog .profile-sales-day:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-soft) 50%, transparent); }
+.profile-sales-day:disabled { cursor: default; }
+.profile-sales-date { font-size: .86rem; font-variant-numeric: tabular-nums; }
+#personDialog .profile-sales-detail { justify-self: start; text-align: left; overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.profile-sales-action { justify-self: end; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: .76rem; font-weight: 650; }
+.profile-sales-action:empty { display: none; }
+.profile-sales-action.is-fill { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 45%, var(--border)); }
+:root[data-theme="dark"] .profile-sales-action.is-fill { color: #a5b4fc; }
+#personDialog .profile-sales-summary .profile-sales-empty { grid-column: 1 / -1; }
+#personDialog .profile-sales-summary .profile-sales-empty > strong { font-size: .95rem; }
+#personDialog .profile-sales-day .sales-result { justify-self: start; }
+#personDialog .profile-sales-day:disabled { opacity: .8; }
+.sales-report-dialog #cancelSalesReport { background: var(--brand-soft); color: var(--text); border-color: var(--border); }
+.sales-report-dialog .sales-report-preview .sales-result { display: inline-flex; width: fit-content; }
