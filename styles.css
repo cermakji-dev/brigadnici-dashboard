@@ -1431,3 +1431,100 @@ body.detail-open .month-row { grid-template-columns: var(--day-w) minmax(0, 1fr)
 .card-footer { flex-wrap: wrap; row-gap: 6px; }
 .card-footer-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; margin-left: auto; overflow: visible; }
 .card-footer-actions .card-link, .sales-card-button { white-space: nowrap; }
+
+/* ==========================================================================
+   v96 – sladění vzhledu všech záložek
+   ========================================================================== */
+/* Pozadí v tmavém režimu nekončí na dlouhých stránkách */
+:root[data-theme="dark"] body { background-attachment: fixed; }
+
+/* Jednotné záhlaví záložek: nadtitulek, nadpis, podtitulek */
+.section-heading h2, .shifts-heading h2, .sales-dashboard-heading h2 { margin: 4px 0 4px; font-size: 1.75rem; line-height: 1.15; letter-spacing: -.025em; }
+.section-heading .section-subtitle, .shifts-heading .section-subtitle, .sales-dashboard-heading .section-subtitle { margin: 0; color: var(--muted); font-size: .86rem; }
+.shifts-heading .section-subtitle:empty { display: none; }
+.overview { margin-top: 30px; }
+
+/* Jednotné souhrnné karty (Tým, Směny, Prodejní výkon) */
+.team-insights, .sales-kpis, .shifts-summary { display: grid; gap: 10px; margin: 0; }
+.team-insights { margin-bottom: 14px; }
+.sales-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.shifts-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.team-insights article, .sales-kpis article, .shifts-summary > span {
+  display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; gap: 4px;
+  padding: 13px 15px;
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  border: 1px solid var(--border); border-radius: 13px;
+  box-shadow: 0 8px 24px rgba(17, 24, 39, .035);
+  color: var(--text); font-size: inherit;
+}
+.team-insights article > span, .sales-kpis article > span, .shifts-summary > span > span {
+  overflow: hidden; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap;
+}
+.team-insights article > strong, .sales-kpis article > strong, .shifts-summary > span > strong {
+  margin: 0; color: var(--text); font-size: 1.35rem; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1.2;
+}
+.sales-kpis .attention, .shifts-summary .attention { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+.sales-kpis .attention strong, .shifts-summary .attention strong { color: var(--warning); }
+.sales-kpis .attention { border-color: color-mix(in srgb, var(--negative) 40%, var(--border)); }
+.sales-kpis .attention strong { color: var(--negative); }
+
+/* Ovládací prvky: výběry stejně velké jako tlačítka vedle nich */
+.custom-select-button, .toolbar select, .sales-toolbar select { min-height: 44px; font-size: .9rem; font-weight: 650; }
+.custom-select-button strong, .custom-select-button span { font-size: inherit; font-weight: inherit; }
+.search-field input { font-size: .92rem; }
+
+/* Duplicitní čísla v liště synchronizace (jsou v kartách pod ní) */
+.attendance-mini-summary { display: none !important; }
+
+/* Pokročilé filtrování jako nenápadný odkaz, ne nadpis */
+.advanced-filters summary { width: fit-content; color: var(--muted); font-size: .82rem; font-weight: 650; }
+.advanced-filters summary:hover { color: var(--text); }
+.advanced-filters summary::before { width: 12px; height: 12px; }
+.advanced-filters { padding: 9px 14px; }
+
+/* Podpis a verze: na konci stránky, nic nepřekrývá */
+.app-signature { position: static; justify-content: center; width: fit-content; margin: 28px auto 22px; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+body.detail-open .app-signature { display: flex; }
+
+/* Upozornění vždy nad lištou s hledáním */
+.alerts-drawer { z-index: 60; }
+
+/* Čára „teď“ nepřeškrtává jména – vede pod bloky směn */
+.timeline-block { z-index: 1; }
+.timeline-now { z-index: 0; opacity: .85; }
+
+/* Profil: souhrny se zalomí místo „…“ */
+#personDialog .profile-tab-panel .profile-stats { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); row-gap: 10px; }
+#personDialog .profile-tab-panel .profile-stat > strong { overflow: visible; text-overflow: clip; white-space: nowrap; }
+#personDialog .profile-tab-panel .profile-stat > span { overflow: visible; text-overflow: clip; white-space: normal; }
+
+/* Prodeje: splněný cíl zeleně, výrazně nad cílem plně zeleně */
+.sales-result.excellent { background: var(--positive); color: #fff; }
+.sales-result { padding: 4px 9px; font-size: .72rem; }
+
+/* Prodeje: čitelná tlačítka v řádcích, decentní šipky řazení */
+.sales-row-action { min-height: 30px; padding: 5px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: .78rem; font-weight: 650; white-space: nowrap; }
+.sales-row-action:hover { border-color: color-mix(in srgb, var(--brand) 60%, var(--border)); background: var(--brand-soft); }
+.sales-row-action.is-fill { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 45%, var(--border)); }
+:root[data-theme="dark"] .sales-row-action.is-fill { color: #a5b4fc; }
+.table-sort span { color: var(--muted); font-size: .72rem; opacity: .55; }
+.table-sort.is-active span, .table-sort:hover span { color: var(--brand); opacity: 1; }
+
+/* Hromadné reporty: bez oranžového pruhu, chybějící řádek jen jemně podbarvený */
+.bulk-sales-table tr.is-pending td:first-child { box-shadow: none; }
+.bulk-sales-table tr.is-pending td:first-child strong::after { display: inline-block; width: 6px; height: 6px; margin-left: 7px; vertical-align: middle; background: #d97706; border-radius: 50%; content: ""; }
+
+/* Směny: přepínač Den / Celý měsíc stejně vysoký a tvarovaný jako tlačítka dne */
+.shifts-mode { min-height: 40px; align-items: stretch; border-radius: 11px; }
+.shifts-mode-button { display: grid; place-items: center; border-radius: 8px; }
+.shifts-summary { margin-top: 2px; }
+
+/* Menu ⋯: položky na jeden řádek */
+.topbar-menu-list { min-width: 290px; }
+.topbar-menu-list > a, .topbar-menu-list > button { white-space: nowrap; }
+
+@media (max-width: 1100px) {
+  .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shifts-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
