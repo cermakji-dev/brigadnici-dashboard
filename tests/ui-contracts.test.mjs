@@ -30,21 +30,25 @@ test("autor prodejního reportu se nevkládá jako HTML", () => {
   assert.match(app, /cells\[7\]\.textContent = day\.updatedByEmail/);
 });
 
-test("aplikace běží bez přihlášení a neposílá staré přihlášení", () => {
-  assert.doesNotMatch(html, /id="authGate"|type="password"/);
-  assert.doesNotMatch(app, /signInWithPassword|remoteUser/);
-  assert.match(app, /persistSession: false/);
+test("prohlížení je veřejné, úpravy jen pod přihlášeným účtem", () => {
+  assert.doesNotMatch(html, /id="authGate"/);
+  assert.match(html, /id="loginPassword" type="password"/);
+  assert.match(app, /signInWithPassword/);
+  assert.match(app, /persistSession: true/);
+  assert.match(app, /guardWrites\(supabaseClient\)/);
+  assert.doesNotMatch(app, /x-editor-name/);
 });
 
-test("autor změny se posílá jako URL-kódovaná hlavička", () => {
-  assert.match(app, /"x-editor-name": encodeURIComponent\(name\)/);
-});
-
-test("profil má záložku docházky a přehledy mají export", () => {
+test("profil má záložku docházky a přehledy už nemají export", () => {
   assert.match(html, /data-profile-tab="attendance"/);
   assert.match(html, /id="attendanceHistoryChart"/);
-  assert.match(html, /id="exportTeamButton"/);
-  assert.match(html, /id="exportSalesButton"/);
+  assert.doesNotMatch(html, /id="exportTeamButton"|id="exportSalesButton"/);
+  assert.doesNotMatch(app, /exportTeamCsv|exportSalesCsv/);
+});
+
+test("záložka Docházka má jen vykřičník pro dnešní neobsazenou směnu", () => {
+  assert.match(html, />Docházka <span id="shiftsFreeBadge" class="tab-alert" hidden/);
+  assert.match(app, /block\.date === todayKey/);
 });
 
 test("verze souborů pro obejití mezipaměti GitHub Pages sedí", () => {
