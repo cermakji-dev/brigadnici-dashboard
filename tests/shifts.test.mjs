@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildShiftRows, buildWorkerLookup, departmentsForLabel, mergeShiftBlocks, resolveShiftCell,
+  assignLanes, timelineRange, buildShiftRows, buildWorkerLookup, departmentsForLabel, mergeShiftBlocks, resolveShiftCell,
   salesExpectationsFromShifts, suggestReplacements, summarizeShifts
 } from "../logic.mjs";
 
@@ -101,4 +101,28 @@ test("návrh náhrady: zaškolení, volno v danou dobu, méně hodin první", ()
   const free = { date: "2026-11-05", start: 540, end: 660, department: "Výdej / Prodej" };
   const day = shifts.filter(row => row.date === "2026-11-05");
   assert.deepEqual(suggestReplacements(free, people, day).map(person => person.remoteId), ["w2", "w4"]);
+});
+
+test("návrh náhrady dá přednost lidem, kteří v posledních 60 dnech pracovali", () => {
+  const people = [
+    { remoteId: "a", name: "Nechodí Vůbec", departments: ["Prodej"], hours: 0, hours60: 0, reliability: 100 },
+    { remoteId: "b", name: "Chodí Hodně", departments: ["Prodej"], hours: 40, hours60: 80, reliability: 100 },
+    { remoteId: "c", name: "Chodí Málo", departments: ["Prodej"], hours: 4, hours60: 20, reliability: 100 }
+  ];
+  const free = { date: "2026-11-11", start: 720, end: 840, department: "Prodej" };
+  assert.deepEqual(suggestReplacements(free, people, []).map(person => person.remoteId), ["c", "b", "a"]);
+});
+
+test("překrývající se bloky dostanou vlastní pruh, navazující sdílí", () => {
+  const { blocks, lanes } = assignLanes([
+    { start: 480, end: 600 }, { start: 600, end: 900 }, { start: 540, end: 720 }, { start: 720, end: 1200 }
+  ]);
+  assert.equal(lanes, 2);
+  assert.deepEqual(blocks.map(block => [block.start, block.lane]), [[480, 0], [540, 1], [600, 0], [720, 1]]);
+  assert.equal(assignLanes([]).lanes, 1);
+});
+
+test("rozsah osy je aspoň 8–20 a zaokrouhlí se na hodiny", () => {
+  assert.deepEqual(timelineRange([]), [480, 1200]);
+  assert.deepEqual(timelineRange([{ start: 450, end: 1230 }]), [420, 1260]);
 });

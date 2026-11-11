@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.9.0">
+  <meta name="app-build" content="5.10.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=94">
+    <link rel="stylesheet" href="styles.css?v=95">
 </head>
 <body>
 
@@ -256,14 +256,14 @@
           <input id="shiftsDateInput" class="shifts-date-input" type="date" aria-label="Vybrat datum">
         </div>
       </div>
-      <div class="shifts-kpis">
-        <article><span>Lidí na směně</span><strong id="shiftsPeopleKpi">0</strong></article>
-        <article><span>Obsazené hodiny</span><strong id="shiftsHoursKpi">0 h</strong></article>
-        <article id="shiftsFreeCard" class="attention"><span>Volné hodiny</span><strong id="shiftsFreeKpi">0 h</strong></article>
-        <article id="shiftsReportsCard"><span id="shiftsReportsLabel">Chybí prodejní report</span><strong id="shiftsReportsKpi">0</strong></article>
+      <div class="shifts-summary" aria-label="Souhrn dne">
+        <span><strong id="shiftsPeopleKpi">0</strong> lidí na směně</span>
+        <span><strong id="shiftsHoursKpi">0 h</strong> obsazeno</span>
+        <span id="shiftsFreeCard"><strong id="shiftsFreeKpi">0 h</strong> volných</span>
+        <span id="shiftsReportsCard"><strong id="shiftsReportsKpi">0</strong> <span id="shiftsReportsLabel">na prodeji</span></span>
       </div>
+      <div id="shiftsBoard" class="shifts-timeline"></div>
       <div id="shiftsAttention" class="shifts-attention"></div>
-      <div id="shiftsBoard" class="shifts-board"></div>
       <div id="shiftsEmpty" class="empty-state" hidden><strong>Na tento den není v rozpisu žádná směna</strong><span>Rozpis se načítá z Google tabulky v rozmezí 2 měsíců zpět a 6 týdnů dopředu.</span></div>
     </section>
 
@@ -305,7 +305,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v93</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v94</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -634,6 +634,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=93"></script>
+  <script type="module" src="app.js?v=94"></script>
 </body>
 </html>
