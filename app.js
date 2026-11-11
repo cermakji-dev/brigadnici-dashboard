@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=106";
+} from "./logic.mjs?v=107";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -365,6 +365,7 @@ elements.clearNotesButton.addEventListener("click", () => {
 });
 elements.addWorkerNoteButton.addEventListener("click", addWorkerNote);
 elements.closeSalesReport.addEventListener("click", () => elements.salesReportDialog.close());
+document.querySelector("#cancelSalesReport").addEventListener("click", () => elements.salesReportDialog.close());
 elements.salesReportForm.addEventListener("submit", saveSalesReport);
 elements.salesReportDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.markNotSalesButton.addEventListener("click", markSalesDayNotSales);
@@ -2680,13 +2681,44 @@ function openSalesForPerson(person) {
 function renderProfileSales(person) {
   const rows = salesDays.filter(day => day.workerId === person.remoteId);
   const { revenue, hours, asr, aros, targetPercent } = summarizeSales(rows);
-  elements.profileSalesSummary.innerHTML = `<div class="profile-stat"><strong>${formatNumber(Math.round(asr))}</strong><span>ASR (Kč/h)</span></div><div class="profile-stat"><strong>${Math.round(targetPercent || 0)} %</strong><span>plnění TGT</span></div><div class="profile-stat"><strong>${formatAros(aros)}</strong><span>ARoS</span></div><div class="profile-stat"><strong>${formatCurrency(revenue)}</strong><span>obrat · ${formatNumber(hours)} h</span></div>`;
+  const reported = rows.filter(day => day.status === "reported").length;
+  const todayKey = dateKey(new Date());
+  const missing = rows.filter(day => day.status === "pending" && day.date < todayKey).length;
+  // Bez vyplněného reportu žádná řada nul, jen krátké shrnutí.
+  elements.profileSalesSummary.innerHTML = reported
+    ? `<div class="profile-stat"><strong>${formatCurrency(asr)}/h</strong><span>ASR</span></div><div class="profile-stat"><strong>${Math.round(targetPercent || 0)} %</strong><span>plnění TGT</span></div><div class="profile-stat"><strong>${formatAros(aros)}</strong><span>ARoS</span></div><div class="profile-stat"><strong>${formatCurrency(revenue)}</strong><span>obrat · ${formatNumber(hours)} h</span></div>`
+    : `<div class="profile-stat profile-sales-empty"><strong>Zatím žádný vyplněný report</strong><span>${missing ? `chybí ${missing} ${missing === 1 ? "report" : missing < 5 ? "reporty" : "reportů"}` : "prodejní směny se objeví po synchronizaci rozpisu"}</span></div>`;
   if (!rows.length) { elements.profileSalesHistory.innerHTML = '<p class="no-feedback">Zatím bez prodejních směn.</p>'; return; }
-  elements.profileSalesHistory.replaceChildren(...rows.map(day => {
-    const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
+  const sorted = [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  elements.profileSalesHistory.replaceChildren(...sorted.map(day => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "profile-sales-day";
     const percent = salesTargetPercent(day);
-    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))} · ARoS ${formatAros(salesAros(day))}` : day.status === "pending" ? (day.date > dateKey(new Date()) ? "Naplánováno" : day.date === dateKey(new Date()) ? "Dnes – k vyplnění" : "Chybí report") : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
-    item.addEventListener("click", () => openSalesReport(day)); return item;
+    const isReported = day.status === "reported";
+    const planned = day.status === "pending" && day.date > todayKey;
+    const today = day.status === "pending" && day.date === todayKey;
+    const date = parseDateKey(day.date);
+    const weekday = new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(date);
+    const dateText = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }).format(date)}`;
+    const detail = isReported
+      ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))} · ASR ${formatCurrency(salesAsr(day))}/h`
+      : day.status === "not_sales" ? "Nebyl na prodeji" : `${formatNumber(day.plannedHours)} h v rozpisu`;
+    const badgeClass = isReported ? salesPerformanceClass(percent) : planned ? "planned" : today ? "today" : day.status;
+    const badgeText = isReported ? `${Math.round(percent)} % TGT` : planned ? "Naplánováno" : today ? "K vyplnění" : day.status === "not_sales" ? "Nebyl" : "Chybí report";
+    const action = isReported || day.status === "not_sales" ? "Detail" : planned ? "" : "Doplnit";
+    item.innerHTML = '<strong class="profile-sales-date"></strong><span class="profile-sales-detail"></span><span class="sales-result"></span><span class="profile-sales-action"></span>';
+    item.querySelector(".profile-sales-date").textContent = dateText;
+    item.querySelector(".profile-sales-detail").textContent = detail;
+    const badge = item.querySelector(".sales-result");
+    badge.classList.add(badgeClass);
+    badge.textContent = badgeText;
+    const actionElement = item.querySelector(".profile-sales-action");
+    actionElement.textContent = action;
+    actionElement.classList.toggle("is-fill", action === "Doplnit");
+    if (planned) item.disabled = true;
+    item.addEventListener("click", () => openSalesReport(day));
+    return item;
   }));
 }
 
@@ -2706,7 +2738,8 @@ function updateSalesReportPreview() {
   const asr = hours ? revenue / hours : 0, percent = asr / SALES_ASR_TARGET * 100;
   const hardware = Number(elements.salesReportHardware.value || 0), services = Number(elements.salesReportServices.value || 0);
   const aros = hardware > 0 ? services / hardware * 100 : null;
-  elements.salesReportPreview.innerHTML = `<span>Celkem <strong>${formatCurrency(revenue)}</strong></span><span>ASR <strong>${formatCurrency(asr)}/h</strong></span><span>ARoS <strong>${formatAros(aros)}</strong></span><span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent || 0)} % TGT</span>`;
+  const filled = hours > 0 && (hardware > 0 || services > 0);
+  elements.salesReportPreview.innerHTML = `<div class="profile-stat"><strong>${formatCurrency(revenue)}</strong><span>obrat celkem</span></div><div class="profile-stat"><strong>${filled ? `${formatCurrency(asr)}/h` : "—"}</strong><span>ASR</span></div><div class="profile-stat"><strong>${formatAros(aros)}</strong><span>ARoS</span></div><div class="profile-stat"><strong>${filled ? `<span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent)} % TGT</span>` : "—"}</strong><span>plnění cíle</span></div>`;
 }
 
 async function saveSalesReport(event) {
