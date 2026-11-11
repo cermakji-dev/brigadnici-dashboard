@@ -3,15 +3,16 @@ import {
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
-  summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
+  summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=107";
+} from "./logic.mjs?v=108";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
 const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const SORT_KEY = "brigadnici-dashboard-sort";
-const EDITOR_KEY = "brigadnici-editor-name";
+// Přihlášený účet Supabase a jeho členství v app_members (oprávnění k úpravám).
+const authState = { user: null, member: null, checked: false };
 const SORT_OPTIONS = {
   name: { key: "name", direction: "asc" },
   "hours-desc": { key: "hours", direction: "desc" },
@@ -78,7 +79,15 @@ const elements = {
   editorNameLabel: document.querySelector("#editorNameLabel"),
   editorDialog: document.querySelector("#editorDialog"),
   editorForm: document.querySelector("#editorForm"),
-  editorNameInput: document.querySelector("#editorNameInput"),
+  loginEmail: document.querySelector("#loginEmail"),
+  loginPassword: document.querySelector("#loginPassword"),
+  loginFields: document.querySelector("#loginFields"),
+  loginSignedIn: document.querySelector("#loginSignedIn"),
+  loginWho: document.querySelector("#loginWho"),
+  loginRole: document.querySelector("#loginRole"),
+  loginStatus: document.querySelector("#loginStatus"),
+  loginSubmit: document.querySelector("#loginSubmit"),
+  logoutButton: document.querySelector("#logoutButton"),
   closeEditorDialog: document.querySelector("#closeEditorDialog"),
   skipEditorName: document.querySelector("#skipEditorName"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
@@ -134,8 +143,6 @@ const elements = {
   freeHoursKpi: document.querySelector("#freeHoursKpi"),
   freeHoursShareKpi: document.querySelector("#freeHoursShareKpi"),
   sortSelect: document.querySelector("#sortSelect"),
-  exportTeamButton: document.querySelector("#exportTeamButton"),
-  exportSalesButton: document.querySelector("#exportSalesButton"),
   salesPersonFilter: document.querySelector("#salesPersonFilter"),
   attendanceHistoryStats: document.querySelector("#attendanceHistoryStats"),
   attendanceHistoryChart: document.querySelector("#attendanceHistoryChart"),
@@ -262,11 +269,11 @@ const elements = {
 elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
 updateThemeControls();
 elements.editorNameButton.addEventListener("click", () => openEditorDialog());
-elements.editorForm.addEventListener("submit", saveEditorName);
+elements.editorForm.addEventListener("submit", submitLogin);
+elements.logoutButton.addEventListener("click", logout);
 elements.closeEditorDialog.addEventListener("click", () => elements.editorDialog.close());
 elements.skipEditorName.addEventListener("click", () => elements.editorDialog.close());
 elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
-elements.editorDialog.addEventListener("close", () => { if (!editorName()) sessionStorage.setItem(EDITOR_KEY, "skipped"); });
 renderEditorName();
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets());
 elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets());
@@ -320,8 +327,6 @@ elements.sortSelect.addEventListener("change", () => {
   saveSort();
   render();
 });
-elements.exportTeamButton.addEventListener("click", exportTeamCsv);
-elements.exportSalesButton.addEventListener("click", exportSalesCsv);
 elements.salesPersonFilter.addEventListener("change", renderSalesDashboard);
 elements.tableSortButtons.forEach(button => button.addEventListener("click", () => setTableSort(button.dataset.sortKey)));
 elements.salesSortButtons.forEach(button => button.addEventListener("click", () => setSalesTableSort(button.dataset.salesSortKey)));
@@ -518,6 +523,7 @@ async function saveFeedback() {
 }
 
 function openAddWorkerDialog() {
+  if (!requireEdit()) return;
   elements.addWorkerForm.reset();
   setDialogStatus(elements.addWorkerStatus, "");
   elements.addWorkerDialog.showModal();
@@ -708,6 +714,10 @@ async function initializeApp() {
     return;
   }
   createSupabaseClient();
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    await applySession(data?.session || null);
+  } catch { await applySession(null); }
   showAppLoader("Načítám profily brigádníků…");
   try {
     await loadRemoteState();
@@ -720,23 +730,69 @@ async function initializeApp() {
     updateAppLoader("Přehled je připravený");
     await waitForAppPaint();
     hideAppLoader();
-    if (!editorName() && !sessionStorage.getItem(EDITOR_KEY)) openEditorDialog();
   } catch (error) {
     showLoadError(error.message || "Data se nepodařilo načíst.");
   }
 }
 
-// Aplikace běží bez přihlášení (veřejný přístup, viz supabase/2026-10-28-public-access.sql).
-// Případné staré přihlášení z prohlížeče se nepoužije, aby všechny požadavky
-// šly pod stejnou veřejnou rolí. Jméno editora jde v hlavičce kvůli historii změn;
-// hlavičky nesmí obsahovat diakritiku, proto je URL-kódované.
+// Prohlížení je veřejné (role anon). Úpravy jdou jen pod přihlášeným účtem
+// Supabase (stejné účty jako Insight) – databáze sama doplní autora změny
+// do historie (trigger stamp_editor / audit_worker_change), z klienta se nic
+// podvrhnout nedá. Člen = e-mail v tabulce app_members.
 function createSupabaseClient() {
   const config = window.APP_CONFIG;
-  const name = editorName();
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "brigadnici-public" },
-    global: { headers: name ? { "x-editor-name": encodeURIComponent(name) } : {} }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "brigadnici-auth" }
   });
+  guardWrites(supabaseClient);
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    // Callback nesmí čekat na další volání Supabase (deadlock v auth-js).
+    setTimeout(() => { void applySession(session, event); }, 0);
+  });
+}
+
+// Zápis bez přihlášení se vůbec neodešle: vrátí chybu stejného tvaru jako
+// Supabase, takže stávající obsluha chyb (vrácení optimistické změny) funguje.
+function guardWrites(client) {
+  const denied = () => {
+    promptLogin();
+    const result = { data: null, error: { message: authState.user ? "Váš účet nemá oprávnění k úpravám." : "Pro úpravy se přihlaste." } };
+    const chain = new Proxy(function () {}, {
+      get: (target, key) => key === "then" ? (resolve, reject) => Promise.resolve(result).then(resolve, reject) : () => chain
+    });
+    return chain;
+  };
+  const from = client.from.bind(client);
+  client.from = table => {
+    const query = from(table);
+    ["insert", "update", "upsert", "delete"].forEach(method => {
+      const original = query[method].bind(query);
+      query[method] = (...args) => canEdit() ? original(...args) : denied();
+    });
+    return query;
+  };
+  const rpc = client.rpc.bind(client);
+  client.rpc = (...args) => canEdit() ? rpc(...args) : denied();
+}
+
+
+function canEdit() {
+  return Boolean(authState.user && authState.member);
+}
+
+async function applySession(session, event = "") {
+  const user = session?.user || null;
+  const sameUser = authState.checked && authState.user?.id === user?.id;
+  authState.user = user;
+  if (!user) authState.member = null;
+  else if (!sameUser) {
+    const { data } = await supabaseClient.from("app_members").select("email, display_name, role").eq("email", (user.email || "").toLowerCase()).maybeSingle();
+    authState.member = data || null;
+  }
+  authState.checked = true;
+  renderEditorName();
+  document.body.classList.toggle("is-readonly", !canEdit());
+  if (!sameUser && event && event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED") void refreshData().catch(() => {});
 }
 
 function showLoadError(text) {
@@ -745,12 +801,10 @@ function showLoadError(text) {
   updateAppLoader(text);
 }
 
+// Jméno přihlášeného – zobrazení v aplikaci. Do databáze ho doplní trigger.
 function editorName() {
-  try {
-    return (localStorage.getItem(EDITOR_KEY) || "").trim();
-  } catch {
-    return "";
-  }
+  if (!authState.user) return "";
+  return (authState.member?.display_name || authState.user.email || "").trim();
 }
 
 // Text ukládaný do sloupců *_by_email u palců, poznámek, reportů a nástupu.
@@ -760,25 +814,82 @@ function editorLabel() {
 
 function renderEditorName() {
   const name = editorName();
-  elements.editorNameLabel.textContent = name || "Podepsat se";
+  elements.editorNameLabel.textContent = name || "Přihlásit se";
   elements.editorNameButton.classList.toggle("is-missing", !name);
+  elements.editorNameButton.classList.toggle("is-readonly-user", Boolean(authState.user) && !authState.member);
+  elements.editorNameButton.title = name ? (authState.member ? `Přihlášen(a): ${name}` : `${name} – bez oprávnění k úpravám`) : "Přihlášení pro úpravy";
+}
+
+// Před otevřením formuláře pro úpravu: bez oprávnění rovnou nabídne přihlášení.
+function requireEdit() {
+  if (canEdit()) return true;
+  loginPromptedAt = 0;
+  promptLogin();
+  return false;
+}
+
+let loginPromptedAt = 0;
+function promptLogin() {
+  if (Date.now() - loginPromptedAt < 1500) return;
+  loginPromptedAt = Date.now();
+  if (authState.user && !authState.member) {
+    setMessage("Váš účet nemá oprávnění k úpravám. Požádejte o přidání mezi editory.", true);
+    return;
+  }
+  setMessage("Pro úpravy se přihlaste.", true);
+  if (!elements.editorDialog.open) openEditorDialog();
 }
 
 function openEditorDialog() {
-  elements.editorNameInput.value = editorName();
-  elements.editorDialog.showModal();
-  elements.editorNameInput.focus();
+  const signedIn = Boolean(authState.user);
+  elements.loginFields.hidden = signedIn;
+  elements.loginSignedIn.hidden = !signedIn;
+  elements.loginSubmit.hidden = signedIn;
+  elements.logoutButton.hidden = !signedIn;
+  elements.loginEmail.required = !signedIn;
+  elements.loginPassword.required = !signedIn;
+  elements.loginStatus.textContent = "";
+  elements.loginStatus.classList.remove("error");
+  if (signedIn) {
+    elements.loginWho.textContent = editorName();
+    elements.loginRole.textContent = authState.member
+      ? `Změny se ukládají pod tímto účtem${authState.member.display_name ? ` (${authState.user.email})` : ""}.`
+      : "Tento účet zatím nemá oprávnění k úpravám – může jen prohlížet.";
+  } else {
+    elements.loginPassword.value = "";
+  }
+  if (!elements.editorDialog.open) elements.editorDialog.showModal();
+  if (!signedIn) (elements.loginEmail.value ? elements.loginPassword : elements.loginEmail).focus();
 }
 
-function saveEditorName(event) {
+async function submitLogin(event) {
   event.preventDefault();
-  const name = elements.editorNameInput.value.trim().slice(0, 80);
-  if (!name) return;
-  localStorage.setItem(EDITOR_KEY, name);
-  createSupabaseClient();
-  renderEditorName();
+  if (authState.user) return;
+  const email = elements.loginEmail.value.trim();
+  const password = elements.loginPassword.value;
+  if (!email || !password) return;
+  elements.loginSubmit.disabled = true;
+  elements.loginStatus.classList.remove("error");
+  elements.loginStatus.textContent = "Přihlašuji…";
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await applySession(data.session, "SIGNED_IN");
+    elements.editorDialog.close();
+    setMessage(canEdit() ? `Přihlášen(a) jako ${editorName()}. Změny se ukládají pod tímto účtem.` : "Přihlášeno, ale účet nemá oprávnění k úpravám.", !canEdit());
+  } catch (error) {
+    elements.loginStatus.classList.add("error");
+    elements.loginStatus.textContent = /invalid/i.test(error?.message || "") ? "Nesprávný e-mail nebo heslo." : `Přihlášení se nezdařilo: ${error?.message || "neznámá chyba"}`;
+  } finally {
+    elements.loginSubmit.disabled = false;
+  }
+}
+
+async function logout() {
+  await supabaseClient.auth.signOut();
+  await applySession(null, "SIGNED_OUT");
   elements.editorDialog.close();
-  setMessage(`Změny se budou ukládat pod jménem ${name}.`);
+  setMessage("Odhlášeno. Aplikace je teď jen pro čtení.");
 }
 
 function toggleTheme() {
@@ -1833,7 +1944,6 @@ function renderTeam() {
   updateTableSortIndicators();
 
   visibleTeamPeople = people;
-  elements.exportTeamButton.disabled = people.length === 0;
   // Vykresluje se jen zobrazený pohled (karty, nebo tabulka) – polovina práce i DOMu.
   if (currentView === "table") { renderPeopleTable(people); elements.peopleGrid.replaceChildren(); }
   else { elements.peopleGrid.replaceChildren(...people.map(createCard)); elements.peopleTableBody.replaceChildren(); }
@@ -2253,7 +2363,6 @@ function renderSalesDashboard() {
   elements.salesPendingBadge.hidden = globalMissing === 0;
   elements.salesPendingBadge.textContent = globalMissing;
   elements.salesEmpty.hidden = rows.length > 0;
-  elements.exportSalesButton.disabled = rows.length === 0;
   visibleSalesRows = rows;
 
   // Dokud v měsíci není nic vyplněno, místo řady nul jen krátká výzva.
@@ -2723,6 +2832,7 @@ function renderProfileSales(person) {
 }
 
 function openSalesReport(day) {
+  if (!requireEdit()) return;
   if (!day) return;
   const person = personByRemoteId(day.workerId);
   elements.salesReportId.value = day.id;
@@ -2890,7 +3000,7 @@ function createCard(person, index = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Pohled Směny: kdo je ve vybraný den na jakém oddělení, volné směny s návrhem
+// Pohled Docházka: kdo je ve vybraný den na jakém oddělení, volné směny s návrhem
 // náhrady a chybějící prodejní reporty.
 // ---------------------------------------------------------------------------
 function setShiftDay(date) {
@@ -2930,13 +3040,12 @@ function freeShiftBlocksFrom(date) {
 }
 
 function renderShiftsBadge() {
-  // Volné směny dnes a zítra – to, co je potřeba obsadit nejdřív.
-  const today = startOfDay(new Date());
-  const keys = new Set([dateKey(today), dateKey(addDays(today, 1))]);
-  const count = freeShiftBlocksFrom(today).filter(block => keys.has(block.date)).length;
+  // Žlutý vykřičník jen tehdy, když na dnešek připadá neobsazená směna.
+  const todayKey = dateKey(startOfDay(new Date()));
+  const count = freeShiftBlocksFrom(startOfDay(new Date())).filter(block => block.date === todayKey).length;
   elements.shiftsFreeBadge.hidden = count === 0;
-  elements.shiftsFreeBadge.textContent = count;
-  elements.shiftsFreeBadge.title = `${count} volných směn dnes a zítra`;
+  elements.shiftsFreeBadge.title = count === 1 ? "Dnes je 1 neobsazená směna" : `Dnes jsou neobsazené směny (${count})`;
+  elements.shiftsFreeBadge.setAttribute("aria-label", elements.shiftsFreeBadge.title);
 }
 
 function renderShiftsDashboard() {
@@ -3356,6 +3465,7 @@ function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReport
 // Hromadné vyplnění prodejních reportů za jeden den.
 // ---------------------------------------------------------------------------
 function openBulkSales(date) {
+  if (!requireEdit()) return;
   const todayKey = dateKey(startOfDay(new Date()));
   const pendingDates = [...new Set(salesDays.filter(day => day.status === "pending" && day.date <= todayKey).map(day => day.date))].sort().reverse();
   const allDates = [...new Set(salesDays.filter(day => day.date <= todayKey).map(day => day.date))].sort().reverse();
@@ -3533,77 +3643,6 @@ function renderQuickFeedback(type) {
   }));
 }
 
-function downloadCsv(fileName, headers, rows) {
-  const blob = new Blob([toCsv(headers, rows)], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function exportFileStamp() {
-  return dateKey(new Date());
-}
-
-function exportTeamCsv() {
-  if (!visibleTeamPeople.length) return;
-  const period = elements.sheetSelect.value || currentImportPeriod.slice(0, 7);
-  downloadCsv(`brigadnici-${slugify(period) || exportFileStamp()}.csv`,
-    ["Jméno", "Interní ID", "E-mail", "Stav", "Hodiny v měsíci", "Hodiny za 60 dní", "Schopnosti %", "Docházková morálka %", "Zaškolení", "👍", "👎", "Skóre", "Nedokončený nástup", "Další směna", "Poznámka"],
-    visibleTeamPeople.map(person => {
-      const shift = nextShiftsByPerson.get(person.id);
-      return [
-        person.name,
-        person.userId || "",
-        person.email || "",
-        person.status || "",
-        Number(person.hours || 0),
-        Number(person.hours60 || 0),
-        clampMetric(person.skills),
-        clampMetric(person.reliability),
-        (person.departments || []).join(", "),
-        feedbackCount(person, "positive"),
-        feedbackCount(person, "negative"),
-        score(person),
-        incompleteOnboardingTasks(person.onboarding).join(", "),
-        shift ? `${new Intl.DateTimeFormat("cs-CZ").format(shift.date)} ${shift.start}–${shift.end} ${shift.department}` : "",
-        person.notes || ""
-      ];
-    }));
-  setMessage(`Exportováno ${visibleTeamPeople.length} brigádníků.`);
-}
-
-function exportSalesCsv() {
-  if (!visibleSalesRows.length) return;
-  const month = elements.salesPeriodFilter.value;
-  downloadCsv(`prodejni-vykon-${month === "all" ? "vse" : month}.csv`,
-    ["Brigádník", "Datum", "Stav", "Plánované hodiny", "Prodejní hodiny", "Železo Kč", "Služby Kč", "Celkem Kč", "ASR Kč/h", "ARoS %", "Plnění TGT %", "Poznámka", "Upravil"],
-    visibleSalesRows.map(day => {
-      const reported = day.status === "reported";
-      const aros = salesAros(day);
-      return [
-        personByRemoteId(day.workerId)?.name || "Neznámý brigádník",
-        new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`)),
-        day.status === "pending" ? (day.date >= dateKey(new Date()) ? "Naplánováno" : "Chybí report") : day.status === "not_sales" ? "Nebyl na prodeji" : "Vyplněno",
-        Number(day.plannedHours || 0),
-        reported ? day.salesHours : "",
-        reported ? day.hardware : "",
-        reported ? day.services : "",
-        reported ? salesRevenue(day) : "",
-        reported ? Math.round(salesAsr(day)) : "",
-        reported && Number.isFinite(aros) ? Math.round(aros * 10) / 10 : "",
-        reported ? Math.round(salesTargetPercent(day)) : "",
-        day.note || "",
-        day.updatedByEmail || ""
-      ];
-    }));
-  setMessage(`Exportováno ${visibleSalesRows.length} prodejních dní.`);
-}
-
 function setupInlineNote(input, person) {
   input.value = person.notes || "";
   input.addEventListener("click", event => event.stopPropagation());
@@ -3670,6 +3709,7 @@ function renderDepartmentBadges(container, departments) {
 }
 
 function openFeedback(id, type) {
+  if (!requireEdit()) return;
   const person = state.people[id];
   elements.feedbackPersonId.value = id;
   elements.feedbackType.value = type;

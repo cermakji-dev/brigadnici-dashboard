@@ -1734,3 +1734,11 @@ dialog .custom-select { position: relative; }
 #personDialog .profile-sales-day:disabled { opacity: .8; }
 .sales-report-dialog #cancelSalesReport { background: var(--brand-soft); color: var(--text); border-color: var(--border); }
 .sales-report-dialog .sales-report-preview .sales-result { display: inline-flex; width: fit-content; }
+
+/* v108 – přihlášení, vykřičník u Docházky */
+.app-view-tab .tab-alert { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; background: #f5b400; color: #3b2a00; font-size: .72rem; font-weight: 800; line-height: 1; vertical-align: 1px; }
+.editor-name-action.is-missing { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 35%, var(--border)); background: transparent; }
+.editor-name-action.is-readonly-user { color: var(--muted); }
+.login-dialog label { display: grid; gap: 6px; margin-top: 12px; }
+.login-dialog .login-role { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+.login-dialog .dialog-actions [hidden] { display: none; }
