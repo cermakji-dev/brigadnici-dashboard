@@ -1639,3 +1639,10 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
 .sales-target-meter.met span::after, .sales-target-meter.excellent span::after { background: var(--positive); }
 .sales-target-meter strong { font-size: .8rem; font-variant-numeric: tabular-nums; text-align: right; }
 .sales-missing-count { color: var(--warning); font-weight: 700; }
+
+/* v99 – další směna modře přímo na kartě (bez bubliny nad jménem) */
+.card-next-shift:not(.is-empty) { color: var(--skills-color); font-weight: 600; }
+.card-next-shift.is-soon { color: var(--skills-color); font-weight: 700; }
+.table-hours .table-next-shift { display: block; color: var(--skills-color); font-weight: 600; }
+.shift-name-anchor { cursor: inherit; }
+:root[data-theme="dark"] .card-next-shift:not(.is-empty), :root[data-theme="dark"] .table-hours .table-next-shift { color: #60a5fa; }

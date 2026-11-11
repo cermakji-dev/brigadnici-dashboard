@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=98";
+} from "./logic.mjs?v=99";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -1894,7 +1894,16 @@ function renderPeopleTable(people) {
     row.innerHTML = `<td><strong></strong><small></small></td><td class="table-hours"><strong>${formatNumber(person.hours || 0)} h</strong><small>${formatNumber(person.hours60 || 0)} h / 60 dní</small></td><td>${metricCell(person.skills, "skills")}</td><td>${metricCell(person.reliability, "reliability")}</td><td class="table-departments"></td><td class="table-note"><textarea class="inline-note" rows="2" placeholder="Poznámka viditelná v přehledu…" aria-label="Poznámka v přehledu"></textarea></td><td class="table-score"><div class="table-feedback"><button class="feedback-button positive" type="button" aria-label="Přidat palec nahoru">👍 <span>0</span></button><button class="feedback-button negative" type="button" aria-label="Přidat palec dolů">👎 <span>0</span></button><strong class="score"></strong></div></td>`;
     const name = row.querySelector("strong");
     name.textContent = person.name;
-    setupNextShiftTooltip(name, person);
+    // Další směna pod hodinami (karta ji má přímo v textu, tabulka tady).
+    const tableNextShift = nextShiftsByPerson.get(person.id);
+    if (tableNextShift) {
+      const shiftLine = document.createElement("small");
+      shiftLine.className = "table-next-shift";
+      const label = shiftDayLabel(tableNextShift.date);
+      shiftLine.textContent = `${label || new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(tableNextShift.date)} ${tableNextShift.start}–${tableNextShift.end}`;
+      shiftLine.title = `Další směna · ${tableNextShift.department}`;
+      row.querySelector(".table-hours").append(shiftLine);
+    }
     if (normalize(person.status) === "novacek") {
       const newcomerBadge = document.createElement("span");
       newcomerBadge.className = "table-newcomer-badge";
@@ -2633,7 +2642,6 @@ function createCard(person, index = 0) {
   card.setAttribute("aria-label", `Zobrazit detail: ${person.name}`);
   const name = card.querySelector("h3");
   name.textContent = person.name;
-  setupNextShiftTooltip(name, person);
   const email = card.querySelector(".email");
   email.textContent = person.email || "";
   const avatar = card.querySelector(".avatar");
@@ -3438,35 +3446,6 @@ function exportSalesCsv() {
       ];
     }));
   setMessage(`Exportováno ${visibleSalesRows.length} prodejních dní.`);
-}
-
-function setupNextShiftTooltip(nameElement, person) {
-  const shift = nextShiftsByPerson.get(person.id);
-  nameElement.classList.add("shift-name-anchor");
-  nameElement.tabIndex = 0;
-  nameElement.setAttribute("aria-label", shift ? `${person.name}, zobrazit další směnu` : `${person.name}, další směna není naplánována`);
-
-  const tooltip = document.createElement("span");
-  tooltip.className = "next-shift-tooltip";
-  tooltip.setAttribute("role", "tooltip");
-  if (!shift) {
-    tooltip.innerHTML = '<span class="next-shift-label">Další směna</span><strong>Zatím není naplánována</strong>';
-  } else {
-    const date = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long" }).format(shift.date);
-    tooltip.innerHTML = '<span class="next-shift-label">Další směna</span><strong class="next-shift-date"></strong><span class="next-shift-detail"><b class="next-shift-time"></b><i class="next-shift-department"></i></span>';
-    tooltip.querySelector(".next-shift-date").textContent = date;
-    tooltip.querySelector(".next-shift-time").textContent = `${shift.start}–${shift.end}`;
-    tooltip.querySelector(".next-shift-department").textContent = shift.department;
-  }
-  nameElement.append(tooltip);
-  nameElement.addEventListener("click", event => {
-    event.stopPropagation();
-    nameElement.classList.toggle("is-tooltip-open");
-  });
-  nameElement.addEventListener("keydown", event => {
-    if (event.key === "Escape") nameElement.classList.remove("is-tooltip-open");
-  });
-  nameElement.addEventListener("blur", () => nameElement.classList.remove("is-tooltip-open"));
 }
 
 function setupInlineNote(input, person) {
