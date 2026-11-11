@@ -1571,3 +1571,71 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
   #personDialog [data-profile-panel="feedback"] .worker-notes { margin-top: 0; padding-top: 0; border-top: 0; }
 }
 .sales-result:empty { display: none; }
+
+/* ==========================================================================
+   v98 – Prodejní výkon: Dny / Lidé, skupiny po dnech, vyplňování v tabulce
+   ========================================================================== */
+.sales-toolbar { justify-content: flex-start; }
+.sales-toolbar .toolbar-spacer { flex: 1; }
+.sales-kpis[hidden], .sales-no-data[hidden], .sales-trend[hidden], .sales-table-wrap[hidden], .sales-inline-bar[hidden] { display: none; }
+
+.sales-no-data { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; background: color-mix(in srgb, var(--surface) 91%, transparent); border: 1px solid color-mix(in srgb, #d97706 40%, var(--border)); border-radius: 13px; }
+.sales-no-data > div { display: grid; gap: 3px; }
+.sales-no-data strong { font-size: 1rem; }
+.sales-no-data span { color: var(--muted); font-size: .86rem; }
+
+/* Trend */
+.sales-trend { padding: 12px 16px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.sales-trend header { display: flex; align-items: baseline; justify-content: space-between; }
+.sales-trend h3 { margin: 0; font-size: .95rem; }
+.sales-trend header span { color: var(--muted); font-size: .78rem; }
+.sales-trend svg { display: block; max-width: 100%; height: auto; }
+.trend-axis { stroke: var(--border); stroke-width: 1; }
+.trend-bar { fill: color-mix(in srgb, var(--skills-color) 70%, var(--surface)); }
+.trend-bar.is-met { fill: var(--positive); }
+.trend-target { stroke: #d97706; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.trend-target-label { fill: #d97706; font-size: 11px; font-weight: 700; }
+.trend-value { fill: var(--text); font-size: 11px; font-weight: 700; }
+.trend-label { fill: var(--muted); font-size: 11px; }
+
+/* Skupiny po dnech */
+.sales-day-head td { padding: 0 !important; background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface)); }
+.sales-day-head td { display: table-cell; }
+.sales-day-head td > * { vertical-align: middle; }
+.sales-day-toggle { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; background: none; border: 0; color: var(--text); font: inherit; cursor: pointer; }
+.sales-day-toggle i { width: 7px; height: 7px; border-right: 1.8px solid var(--muted); border-bottom: 1.8px solid var(--muted); transform: rotate(-45deg); transition: transform 140ms; }
+.sales-day-head.is-open .sales-day-toggle i { transform: rotate(45deg); }
+.sales-day-toggle strong { font-size: .86rem; }
+.sales-day-toggle span { color: var(--muted); font-size: .78rem; }
+.sales-day-status { display: inline-block; margin-right: 10px; padding: 3px 9px; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.sales-day-status.is-pending { background: color-mix(in srgb, #d97706 14%, transparent); color: var(--warning); }
+.sales-day-status.is-done { background: color-mix(in srgb, var(--positive) 14%, transparent); color: var(--positive); }
+.sales-day-head .sales-row-action { margin: 6px 0; }
+
+/* Vyplňování v řádku */
+.sales-table tr.is-editable td { padding-top: 7px; padding-bottom: 7px; }
+.sales-inline-field { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sales-inline-revenue { display: grid; grid-template-columns: repeat(2, minmax(84px, 1fr)); gap: 6px; max-width: 240px; }
+.sales-inline-input { width: 100%; min-width: 0; height: 32px; padding: 4px 8px; background: var(--input-bg, var(--surface)); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.sales-inline-field .sales-inline-input { width: 64px; }
+.sales-inline-input:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 3px var(--focus); }
+.sales-inline-input::-webkit-inner-spin-button { display: none; }
+.sales-table tr.is-draft td { background: color-mix(in srgb, var(--brand-soft) 50%, transparent); }
+.sales-table tr.is-incomplete .sales-inline-input:placeholder-shown:not([data-field="hours"]) { border-color: color-mix(in srgb, #d97706 70%, var(--border)); }
+.sales-row-action.is-quiet { color: var(--muted); }
+.sales-inline-bar { position: sticky; z-index: 20; bottom: 14px; display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px 12px 10px 16px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 16px 40px rgba(3, 7, 18, .22); }
+.sales-inline-bar span { flex: 1; color: var(--muted); font-size: .84rem; }
+
+/* Lidé */
+.sales-people-table td, .sales-people-table th { white-space: nowrap; }
+.sales-rank { width: 36px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sales-person-link { padding: 0; background: none; border: 0; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.sales-person-link:hover { color: var(--skills-color); text-decoration: underline; }
+.sales-target-meter { display: grid; grid-template-columns: minmax(80px, 140px) 44px; align-items: center; gap: 8px; }
+.sales-target-meter span { position: relative; height: 6px; background: color-mix(in srgb, var(--border) 60%, transparent); border-radius: 999px; overflow: hidden; }
+.sales-target-meter span::after { position: absolute; inset: 0 auto 0 0; width: calc(var(--share) * 100%); background: var(--negative); border-radius: inherit; content: ""; }
+.sales-target-meter span::before { position: absolute; z-index: 1; top: -2px; bottom: -2px; left: calc(100% / 1.5); width: 1.5px; background: var(--text); opacity: .35; content: ""; }
+.sales-target-meter.near span::after { background: #f59e0b; }
+.sales-target-meter.met span::after, .sales-target-meter.excellent span::after { background: var(--positive); }
+.sales-target-meter strong { font-size: .8rem; font-variant-numeric: tabular-nums; text-align: right; }
+.sales-missing-count { color: var(--warning); font-weight: 700; }

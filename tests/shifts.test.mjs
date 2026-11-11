@@ -126,3 +126,12 @@ test("rozsah osy je aspoň 8–20 a zaokrouhlí se na hodiny", () => {
   assert.deepEqual(timelineRange([]), [480, 1200]);
   assert.deepEqual(timelineRange([{ start: 450, end: 1230 }]), [420, 1260]);
 });
+
+test("jméno v obráceném pořadí se spáruje se stejným brigádníkem", async () => {
+  const { buildWorkerLookup } = await import("../logic.mjs");
+  const lookup = buildWorkerLookup([{ id: "a", full_name: "Kolebač Ondřej", external_user_id: "AUTO_X" }, { id: "b", full_name: "Hrubantová Veronika", external_user_id: "U1" }]);
+  assert.equal(lookup("Ondřej Kolebač")?.id, "a");
+  assert.equal(lookup("Veronika Hrubantová")?.id, "b");
+  assert.equal(lookup("Hrubantová Veronika")?.id, "b");
+  assert.equal(lookup("Veronika Nováková"), null);
+});
