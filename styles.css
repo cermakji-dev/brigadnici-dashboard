@@ -1528,3 +1528,46 @@ body.detail-open .app-signature { display: flex; }
   .shifts-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* ==========================================================================
+   v97 – detail brigádníka jako velké okno uprostřed (záložky zůstávají)
+   ========================================================================== */
+#personDialog {
+  position: fixed; inset: 0; z-index: auto;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(780px, calc(100vh - 48px));
+  max-width: none; max-height: none;
+  margin: auto;
+  border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: 0 28px 100px rgba(0, 0, 0, .42);
+}
+#personDialog[open] { animation: dialog-enter 170ms ease-out; }
+#personDialog::backdrop { background: rgba(3, 7, 18, .55); backdrop-filter: blur(3px); }
+#personDialog form { height: 100%; }
+#personDialog .dialog-heading { padding: 20px 28px 14px; }
+#personDialog .profile-stats { margin: 0 28px 14px; }
+#personDialog .profile-tabs { margin-left: 28px; margin-right: 28px; }
+#personDialog .profile-tab-panel { padding: 22px 28px; }
+#personDialog .dialog-actions { padding: 12px 28px; }
+
+/* Přepínání mezi lidmi v záhlaví */
+.profile-nav { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; padding: 2px; border: 1px solid var(--border); border-radius: 10px; }
+.profile-nav[hidden] { display: none; }
+.profile-nav .icon-button { width: 30px; height: 30px; font-size: 1.15rem; line-height: 1; border: 0; }
+.profile-nav .icon-button:disabled { opacity: .3; cursor: default; }
+.profile-position { min-width: 52px; color: var(--muted); font-size: .76rem; font-weight: 650; font-variant-numeric: tabular-nums; text-align: center; }
+
+/* Víc místa = dva sloupce v záložkách */
+@media (min-width: 900px) {
+  /* Přehled: vlevo ukazatele a zaškolení, vpravo nástup a poznámka */
+  #personDialog [data-profile-panel="overview"]:not([hidden]) { display: block; column-count: 2; column-gap: 32px; }
+  #personDialog [data-profile-panel="overview"] > * { break-inside: avoid; margin: 0 0 16px; }
+  #personDialog [data-profile-panel="overview"] > .onboarding-editor { break-before: column; }
+  #personDialog [data-profile-panel="attendance"]:not([hidden]),
+  #personDialog [data-profile-panel="feedback"]:not([hidden]) {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; align-content: start; align-items: start;
+  }
+  #personDialog [data-profile-panel="attendance"] > *, #personDialog [data-profile-panel="feedback"] > * { grid-column: auto; min-width: 0; }
+  #personDialog [data-profile-panel="feedback"] .worker-notes { margin-top: 0; padding-top: 0; border-top: 0; }
+}
+.sales-result:empty { display: none; }

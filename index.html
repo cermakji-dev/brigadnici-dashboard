@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.12.0">
+  <meta name="app-build" content="5.13.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=97">
+    <link rel="stylesheet" href="styles.css?v=98">
 </head>
 <body>
 
@@ -313,7 +313,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v96</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v97</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -327,6 +327,11 @@
           </div>
         </div>
         <div class="profile-heading-actions">
+          <div class="profile-nav" role="group" aria-label="Přepnout brigádníka">
+            <button id="profilePrev" class="icon-button" type="button" aria-label="Předchozí brigádník" title="Předchozí (←)">‹</button>
+            <span id="profilePosition" class="profile-position"></span>
+            <button id="profileNext" class="icon-button" type="button" aria-label="Další brigádník" title="Další (→)">›</button>
+          </div>
           <button id="profileThumbUp" class="profile-thumb positive" type="button" title="Přidat palec nahoru">👍 <span>Pochválit</span></button>
           <button id="profileThumbDown" class="profile-thumb negative" type="button" title="Přidat palec dolů">👎 <span>Výtka</span></button>
           <button class="icon-button" value="cancel" type="submit" aria-label="Zavřít">×</button>
@@ -642,6 +647,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=96"></script>
+  <script type="module" src="app.js?v=97"></script>
 </body>
 </html>

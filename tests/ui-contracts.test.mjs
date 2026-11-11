@@ -84,10 +84,12 @@ test("profil má souhrn v hlavičce a pět záložek", () => {
   }
 });
 
-test("detail je boční panel, seznam zůstává použitelný", () => {
-  assert.match(app, /elements\.dialog\.show\(\)/);
-  assert.doesNotMatch(app, /elements\.dialog\.showModal\(\)/);
-  assert.match(app, /document\.body\.classList\.add\("detail-open"\)/);
+test("detail je velké okno uprostřed se záložkami a přepínáním lidí", () => {
+  assert.match(app, /elements\.dialog\.showModal\(\)/);
+  assert.doesNotMatch(app, /elements\.dialog\.show\(\)/);
+  assert.match(html, /id="profilePrev"/);
+  assert.match(html, /id="profileNext"/);
+  assert.match(app, /function stepPerson\(/);
 });
 
 test("Směny mají přepínač Den / Celý měsíc a měsíční osu", () => {
