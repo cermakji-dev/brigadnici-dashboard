@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts
-} from "./logic.mjs?v=94";
+} from "./logic.mjs?v=95";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -38,9 +38,14 @@ const nextShiftsByPerson = new Map();
 let shiftRows = [];
 let currentMainView = "team";
 let selectedShiftDay = startOfDay(new Date());
+const SHIFTS_MODE_KEY = "brigadnici-shifts-mode";
+let shiftsMode = (() => { try { return localStorage.getItem(SHIFTS_MODE_KEY) === "month" ? "month" : "day"; } catch { return "day"; } })();
+let selectedShiftMonth = new Date(selectedShiftDay.getFullYear(), selectedShiftDay.getMonth(), 1);
+// Hodiny za měsíc ze souhrnu měsíčního listu Google tabulky (attendance_totals).
+const monthAttendanceCache = new Map();
 const MAIN_VIEW_KEY = "brigadnici-main-view";
 let lastSyncRun = null;
-const SHIFT_WINDOW_PAST_DAYS = 62;
+const SHIFT_WINDOW_PAST_MONTHS = 3;
 const SHIFT_WINDOW_FUTURE_DAYS = 45;
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
@@ -136,6 +141,9 @@ const elements = {
   shiftsFreeKpi: document.querySelector("#shiftsFreeKpi"), shiftsFreeCard: document.querySelector("#shiftsFreeCard"),
   shiftsReportsKpi: document.querySelector("#shiftsReportsKpi"), shiftsReportsLabel: document.querySelector("#shiftsReportsLabel"),
   shiftsReportsCard: document.querySelector("#shiftsReportsCard"),
+  shiftsMonth: document.querySelector("#shiftsMonth"), shiftsModeButtons: [...document.querySelectorAll("[data-shifts-mode]")],
+  shiftsPeopleLabel: document.querySelector("#shiftsPeopleLabel"), shiftsHoursLabel: document.querySelector("#shiftsHoursLabel"),
+  shiftsFreeLabel: document.querySelector("#shiftsFreeLabel"),
   bulkSalesButton: document.querySelector("#bulkSalesButton"), bulkSalesDialog: document.querySelector("#bulkSalesDialog"),
   bulkSalesForm: document.querySelector("#bulkSalesForm"), bulkSalesTitle: document.querySelector("#bulkSalesTitle"),
   bulkSalesDate: document.querySelector("#bulkSalesDate"), bulkSalesBody: document.querySelector("#bulkSalesBody"),
@@ -251,8 +259,9 @@ elements.teamViewButton.addEventListener("click", () => setMainView("team"));
 elements.salesViewButton.addEventListener("click", () => setMainView("sales"));
 elements.shiftsViewButton.addEventListener("click", () => setMainView("shifts"));
 elements.shiftsDayChips.forEach(chip => chip.addEventListener("click", () => setShiftDay(addDays(startOfDay(new Date()), Number(chip.dataset.shiftOffset)))));
-elements.shiftsPrevDay.addEventListener("click", () => setShiftDay(addDays(selectedShiftDay, -1)));
-elements.shiftsNextDay.addEventListener("click", () => setShiftDay(addDays(selectedShiftDay, 1)));
+elements.shiftsPrevDay.addEventListener("click", () => shiftsMode === "month" ? setShiftMonth(-1) : setShiftDay(addDays(selectedShiftDay, -1)));
+elements.shiftsNextDay.addEventListener("click", () => shiftsMode === "month" ? setShiftMonth(1) : setShiftDay(addDays(selectedShiftDay, 1)));
+elements.shiftsModeButtons.forEach(button => button.addEventListener("click", () => setShiftsMode(button.dataset.shiftsMode)));
 elements.shiftsDateInput.addEventListener("change", () => { if (elements.shiftsDateInput.value) setShiftDay(parseDateKey(elements.shiftsDateInput.value)); });
 elements.bulkSalesButton.addEventListener("click", () => openBulkSales());
 elements.bulkSalesDate.addEventListener("change", () => renderBulkSalesRows(elements.bulkSalesDate.value));
@@ -1061,12 +1070,13 @@ async function loadRemoteState() {
     scoped(supabaseClient.from("worker_onboarding").select("worker_id, training_completed, contracts_completed, taxes_completed, updated_by_email, updated_at")),
     fetchAllRows(() => supabaseClient.from("shifts")
       .select("shift_date, start_minutes, end_minutes, department, column_index, raw_name, worker_id, is_free")
-      .gte("shift_date", dateKey(addDays(today, -SHIFT_WINDOW_PAST_DAYS)))
+      .gte("shift_date", dateKey(shiftWindowStart(today)))
       .lte("shift_date", dateKey(addDays(today, SHIFT_WINDOW_FUTURE_DAYS)))
       .order("shift_date").order("start_minutes").order("id")),
     supabaseClient.from("sheets_sync_runs").select("status, sheet_name, finished_at, planned_hours, details")
       .eq("status", "success").order("finished_at", { ascending: false }).limit(1).maybeSingle()
   ]);
+  monthAttendanceCache.clear();
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
   workerNotesTableAvailable = !workerNotesResult.error;
@@ -2372,6 +2382,27 @@ function createCard(person, index = 0) {
 // ---------------------------------------------------------------------------
 function setShiftDay(date) {
   selectedShiftDay = startOfDay(date);
+  selectedShiftMonth = new Date(selectedShiftDay.getFullYear(), selectedShiftDay.getMonth(), 1);
+  renderShiftsDashboard();
+}
+
+function shiftWindowStart(today) {
+  return new Date(today.getFullYear(), today.getMonth() - SHIFT_WINDOW_PAST_MONTHS, 1);
+}
+
+function setShiftsMode(mode) {
+  shiftsMode = mode === "month" ? "month" : "day";
+  try { localStorage.setItem(SHIFTS_MODE_KEY, shiftsMode); } catch { /* jen pohodlí */ }
+  renderShiftsDashboard();
+}
+
+function setShiftMonth(step) {
+  const today = startOfDay(new Date());
+  const min = shiftWindowStart(today);
+  const max = addDays(today, SHIFT_WINDOW_FUTURE_DAYS);
+  const next = new Date(selectedShiftMonth.getFullYear(), selectedShiftMonth.getMonth() + step, 1);
+  if (next < new Date(min.getFullYear(), min.getMonth(), 1) || next > max) return;
+  selectedShiftMonth = next;
   renderShiftsDashboard();
 }
 
@@ -2398,6 +2429,20 @@ function renderShiftsBadge() {
 function renderShiftsDashboard() {
   renderShiftsBadge();
   if (elements.shiftsDashboard.hidden) return;
+  const monthMode = shiftsMode === "month";
+  elements.shiftsDashboard.classList.toggle("is-month", monthMode);
+  elements.shiftsModeButtons.forEach(button => {
+    const active = button.dataset.shiftsMode === shiftsMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.shiftsPrevDay.setAttribute("aria-label", monthMode ? "Předchozí měsíc" : "Předchozí den");
+  elements.shiftsNextDay.setAttribute("aria-label", monthMode ? "Další měsíc" : "Další den");
+  elements.shiftsDayChips.forEach(chip => { chip.hidden = monthMode; });
+  elements.shiftsDateInput.hidden = monthMode;
+  elements.shiftsMonth.hidden = !monthMode;
+  if (monthMode) { renderShiftsMonth(); return; }
+  setShiftsSummaryLabels(false);
   const day = selectedShiftDay;
   const key = dateKey(day);
   const todayKey = dateKey(startOfDay(new Date()));
@@ -2433,6 +2478,213 @@ function renderShiftsDashboard() {
 
   elements.shiftsEmpty.hidden = dayShifts.length > 0;
   renderShiftsTimeline(blocks, key === todayKey);
+}
+
+function setShiftsSummaryLabels(month) {
+  elements.shiftsPeopleLabel.textContent = month ? "lidí v rozpisu" : "lidí na směně";
+  elements.shiftsHoursLabel.textContent = "obsazeno";
+  if (!month) {
+    elements.shiftsFreeLabel.textContent = "volných";
+    elements.shiftsPrevDay.disabled = false;
+    elements.shiftsNextDay.disabled = false;
+  }
+}
+
+const MONTH_NAMES_CS = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+
+async function loadMonthAttendance(period) {
+  if (monthAttendanceCache.has(period)) return monthAttendanceCache.get(period);
+  const { data, error } = await supabaseClient.from("attendance_totals").select("worker_id, hours").eq("period", period);
+  const rows = error ? null : (data || []).map(row => ({ workerId: row.worker_id, hours: Number(row.hours) || 0 }));
+  if (rows) monthAttendanceCache.set(period, rows);
+  return rows;
+}
+
+// Celý měsíc: řádek pro každý den, vodorovně hodiny. Sytost buňky = kolik lidí
+// v tu hodinu pracuje, šrafování = volná směna. Klik na den otevře jeho detail.
+function renderShiftsMonth() {
+  setShiftsSummaryLabels(true);
+  const month = selectedShiftMonth;
+  const year = month.getFullYear();
+  const prefix = `${year}-${String(month.getMonth() + 1).padStart(2, "0")}`;
+  const period = `${prefix}-01`;
+  const todayKey = dateKey(startOfDay(new Date()));
+  const monthName = MONTH_NAMES_CS[month.getMonth()];
+  elements.shiftsDayTitle.textContent = `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${year}`;
+  const today = startOfDay(new Date());
+  const minMonth = shiftWindowStart(today);
+  elements.shiftsPrevDay.disabled = month <= minMonth;
+  elements.shiftsNextDay.disabled = new Date(year, month.getMonth() + 1, 1) > addDays(today, SHIFT_WINDOW_FUTURE_DAYS);
+
+  const monthShifts = shiftRows.filter(shift => shift.date.startsWith(prefix));
+  const blocks = mergeShiftBlocks(monthShifts);
+  const work = blocks.filter(block => !block.free);
+  const free = blocks.filter(block => block.free);
+  const workedHours = work.reduce((sum, block) => sum + block.hours, 0);
+  const freeHours = free.reduce((sum, block) => sum + block.hours, 0);
+  const people = new Set(work.map(block => block.workerId || `n:${normalize(block.name)}`));
+  elements.shiftsPeopleKpi.textContent = people.size;
+  elements.shiftsHoursKpi.textContent = `${formatNumber(workedHours)} h`;
+  elements.shiftsFreeKpi.textContent = `${formatNumber(freeHours)} h`;
+  elements.shiftsFreeLabel.textContent = free.length ? `volných · ${free.length} ${free.length === 1 ? "směna" : free.length < 5 ? "směny" : "směn"}` : "volných";
+  elements.shiftsFreeCard.classList.toggle("attention", free.some(block => block.date >= todayKey));
+  const total = workedHours + freeHours;
+  elements.shiftsReportsKpi.textContent = total ? `${Math.round(workedHours / total * 100)} %` : "—";
+  elements.shiftsReportsLabel.textContent = "obsazení";
+  elements.shiftsReportsCard.classList.remove("attention");
+  const lastSync = state.lastImport ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(state.lastImport)) : null;
+  elements.shiftsDaySubtitle.textContent = monthShifts.length && lastSync ? `Rozpis načten v ${lastSync}` : "";
+  elements.shiftsAttention.replaceChildren();
+  elements.shiftsAttention.hidden = true;
+  elements.shiftsBoard.replaceChildren();
+  elements.shiftsBoard.hidden = true;
+  elements.shiftsEmpty.hidden = monthShifts.length > 0;
+  if (!monthShifts.length) { elements.shiftsMonth.replaceChildren(); elements.shiftsMonth.hidden = true; return; }
+  elements.shiftsMonth.hidden = false;
+
+  const [from, to] = timelineRange(blocks);
+  const hours = Array.from({ length: (to - from) / 60 }, (_, index) => from + index * 60);
+  const byDay = new Map();
+  blocks.forEach(block => { if (!byDay.has(block.date)) byDay.set(block.date, []); byDay.get(block.date).push(block); });
+  const cellStats = dayBlocks => hours.map(start => {
+    const end = start + 60;
+    const inHour = dayBlocks.filter(block => block.start < end && block.end > start);
+    return {
+      start,
+      people: new Set(inHour.filter(block => !block.free).map(block => block.workerId || block.name)).size,
+      free: inHour.filter(block => block.free).length
+    };
+  });
+  const allCells = [...byDay.values()].flatMap(cellStats);
+  const maxPeople = Math.max(1, ...allCells.map(cell => cell.people));
+
+  const timeline = document.createElement("div");
+  timeline.className = "month-timeline";
+  timeline.style.setProperty("--month-hours", hours.length);
+  const head = document.createElement("div");
+  head.className = "month-row month-head";
+  const headDay = document.createElement("span");
+  headDay.textContent = "Den";
+  const headHours = document.createElement("div");
+  headHours.className = "month-cells";
+  hours.forEach(start => {
+    const tick = document.createElement("span");
+    tick.textContent = start / 60;
+    headHours.append(tick);
+  });
+  const headPeople = document.createElement("span");
+  headPeople.textContent = "Lidé";
+  const headWorked = document.createElement("span");
+  headWorked.textContent = "Hodiny";
+  const headFree = document.createElement("span");
+  headFree.textContent = "Volno";
+  head.append(headDay, headHours, headPeople, headWorked, headFree);
+  timeline.append(head);
+
+  const daysInMonth = new Date(year, month.getMonth() + 1, 0).getDate();
+  for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
+    const date = new Date(year, month.getMonth(), dayNumber);
+    const key = dateKey(date);
+    const dayBlocks = byDay.get(key) || [];
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "month-row month-day";
+    const weekday = date.getDay();
+    row.classList.toggle("is-weekend", weekday === 0 || weekday === 6);
+    row.classList.toggle("is-today", key === todayKey);
+    row.classList.toggle("is-past", key < todayKey);
+    row.classList.toggle("is-empty", !dayBlocks.length);
+    const label = document.createElement("span");
+    label.className = "month-day-label";
+    const weekdayLabel = new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(date);
+    label.innerHTML = "<small></small><strong></strong>";
+    label.querySelector("small").textContent = weekdayLabel;
+    label.querySelector("strong").textContent = `${dayNumber}.`;
+    const cells = document.createElement("div");
+    cells.className = "month-cells";
+    const dayWork = dayBlocks.filter(block => !block.free);
+    const dayFree = dayBlocks.filter(block => block.free);
+    if (dayBlocks.length) {
+      cellStats(dayBlocks).forEach(cell => {
+        const element = document.createElement("span");
+        element.className = "month-cell";
+        if (cell.people) element.style.setProperty("--fill", (0.18 + 0.82 * cell.people / maxPeople).toFixed(2));
+        element.classList.toggle("has-people", cell.people > 0);
+        element.classList.toggle("has-free", cell.free > 0);
+        element.title = `${formatClock(cell.start)}–${formatClock(cell.start + 60)} · ${cell.people} ${cell.people === 1 ? "člověk" : cell.people >= 2 && cell.people <= 4 ? "lidé" : "lidí"}${cell.free ? ` · ${cell.free} volná` : ""}`;
+        cells.append(element);
+      });
+    } else {
+      const note = document.createElement("span");
+      note.className = "month-day-note";
+      note.textContent = "Bez směn v rozpisu";
+      cells.append(note);
+    }
+    const peopleCount = document.createElement("span");
+    peopleCount.textContent = dayWork.length ? new Set(dayWork.map(block => block.workerId || block.name)).size : "–";
+    const worked = document.createElement("span");
+    const dayHours = dayWork.reduce((sum, block) => sum + block.hours, 0);
+    worked.textContent = dayHours ? `${formatNumber(dayHours)} h` : "–";
+    const freeCell = document.createElement("span");
+    const dayFreeHours = dayFree.reduce((sum, block) => sum + block.hours, 0);
+    freeCell.textContent = dayFreeHours ? `${formatNumber(dayFreeHours)} h` : "–";
+    freeCell.classList.toggle("is-free", dayFreeHours > 0);
+    row.append(label, cells, peopleCount, worked, freeCell);
+    row.setAttribute("aria-label", `${weekdayLabel} ${dayNumber}. – otevřít rozpis dne`);
+    row.addEventListener("click", () => { selectedShiftDay = date; setShiftsMode("day"); });
+    timeline.append(row);
+  }
+
+  const peopleCard = document.createElement("section");
+  peopleCard.className = "month-people";
+  const header = document.createElement("header");
+  const title = document.createElement("h3");
+  title.textContent = "Hodiny v měsíci";
+  const source = document.createElement("span");
+  source.textContent = "podle Google tabulky";
+  header.append(title, source);
+  const list = document.createElement("ol");
+  list.className = "month-people-list";
+  peopleCard.append(header, list);
+  const legend = document.createElement("p");
+  legend.className = "month-legend";
+  legend.innerHTML = '<span class="legend-fill"></span>čím sytější, tím víc lidí <span class="legend-free"></span>volná směna';
+  elements.shiftsMonth.replaceChildren(legend, timeline, peopleCard);
+
+  const rosterHours = new Map();
+  work.forEach(block => { if (block.workerId) rosterHours.set(block.workerId, (rosterHours.get(block.workerId) || 0) + block.hours); });
+  const renderPeople = attendance => {
+    if (selectedShiftMonth !== month || shiftsMode !== "month") return;
+    const totals = new Map();
+    (attendance || []).forEach(row => { if (row.hours > 0) totals.set(row.workerId, row.hours); });
+    const fromSheet = totals.size > 0;
+    if (!fromSheet) rosterHours.forEach((value, id) => totals.set(id, value));
+    source.textContent = fromSheet ? "podle Google tabulky" : "podle rozpisu směn";
+    const items = [...totals].map(([id, value]) => ({ person: personByRemoteId(id), hours: value }))
+      .filter(item => item.person)
+      .sort((a, b) => b.hours - a.hours || a.person.name.localeCompare(b.person.name, "cs"));
+    const max = Math.max(1, ...items.map(item => item.hours));
+    list.replaceChildren(...items.map(item => {
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      const name = document.createElement("span");
+      name.className = "month-person-name";
+      name.textContent = item.person.name;
+      const bar = document.createElement("span");
+      bar.className = "month-person-bar";
+      bar.style.setProperty("--share", (item.hours / max).toFixed(3));
+      const value = document.createElement("strong");
+      value.textContent = `${formatNumber(item.hours)} h`;
+      button.append(name, bar, value);
+      button.addEventListener("click", () => openPerson(item.person.id));
+      li.append(button);
+      return li;
+    }));
+    peopleCard.hidden = items.length === 0;
+  };
+  renderPeople(monthAttendanceCache.get(period) || null);
+  loadMonthAttendance(period).then(renderPeople).catch(() => {});
 }
 
 // Časová osa dne: řádek pro každé oddělení, vodorovně hodiny, směny jako pruhy.
