@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.14.0">
+  <meta name="app-build" content="5.16.1">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=99">
+    <link rel="stylesheet" href="styles.css?v=103">
 </head>
 <body>
 
@@ -299,7 +299,7 @@
         <span class="toolbar-spacer"></span>
         <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
         <select id="salesPersonFilter" aria-label="Brigádník"><option value="all">Všichni brigádníci</option></select>
-        <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
+        <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="planned">Naplánováno</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
         <button id="bulkSalesButton" class="toolbar-action toolbar-action-primary" type="button" title="Vyplnit reporty všech brigádníků za jeden den">Vyplnit den</button>
         <button id="exportSalesButton" class="toolbar-action" type="button" title="Stáhnout zobrazené řádky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
       </div>
@@ -329,7 +329,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v98</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v102</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -654,15 +654,13 @@
         </div>
         <div class="card-footer-actions">
           <button class="card-link add-note-button" type="button">+ Poznámka</button>
-          <button class="card-link sales-card-button" type="button"><span class="sales-card-status"></span></button>
         </div>
       </div>
     </article>
   </template>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=98"></script>
+  <script type="module" src="app.js?v=102"></script>
 </body>
 </html>

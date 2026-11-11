@@ -99,3 +99,9 @@ test("Směny mají přepínač Den / Celý měsíc a měsíční osu", () => {
   assert.match(app, /function renderShiftsMonth\(/);
   assert.match(app, /from\("attendance_totals"\)\.select\("worker_id, hours"\)\.eq\("period", period\)/);
 });
+
+test("knihovna pro Excel se načítá až při ručním importu, Supabase má pevnou verzi", () => {
+  assert.doesNotMatch(html, /xlsx\.full\.min\.js/);
+  assert.match(app, /function ensureXlsx\(/);
+  assert.match(html, /supabase-js@\d+\.\d+\.\d+/);
+});

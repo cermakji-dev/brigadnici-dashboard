@@ -199,3 +199,23 @@ test("prodeje po týdnech začínají pondělím", async () => {
   ]);
   assert.deepEqual(weeks.map(week => [week.week, week.asr]), [["2026-11-02", 6500], ["2026-11-09", 5000]]);
 });
+
+test("budoucí naplánované reporty se nepočítají jako chybějící", async () => {
+  const { salesByPerson } = await import("../logic.mjs");
+  const [row] = salesByPerson([
+    { workerId: "a", date: "2026-11-10", status: "pending" },
+    { workerId: "a", date: "2026-11-11", status: "pending" },
+    { workerId: "a", date: "2026-11-13", status: "pending" }
+  ], "2026-11-11");
+  assert.equal(row.missing, 1);
+  assert.equal(row.planned, 1);
+  assert.equal(row.days, 2);
+});
+
+test("značky z rozpisu psané velkými písmeny nejsou brigádníci", () => {
+  assert.equal(isLikelyWorkerName("STÁTNÍ SVÁTEK"), false);
+  assert.equal(isLikelyWorkerName("NEPRODEJNÍ STÁTNÍ SVÁTEK"), false);
+  assert.equal(isLikelyWorkerName("Státní svátek"), false);
+  assert.equal(isLikelyWorkerName("Ho Vít"), true);
+  assert.equal(isLikelyWorkerName("Patejdl Štěpán Václav"), true);
+});
