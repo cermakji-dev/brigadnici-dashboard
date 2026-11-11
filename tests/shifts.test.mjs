@@ -135,3 +135,49 @@ test("jméno v obráceném pořadí se spáruje se stejným brigádníkem", asyn
   assert.equal(lookup("Hrubantová Veronika")?.id, "b");
   assert.equal(lookup("Veronika Nováková"), null);
 });
+
+test("hodiny za měsíc se počítají z rozpisu pro každého, i se jménem obráceně", async () => {
+  const { monthlyRosterHours, buildWorkerLookup } = await import("../logic.mjs");
+  const lookup = buildWorkerLookup([{ id: "k", full_name: "Kolebač Ondřej" }, { id: "l", full_name: "Lískovcová Lucie" }]);
+  const matrix = [
+    ["", 46327],
+    ["Určení:", "Výdej", "Prodej"],
+    ["8-9 h", "Ondřej Kolebač", "Lískovcová Lucie"],
+    ["9-10 h", "Kolebač Ondřej", "VOLNÁ SMĚNA"],
+    ["Celkem hod.:", 4],
+    ["", 46357],
+    ["Určení:", "Výdej"],
+    ["8-9 h", "Kolebač Ondřej"],
+    ["Celkem hod.:", 1]
+  ];
+  const result = monthlyRosterHours(matrix, "2026-11-01", lookup);
+  assert.equal(result.hours.get("k"), 2);
+  assert.equal(result.hours.get("l"), 1);
+  assert.equal(result.free, 1);
+  assert.equal(result.planned, 4);
+});
+
+test("seznam aktivních se čte ze sloupce Jméno v souhrnu listu", async () => {
+  const { summaryNames } = await import("../logic.mjs");
+  const matrix = [
+    ["", 46327, "", "", "", "", "", "", "", "", "", "Jméno", "Počet zapsaných hodin"],
+    ["Určení:", "Výdej", "", "", "", "", "", "", "", "", "", "Barát Štefan", 0],
+    ["8-9 h", "Bihary Jakub", "", "", "", "", "", "", "", "", "", "Bihary Jakub", 11],
+    ["", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", "", "", "", "", "Počet volných směn", 50]
+  ];
+  assert.deepEqual(summaryNames(matrix), ["Barát Štefan", "Bihary Jakub"]);
+  assert.equal(summaryNames([["nic"]]), null);
+});
+
+test("zkrácené jméno se spáruje, jen když je jednoznačné", async () => {
+  const { buildWorkerLookup } = await import("../logic.mjs");
+  const lookup = buildWorkerLookup([
+    { id: "f", full_name: "Four Mediene Abdelkader" },
+    { id: "p", full_name: "Patejdl Štěpán Václav" },
+    { id: "a", full_name: "Novák Jan Petr" }, { id: "b", full_name: "Novák Jan Pavel" }
+  ]);
+  assert.equal(lookup("Four Mediene")?.id, "f");
+  assert.equal(lookup("Patejdl Štěpán")?.id, "p");
+  assert.equal(lookup("Novák Jan"), null);
+});

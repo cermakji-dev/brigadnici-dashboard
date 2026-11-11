@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=102";
+} from "./logic.mjs?v=103";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2083,12 +2083,10 @@ function setTopbarMenuOpen(open) {
   if (open) elements.topbarMenu.querySelector("[role=menuitem]")?.focus();
 }
 
-function isPersonInSelectedMonth(person) {
-  if (!monthRosterKnown) return true;
-  // Nováček přidaný ručně ještě nemusí mít směnu v rozpisu, ale jeho nástup
-  // je potřeba dotáhnout, proto zůstává v přehledu viditelný.
-  if (isNewcomer(person)) return true;
-  return monthRosterPersonIds.has(person.id) || (person.remoteId && monthRosterRemoteIds.has(person.remoteId));
+// Přehled ukazuje celý aktivní tým (workers.active). Kdo je aktivní, se
+// spravuje mimo rozpis, proto se nefiltruje podle směn v měsíci.
+function isPersonInSelectedMonth() {
+  return true;
 }
 
 function previousAuditValue(person, field) {
