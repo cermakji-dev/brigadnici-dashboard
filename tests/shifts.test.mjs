@@ -156,3 +156,28 @@ test("hodiny za měsíc se počítají z rozpisu pro každého, i se jménem obr
   assert.equal(result.free, 1);
   assert.equal(result.planned, 4);
 });
+
+test("seznam aktivních se čte ze sloupce Jméno v souhrnu listu", async () => {
+  const { summaryNames } = await import("../logic.mjs");
+  const matrix = [
+    ["", 46327, "", "", "", "", "", "", "", "", "", "Jméno", "Počet zapsaných hodin"],
+    ["Určení:", "Výdej", "", "", "", "", "", "", "", "", "", "Barát Štefan", 0],
+    ["8-9 h", "Bihary Jakub", "", "", "", "", "", "", "", "", "", "Bihary Jakub", 11],
+    ["", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", "", "", "", "", "Počet volných směn", 50]
+  ];
+  assert.deepEqual(summaryNames(matrix), ["Barát Štefan", "Bihary Jakub"]);
+  assert.equal(summaryNames([["nic"]]), null);
+});
+
+test("zkrácené jméno se spáruje, jen když je jednoznačné", async () => {
+  const { buildWorkerLookup } = await import("../logic.mjs");
+  const lookup = buildWorkerLookup([
+    { id: "f", full_name: "Four Mediene Abdelkader" },
+    { id: "p", full_name: "Patejdl Štěpán Václav" },
+    { id: "a", full_name: "Novák Jan Petr" }, { id: "b", full_name: "Novák Jan Pavel" }
+  ]);
+  assert.equal(lookup("Four Mediene")?.id, "f");
+  assert.equal(lookup("Patejdl Štěpán")?.id, "p");
+  assert.equal(lookup("Novák Jan"), null);
+});

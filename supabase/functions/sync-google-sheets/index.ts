@@ -6,8 +6,8 @@
 // (attendance_totals; ruční souhrn „Jméno / Počet zapsaných hodin“ v tabulce
 // měl chybné rozsahy a chyběla v něm jména), rozpis směn od 1. dne měsíce před
 // třemi měsíci do +45 dní (shifts), prodejní reporty pro naplánované prodejní
-// směny (sales_days) a neaktivní karty pro neznámá jména z rozpisu (workers) –
-// aktivní tým se spravuje jinde.
+// směny (sales_days) a aktivní tým (workers.active) = seznam „Jméno“ v souhrnu
+// aktuálního měsíčního listu; neznámá jména z rozpisu dostanou neaktivní kartu.
 //
 // Nasazení: supabase functions deploy sync-google-sheets --no-verify-jwt
 // (logic.mjs v této složce jen re-exportuje ../../../logic.mjs).
@@ -15,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.53.0";
 import * as XLSX from "npm:xlsx@0.18.5";
 import {
   addDays, automaticWorkerId, buildShiftRows, buildWorkerLookup, dateKey, firstDayOfMonth, isLikelyWorkerName,
-  monthlyRosterHours, normalizeText, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell
+  monthlyRosterHours, normalizeText, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell, summaryNames
 } from "./logic.mjs";
 
 const SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
@@ -95,8 +95,48 @@ Deno.serve(async request => {
     const workers = workerRows as Worker[];
     let lookup = buildWorkerLookup(workers);
 
-    // Neznámá jména z rozpisu aktuálního měsíce dostanou kartu (neaktivní –
-    // aktivní tým se spravuje jinde, karta slouží k přiřazení hodin a směn).
+    // Aktivní tým = seznam „Jméno“ v souhrnu aktuálního listu. Nová jména
+    // v seznamu dostanou aktivní kartu, kdo ze seznamu zmizel, je neaktivní.
+    // Pojistka: s podezřele krátkým seznamem (nový list, chyba) se nic nemění.
+    const listNames = summaryNames(currentMatrix) ?? [];
+    const listApplied = listNames.length >= 5;
+    const listCreated: string[] = [];
+    const activated: string[] = [];
+    const deactivated: string[] = [];
+    if (listApplied) {
+      for (const name of listNames) {
+        if (lookup(name) || dryRun) { if (!lookup(name)) listCreated.push(name); continue; }
+        const { data, error } = await supabase.from("workers").upsert({
+          external_user_id: automaticWorkerId(name), full_name: name, role: "Sales Support", status: "Nováček",
+          active: true, skills: 0, reliability: 100, departments: [], aliases: [], notes: ""
+        }, { onConflict: "external_user_id" }).select("id, external_user_id, full_name, aliases, active").single();
+        if (error) throw error;
+        workers.push(data as Worker);
+        listCreated.push(name);
+        await supabase.from("worker_onboarding").upsert({ worker_id: data.id, training_completed: false, contracts_completed: false, taxes_completed: false }, { onConflict: "worker_id", ignoreDuplicates: true });
+        lookup = buildWorkerLookup(workers);
+      }
+      const activeIds = new Set(listNames.map(name => (lookup(name) as Worker | null)?.id).filter(Boolean) as string[]);
+      const toActivate = workers.filter(worker => activeIds.has(worker.id) && !worker.active);
+      const toDeactivate = workers.filter(worker => !activeIds.has(worker.id) && worker.active);
+      activated.push(...toActivate.map(worker => worker.full_name));
+      deactivated.push(...toDeactivate.map(worker => worker.full_name));
+      if (!dryRun) {
+        if (toActivate.length) {
+          const { error } = await supabase.from("workers").update({ active: true }).in("id", toActivate.map(worker => worker.id));
+          if (error) throw error;
+        }
+        if (toDeactivate.length) {
+          const { error } = await supabase.from("workers").update({ active: false }).in("id", toDeactivate.map(worker => worker.id));
+          if (error) throw error;
+        }
+        toActivate.forEach(worker => { worker.active = true; });
+        toDeactivate.forEach(worker => { worker.active = false; });
+      }
+    }
+
+    // Neznámá jména z rozpisu (mimo seznam) dostanou neaktivní kartu, aby se
+    // jim přiřadily hodiny a směny.
     const candidates = new Map<string, string>();
     forEachShiftCell(currentMatrix, ({ text }) => {
       resolveShiftCell(text, lookup).forEach(entry => {
@@ -199,7 +239,7 @@ Deno.serve(async request => {
     }
 
     const totalHours = [...attendance.values()].reduce((sum, hours) => sum + hours, 0);
-    const details = { shifts_hash: shiftsHash, shifts_written: !shiftsUnchanged, months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
+    const details = { team_list: listNames.length, team_list_applied: listApplied, team_created: listCreated, team_activated: activated, team_deactivated: deactivated, shifts_hash: shiftsHash, shifts_written: !shiftsUnchanged, months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
     const result = { status: dryRun ? "dry_run" : "success", period, sheet: sheetName, seen: summary.length, changed: changed.filter(row => row.period === period).length, created: dryRun ? [...candidates.values()] : created, totalHours, plannedHours, ...details,
       sample: dryRun ? shifts.filter(row => row.date >= todayKey).slice(0, 15) : undefined };
     if (runId) {

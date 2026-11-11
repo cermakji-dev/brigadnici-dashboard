@@ -442,7 +442,17 @@ export const buildWorkerLookup = workers => {
         if (tokens && !byTokens.has(tokens)) byTokens.set(tokens, worker);
       });
     });
-  return name => byName.get(slugFromName(name)) || byTokens.get(nameTokensKey(name)) || null;
+  // Zkrácené jméno („Four Mediene“ = „Four Mediene Abdelkader“): všechna slova
+  // musí být ve jméně právě jednoho brigádníka.
+  const tokenSets = [...new Map(workers.map(worker => [worker.id ?? worker.full_name, worker])).values()]
+    .map(worker => ({ worker, tokens: new Set([worker.full_name ?? worker.name, ...(worker.aliases || [])].flatMap(name => slugFromName(name).split("-")).filter(Boolean)) }));
+  const bySubset = name => {
+    const parts = slugFromName(name).split("-").filter(Boolean);
+    if (parts.length < 2) return null;
+    const matches = tokenSets.filter(item => parts.every(part => item.tokens.has(part)));
+    return matches.length === 1 ? matches[0].worker : null;
+  };
+  return name => byName.get(slugFromName(name)) || byTokens.get(nameTokensKey(name)) || bySubset(name) || null;
 };
 
 // Rozložení bloků v řádku časové osy: překrývající se bloky dostanou
@@ -529,4 +539,25 @@ export const monthlyRosterHours = (matrix, periodKey, lookup) => {
   hours.forEach((value, key) => hours.set(key, roundHours(value)));
   const occupied = roundHours([...hours.values()].reduce((sum, value) => sum + value, 0) + unmatched);
   return { hours, occupied, free: roundHours(free), planned: roundHours(occupied + free) };
+};
+
+// Seznam aktivních brigádníků = sloupec „Jméno“ v souhrnu měsíčního listu
+// (vedle „Počet zapsaných hodin“). Mění se podle nástupů a výpovědí.
+const SUMMARY_STOP = ["pocet volnych smen", "pocet obsazenych smen", "% obsazeni", "planovane hodiny", "z toho log (obsazene)"];
+export const summaryNames = matrix => {
+  for (let headerRow = 0; headerRow < Math.min(matrix.length, 12); headerRow += 1) {
+    const cells = (matrix[headerRow] || []).map(normalizeText);
+    const nameColumn = cells.findIndex(cell => ["jmeno", "brigadnik", "name"].includes(cell));
+    const hoursColumn = cells.findIndex(cell => ["pocet zapsanych hodin", "pocet hodin", "hodiny", "hours"].includes(cell));
+    if (nameColumn < 0 || hoursColumn < 0) continue;
+    const names = [];
+    for (let index = headerRow + 1; index < matrix.length; index += 1) {
+      const name = String(matrix[index]?.[nameColumn] ?? "").trim();
+      if (!name) continue;
+      if (SUMMARY_STOP.includes(normalizeText(name))) break;
+      if (isLikelyWorkerName(name)) names.push(name);
+    }
+    return names;
+  }
+  return null;
 };
