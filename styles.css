@@ -1650,3 +1650,13 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
 /* Bez náběhové animace karet a řádků: při každém překreslení (filtr, obnovení
    dat) karty jinak na chvíli zprůhlednily a vypadaly „vybledle“. */
 .person-card, .people-table tbody tr { animation: none !important; }
+
+/* v101 – prodejní reporty připravené dopředu */
+.sales-result.planned { background: color-mix(in srgb, var(--skills-color) 12%, transparent); color: var(--skills-color); }
+:root[data-theme="dark"] .sales-result.planned { color: #93c5fd; }
+.sales-day-status.is-planned { background: color-mix(in srgb, var(--skills-color) 12%, transparent); color: var(--skills-color); }
+:root[data-theme="dark"] .sales-day-status.is-planned { color: #93c5fd; }
+.sales-day-status.is-today { background: color-mix(in srgb, var(--brand-purple) 16%, transparent); color: var(--brand-purple); }
+:root[data-theme="dark"] .sales-day-status.is-today { color: #c4b5fd; }
+.sales-result.today { background: color-mix(in srgb, var(--brand-purple) 14%, transparent); color: var(--brand-purple); }
+:root[data-theme="dark"] .sales-result.today { color: #c4b5fd; }

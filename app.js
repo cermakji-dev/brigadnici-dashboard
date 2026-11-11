@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=100";
+} from "./logic.mjs?v=101";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -1369,12 +1369,11 @@ async function syncSalesExpectations(workbook) {
   if (!salesDaysTableAvailable || !supabaseClient) return;
   const totals = new Map();
   const scannedDates = new Set();
-  const today = startOfDay(new Date());
   workbook.SheetNames.forEach(sheetName => {
     forEachShiftCell(sheetMatrix(workbook.Sheets[sheetName]), ({ date, slot, text, assignment }) => {
-      // Upozornění vzniká až po skončení dne. Dnešní směna ještě nemusí být
-      // dokončená a její report tedy nemá být označený jako chybějící.
-      if (!date || date >= today) return;
+      // Report se zakládá i pro budoucí směny (připravený dopředu);
+      // za chybějící se považuje až po skončení dne.
+      if (!date) return;
       scannedDates.add(dateKey(date));
       // Popisky v tabulce obsahují šipky a více variant názvu, například
       // „↓ Prodej ↓“, „Prodej / Výdej“ nebo „Prodej (Lenovo)“.
@@ -2145,7 +2144,9 @@ function renderSalesDashboard() {
     && (selectedPerson === "all" || day.workerId === selectedPerson));
   let rows = [...periodRows];
   const status = elements.salesStatusFilter.value;
-  if (status === "pending") rows = rows.filter(day => day.status === "pending");
+  const filterTodayKey = dateKey(now);
+  if (status === "pending") rows = rows.filter(day => day.status === "pending" && day.date < filterTodayKey);
+  if (status === "planned") rows = rows.filter(day => day.status === "pending" && day.date >= filterTodayKey);
   if (status === "not_sales") rows = rows.filter(day => day.status === "not_sales");
   if (status === "below") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) < 100);
   if (status === "met") rows = rows.filter(day => day.status === "reported" && salesTargetPercent(day) >= 100);
@@ -2219,8 +2220,11 @@ function renderSalesDays(rows) {
 
 function isSalesDayOpen(date, rows) {
   if (salesDayOpen.has(date)) return salesDayOpen.get(date);
-  // Výchozí stav: dny s chybějícím reportem rozbalené, hotové sbalené.
-  return rows.some(day => day.date === date && day.status === "pending");
+  // Výchozí stav: rozbalené jsou dny k vyplnění (dnes a dřív s chybějícím
+  // reportem) a zítřek; hotové a vzdálenější budoucí dny jsou sbalené.
+  const todayKey = dateKey(new Date());
+  if (date === dateKey(addDays(startOfDay(new Date()), 1))) return true;
+  return date <= todayKey && rows.some(day => day.date === date && day.status === "pending");
 }
 
 function createSalesDayHeader(date, dayRows, todayKey) {
@@ -2244,10 +2248,11 @@ function createSalesDayHeader(date, dayRows, todayKey) {
   toggle.querySelector("span").textContent = parts.join(" · ");
   toggle.addEventListener("click", () => { salesDayOpen.set(date, !open); renderSalesDashboard(); });
   const status = document.createElement("span");
-  status.className = `sales-day-status ${pending ? "is-pending" : "is-done"}`;
-  status.textContent = pending ? `chybí ${pending}` : "hotovo";
+  const future = date > todayKey;
+  status.className = `sales-day-status ${future ? "is-planned" : date === todayKey && pending ? "is-today" : pending ? "is-pending" : "is-done"}`;
+  status.textContent = future ? `naplánováno ${pending}` : date === todayKey && pending ? `dnes · k vyplnění ${pending}` : pending ? `chybí ${pending}` : "hotovo";
   cell.append(toggle, status);
-  if (pending && date < todayKey) {
+  if (pending && date <= todayKey) {
     const fill = document.createElement("button");
     fill.type = "button";
     fill.className = "sales-row-action";
@@ -2264,7 +2269,9 @@ function createSalesRow(day, todayKey) {
   const row = document.createElement("tr");
   row.dataset.id = day.id;
   const percent = salesTargetPercent(day);
-  const editable = day.status === "pending" && day.date < todayKey;
+  // Vyplnit jde od dne směny (i během dne); budoucí směny jsou připravené dopředu.
+  const editable = day.status === "pending" && day.date <= todayKey;
+  const planned = day.status === "pending" && day.date > todayKey;
   row.classList.toggle("is-editable", editable);
   const cells = Array.from({ length: 9 }, () => document.createElement("td"));
   const name = document.createElement("strong");
@@ -2299,8 +2306,7 @@ function createSalesRow(day, todayKey) {
     cells[4].textContent = "—";
     cells[5].textContent = "—";
     const badge = document.createElement("span");
-    badge.className = "sales-result pending";
-    badge.textContent = "Chybí report";
+    setPendingBadge(badge, day);
     cells[6].append(badge);
     const notSales = document.createElement("button");
     notSales.type = "button";
@@ -2318,18 +2324,27 @@ function createSalesRow(day, todayKey) {
     cells[4].textContent = reported ? `${formatCurrency(salesAsr(day))}/h` : "—";
     cells[5].textContent = reported ? formatAros(salesAros(day)) : "—";
     const badge = document.createElement("span");
-    badge.className = `sales-result ${reported ? salesPerformanceClass(percent) : day.status}`;
-    badge.textContent = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
+    badge.className = `sales-result ${reported ? salesPerformanceClass(percent) : planned ? "planned" : day.status}`;
+    badge.textContent = planned ? "Naplánováno" : day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
     cells[6].append(badge);
-    const action = document.createElement("button");
-    action.type = "button";
-    action.className = `sales-row-action${day.status === "pending" ? " is-fill" : ""}`;
-    action.textContent = day.status === "pending" ? "Doplnit" : "Detail";
-    action.addEventListener("click", () => openSalesReport(day));
-    cells[8].append(action);
+    if (!planned) {
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = `sales-row-action${day.status === "pending" ? " is-fill" : ""}`;
+      action.textContent = day.status === "pending" ? "Doplnit" : "Detail";
+      action.addEventListener("click", () => openSalesReport(day));
+      cells[8].append(action);
+    }
   }
   row.append(...cells);
   return row;
+}
+
+// Dnešní report se teprve vyplňuje, chybějící je až po skončení dne.
+function setPendingBadge(badge, day) {
+  const today = day.date === dateKey(new Date());
+  badge.className = `sales-result ${today ? "today" : "pending"}`;
+  badge.textContent = today ? "K vyplnění" : "Chybí report";
 }
 
 function readSalesDraft(row) {
@@ -2363,9 +2378,7 @@ function updateSalesDraft(row, day) {
   } else {
     asrCell.textContent = "—";
     arosCell.textContent = "—";
-    const badge = row.querySelector(".sales-result");
-    badge.className = "sales-result pending";
-    badge.textContent = "Chybí report";
+    setPendingBadge(row.querySelector(".sales-result"), day);
   }
   row.classList.toggle("is-draft", values.any);
   row.classList.toggle("is-incomplete", values.any && !values.complete);
@@ -2433,7 +2446,7 @@ async function markNotSales(day) {
 
 // Lidé: žebříček za vybrané období.
 function renderSalesPeople(rows) {
-  const people = salesByPerson(rows);
+  const people = salesByPerson(rows, dateKey(new Date()));
   elements.salesPeopleBody.replaceChildren(...people.map((item, index) => {
     const person = personByRemoteId(item.workerId);
     const row = document.createElement("tr");
@@ -2589,7 +2602,7 @@ function renderProfileSales(person) {
   elements.profileSalesHistory.replaceChildren(...rows.map(day => {
     const item = document.createElement("button"); item.type = "button"; item.className = "profile-sales-day";
     const percent = salesTargetPercent(day);
-    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))} · ARoS ${formatAros(salesAros(day))}` : day.status === "pending" ? "Chybí report" : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
+    item.innerHTML = `<span><strong>${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(`${day.date}T00:00:00`))}</strong><small>${day.status === "reported" ? `${formatNumber(day.salesHours)} h · ${formatCurrency(salesRevenue(day))} · ARoS ${formatAros(salesAros(day))}` : day.status === "pending" ? (day.date > dateKey(new Date()) ? "Naplánováno" : day.date === dateKey(new Date()) ? "Dnes – k vyplnění" : "Chybí report") : "Nebyl na prodeji"}</small></span><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${day.status === "reported" ? `${Math.round(percent)} %` : ""}</span>`;
     item.addEventListener("click", () => openSalesReport(day)); return item;
   }));
 }
@@ -3230,8 +3243,8 @@ function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReport
 // ---------------------------------------------------------------------------
 function openBulkSales(date) {
   const todayKey = dateKey(startOfDay(new Date()));
-  const pendingDates = [...new Set(salesDays.filter(day => day.status === "pending" && day.date < todayKey).map(day => day.date))].sort().reverse();
-  const allDates = [...new Set(salesDays.filter(day => day.date < todayKey).map(day => day.date))].sort().reverse();
+  const pendingDates = [...new Set(salesDays.filter(day => day.status === "pending" && day.date <= todayKey).map(day => day.date))].sort().reverse();
+  const allDates = [...new Set(salesDays.filter(day => day.date <= todayKey).map(day => day.date))].sort().reverse();
   const target = date || pendingDates[0] || allDates[0];
   if (!target) {
     setMessage("Zatím nejsou žádné prodejní směny k vyplnění.");
@@ -3461,7 +3474,7 @@ function exportSalesCsv() {
       return [
         personByRemoteId(day.workerId)?.name || "Neznámý brigádník",
         new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`)),
-        day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : "Vyplněno",
+        day.status === "pending" ? (day.date >= dateKey(new Date()) ? "Naplánováno" : "Chybí report") : day.status === "not_sales" ? "Nebyl na prodeji" : "Vyplněno",
         Number(day.plannedHours || 0),
         reported ? day.salesHours : "",
         reported ? day.hardware : "",

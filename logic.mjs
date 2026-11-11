@@ -319,11 +319,12 @@ export const buildShiftRows = (matrix, { from, to, lookup }) => {
 const shiftHours = shift => Math.max(0, shift.end - shift.start) / 60;
 const roundHours = value => Math.round(value * 100) / 100;
 
-// Plánované prodejní hodiny za uplynulé dny (dnešek se ještě nehodnotí).
-export const salesExpectationsFromShifts = (shifts, todayKey) => {
+// Prodejní report se zakládá rovnou pro všechny naplánované prodejní směny
+// (i budoucí), aby byl připravený dopředu. „Chybí“ je až po skončení dne.
+export const salesExpectationsFromShifts = shifts => {
   const totals = new Map();
   shifts.forEach(shift => {
-    if (!shift.workerId || shift.free || shift.date >= todayKey) return;
+    if (!shift.workerId || shift.free) return;
     if (!normalizeText(shift.department).includes("prodej")) return;
     const key = `${shift.workerId}|${shift.date}`;
     const current = totals.get(key) || { worker_id: shift.workerId, shift_date: shift.date, planned_hours: 0 };
@@ -466,7 +467,8 @@ export const timelineRange = (blocks, fallback = [480, 1200]) => {
 
 // Žebříček za vybrané dny: jen vyplněné reporty se počítají do výkonu,
 // chybějící se jen sčítají.
-export const salesByPerson = days => {
+// todayKey: budoucí naplánované dny se nepočítají do „chybí“ ani do počtu dní.
+export const salesByPerson = (days, todayKey = null) => {
   const groups = new Map();
   days.forEach(day => {
     if (!day.workerId) return;
@@ -476,9 +478,10 @@ export const salesByPerson = days => {
   return [...groups].map(([workerId, list]) => ({
     workerId,
     ...summarizeSales(list),
-    days: list.length,
+    days: list.filter(day => !todayKey || day.date <= todayKey).length,
+    planned: todayKey ? list.filter(day => day.status === "pending" && day.date > todayKey).length : 0,
     reported: list.filter(day => day.status === "reported").length,
-    missing: list.filter(day => day.status === "pending").length
+    missing: list.filter(day => day.status === "pending" && (!todayKey || day.date < todayKey)).length
   })).sort((a, b) => (b.reported > 0) - (a.reported > 0) || b.asr - a.asr || b.revenue - a.revenue);
 };
 

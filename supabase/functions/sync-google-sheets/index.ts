@@ -194,9 +194,10 @@ Deno.serve(async request => {
       if (error) throw error;
     }
 
-    // Očekávané prodejní reporty za uplynulé dny a úklid těch, co z rozpisu zmizely.
-    const expected = salesExpectationsFromShifts(shifts, todayKey);
-    const scannedDates = [...new Set(shifts.map(row => row.date).filter(date => date < todayKey))].sort();
+    // Prodejní reporty pro všechny naplánované prodejní směny (i dopředu)
+    // a úklid nevyplněných, jejichž směna z rozpisu zmizela.
+    const expected = salesExpectationsFromShifts(shifts);
+    const scannedDates = [...new Set(shifts.map(row => row.date))].sort();
     let staleRemoved = 0;
     if (!dryRun && expected.length) {
       const { error } = await supabase.from("sales_days").upsert(expected, { onConflict: "worker_id,shift_date" });

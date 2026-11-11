@@ -61,14 +61,14 @@ test("navazující sloty se sloučí do jednoho bloku", () => {
   assert.deepEqual([free[0].start, free[0].end], [540, 660]);
 });
 
-test("prodejní očekávání: jen minulé dny, jen prodej, skutečná délka slotu", () => {
-  const expected = salesExpectationsFromShifts(shifts, "2026-11-06");
+test("prodejní očekávání: i budoucí směny, jen prodej, skutečná délka slotu", () => {
+  const expected = salesExpectationsFromShifts(shifts).filter(row => row.shift_date === "2026-11-05");
   assert.deepEqual(expected.sort((a, b) => a.worker_id.localeCompare(b.worker_id)), [
     { worker_id: "w1", shift_date: "2026-11-05", planned_hours: 2 },
     { worker_id: "w2", shift_date: "2026-11-05", planned_hours: 2 },
     { worker_id: "w3b", shift_date: "2026-11-05", planned_hours: 2 }
   ]);
-  assert.equal(salesExpectationsFromShifts(shifts, "2026-11-05").length, 0);
+  assert.ok(salesExpectationsFromShifts(shifts).every(row => row.planned_hours > 0));
 });
 
 test("souhrn: hodiny za 60 dní, další směna, volné hodiny a rozpis měsíce", () => {
