@@ -89,3 +89,11 @@ test("detail je boční panel, seznam zůstává použitelný", () => {
   assert.doesNotMatch(app, /elements\.dialog\.showModal\(\)/);
   assert.match(app, /document\.body\.classList\.add\("detail-open"\)/);
 });
+
+test("Směny mají přepínač Den / Celý měsíc a měsíční osu", () => {
+  assert.match(html, /data-shifts-mode="day"/);
+  assert.match(html, /data-shifts-mode="month"/);
+  assert.match(html, /id="shiftsMonth"/);
+  assert.match(app, /function renderShiftsMonth\(/);
+  assert.match(app, /from\("attendance_totals"\)\.select\("worker_id, hours"\)\.eq\("period", period\)/);
+});

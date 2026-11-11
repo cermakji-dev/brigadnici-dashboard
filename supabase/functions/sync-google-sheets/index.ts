@@ -2,9 +2,10 @@
 // (hlavička x-sync-secret) a ručně tlačítko v aplikaci (bez tajemství, ale
 // nejvýš jednou za minutu).
 //
-// Zapisuje: docházku aktuálního měsíce (attendance_totals), rozpis směn
-// v okně −62 až +45 dní (shifts), očekávané prodejní směny (sales_days)
-// a nové karty pro neznámá jména z aktuálního měsíce (workers).
+// Zapisuje: docházku všech měsíců až po aktuální ze souhrnů měsíčních listů
+// (attendance_totals), rozpis směn od 1. dne měsíce před třemi měsíci do +45 dní
+// (shifts), očekávané prodejní směny (sales_days) a nové karty pro neznámá
+// jména z aktuálního měsíce (workers).
 //
 // Nasazení: supabase functions deploy sync-google-sheets --no-verify-jwt
 // (logic.mjs v této složce jen re-exportuje ../../../logic.mjs).
@@ -17,7 +18,7 @@ import {
 
 const SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
 const EXPORT_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
-const WINDOW_PAST_DAYS = 62;
+const WINDOW_PAST_MONTHS = 3;
 const WINDOW_FUTURE_DAYS = 45;
 const MANUAL_THROTTLE_MS = 60_000;
 const CORS_HEADERS = {
@@ -94,7 +95,7 @@ Deno.serve(async request => {
     const today = pragueToday();
     const todayKey = dateKey(today);
     const period = firstDayOfMonth(today);
-    const from = addDays(today, -WINDOW_PAST_DAYS);
+    const from = new Date(today.getFullYear(), today.getMonth() - WINDOW_PAST_MONTHS, 1);
     const to = addDays(today, WINDOW_FUTURE_DAYS);
     if (!dryRun) {
       const { data: run, error } = await supabase.from("sheets_sync_runs").insert({ status: "running", period, started_at: new Date().toISOString() }).select("id").single();
@@ -140,25 +141,40 @@ Deno.serve(async request => {
       lookup = buildWorkerLookup(workers);
     }
 
-    // Docházka aktuálního měsíce (zapisují se jen změněné hodnoty).
+    // Docházka ze souhrnů všech měsíčních listů až po aktuální měsíc
+    // (zapisují se jen změněné hodnoty). Nové karty vznikají jen pro aktuální měsíc,
+    // u starších měsíců se páruje jen na existující brigádníky.
+    const attendanceRows: { worker_id: string; period: string; hours: number; source_name: string; imported_at: string }[] = [];
     const attendance = new Map<string, number>();
-    summary.forEach(row => {
-      const worker = lookup(row.name) as Worker | null;
-      if (worker?.active) attendance.set(worker.id, (attendance.get(worker.id) || 0) + row.hours);
-    });
-    let changed: { worker_id: string; period: string; hours: number; source_name: string; imported_at: string }[] = [];
-    if (attendance.size) {
-      const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, hours").eq("period", period).in("worker_id", [...attendance.keys()]);
+    const monthSheets = workbook.SheetNames.map(name => ({ name, sheetPeriod: periodFromSheetName(name) }))
+      .filter(item => item.sheetPeriod && item.sheetPeriod <= period);
+    for (const { name, sheetPeriod } of monthSheets) {
+      let rows: { name: string; hours: number }[];
+      try { rows = name === sheetName ? summary : readSummary(matrices.get(name)!).rows; } catch { continue; }
+      const totals = new Map<string, number>();
+      rows.forEach(row => {
+        const worker = lookup(row.name) as Worker | null;
+        if (!worker || (sheetPeriod === period && !worker.active)) return;
+        totals.set(worker.id, (totals.get(worker.id) || 0) + row.hours);
+      });
+      if (sheetPeriod === period) totals.forEach((hours, id) => attendance.set(id, hours));
+      totals.forEach((hours, worker_id) => attendanceRows.push({ worker_id, period: sheetPeriod!, hours, source_name: `Google Sheets – ${name}`, imported_at: new Date().toISOString() }));
+    }
+    let changed: typeof attendanceRows = [];
+    if (attendanceRows.length) {
+      const periods = [...new Set(attendanceRows.map(row => row.period))];
+      const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, period, hours").in("period", periods);
       if (error) throw error;
-      const old = new Map((existing ?? []).map(row => [row.worker_id, Number(row.hours)]));
-      changed = [...attendance].filter(([id, hours]) => old.get(id) !== hours).map(([worker_id, hours]) => ({
-        worker_id, period, hours, source_name: `Google Sheets – ${sheetName}`, imported_at: new Date().toISOString()
-      }));
+      const old = new Map((existing ?? []).map(row => [`${row.worker_id}|${row.period}`, Number(row.hours)]));
+      changed = attendanceRows.filter(row => old.get(`${row.worker_id}|${row.period}`) !== row.hours);
       if (changed.length && !dryRun) {
-        const { error: upsertError } = await supabase.from("attendance_totals").upsert(changed, { onConflict: "worker_id,period" });
-        if (upsertError) throw upsertError;
+        for (let index = 0; index < changed.length; index += 500) {
+          const { error: upsertError } = await supabase.from("attendance_totals").upsert(changed.slice(index, index + 500), { onConflict: "worker_id,period" });
+          if (upsertError) throw upsertError;
+        }
       }
     }
+    const monthsSynced = monthSheets.map(item => item.sheetPeriod);
 
     // Rozpis směn ze všech listů v okně dat.
     const shifts = workbook.SheetNames.flatMap(name => buildShiftRows(matrices.get(name)!, { from, to, lookup })
@@ -194,13 +210,13 @@ Deno.serve(async request => {
     }
 
     const totalHours = [...attendance.values()].reduce((sum, hours) => sum + hours, 0);
-    const details = { unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
-    const result = { status: dryRun ? "dry_run" : "success", period, sheet: sheetName, seen: summary.length, changed: changed.length, created: dryRun ? [...candidates.values()] : created, totalHours, plannedHours, ...details,
+    const details = { months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
+    const result = { status: dryRun ? "dry_run" : "success", period, sheet: sheetName, seen: summary.length, changed: changed.filter(row => row.period === period).length, created: dryRun ? [...candidates.values()] : created, totalHours, plannedHours, ...details,
       sample: dryRun ? shifts.filter(row => row.date >= todayKey).slice(0, 15) : undefined };
     if (runId) {
       const { error } = await supabase.from("sheets_sync_runs").update({
         status: "success", sheet_name: sheetName, finished_at: new Date().toISOString(), workers_seen: summary.length,
-        workers_changed: changed.length, workers_created: created.length, total_hours: totalHours, planned_hours: plannedHours, details
+        workers_changed: changed.filter(row => row.period === period).length, workers_created: created.length, total_hours: totalHours, planned_hours: plannedHours, details
       }).eq("id", runId);
       if (error) throw error;
     }

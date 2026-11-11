@@ -1368,3 +1368,66 @@ button.timeline-block:hover { border-color: var(--skills-color); background: col
 .team-controls { z-index: 30; }
 .sales-toolbar { position: relative; z-index: 30; }
 .free-shifts li { grid-template-columns: 110px minmax(0, 1fr); }
+
+/* ==========================================================================
+   v95 – přepínač Den / Celý měsíc, měsíční osa, patička karty bez přetékání
+   ========================================================================== */
+.shifts-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.shifts-mode { display: inline-flex; padding: 3px; background: var(--surface-muted, var(--surface)); border: 1px solid var(--border); border-radius: 999px; }
+.shifts-mode-button { padding: 6px 14px; background: none; border: 0; border-radius: 999px; color: var(--muted); font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.shifts-mode-button:hover { color: var(--text); }
+.shifts-mode-button.is-active { background: var(--brand-gradient); color: #fff; }
+.shifts-day-chip[hidden], .shifts-date-input[hidden] { display: none; }
+.shifts-step:disabled { opacity: .35; cursor: default; }
+.shifts-month[hidden] { display: none; }
+.shifts-month { display: grid; gap: 12px; }
+
+.month-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -4px 0 0; color: var(--muted); font-size: .76rem; }
+.month-legend span { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
+.month-legend .legend-fill { background: linear-gradient(90deg, color-mix(in srgb, var(--skills-color) 20%, var(--surface)), var(--skills-color)); }
+.month-legend .legend-free { margin-left: 10px; background: repeating-linear-gradient(135deg, #d97706 0 2px, transparent 2px 5px); border: 1px solid color-mix(in srgb, #d97706 60%, var(--border)); }
+
+.month-timeline { --day-w: 64px; --stat-w: 64px; display: grid; padding: 4px 16px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.month-row { display: grid; grid-template-columns: var(--day-w) minmax(0, 1fr) var(--stat-w) var(--stat-w) var(--stat-w); align-items: center; gap: 12px; }
+.month-head { position: sticky; top: 0; z-index: 1; padding: 8px 0 6px; background: var(--surface); color: var(--muted); font-size: .7rem; font-weight: 700; }
+.month-head > span:not(:first-child) { text-align: right; }
+.month-head .month-cells span { text-align: left; font-variant-numeric: tabular-nums; }
+.month-cells { display: grid; grid-template-columns: repeat(var(--month-hours), minmax(0, 1fr)); gap: 2px; min-width: 0; }
+.month-day { width: 100%; min-height: 32px; padding: 3px 0; background: none; border: 0; border-top: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.month-day:hover { background: color-mix(in srgb, var(--skills-color) 6%, transparent); }
+.month-day:focus-visible { outline: 2px solid var(--skills-color); outline-offset: -2px; border-radius: 6px; }
+.month-day > span:not(.month-day-label) { text-align: right; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.month-day > span.is-free { color: var(--warning); font-weight: 700; }
+.month-day-label { display: flex; align-items: baseline; gap: 6px; padding-left: 6px; }
+.month-day-label small { width: 20px; color: var(--muted); font-size: .72rem; }
+.month-day-label strong { font-size: .86rem; font-variant-numeric: tabular-nums; }
+.month-day.is-weekend .month-day-label small { color: var(--brand-purple); font-weight: 700; }
+.month-day.is-past { color: var(--muted); }
+.month-day.is-past .month-cells { opacity: .62; }
+.month-day.is-today { background: color-mix(in srgb, var(--skills-color) 9%, transparent); border-radius: 8px; }
+.month-day.is-today .month-day-label strong { color: var(--skills-color); }
+.month-cell { height: 20px; background: color-mix(in srgb, var(--border) 45%, transparent); border-radius: 4px; }
+.month-cell.has-people { background: color-mix(in srgb, var(--skills-color) calc(var(--fill, .3) * 100%), var(--surface)); }
+.month-cell.has-free { box-shadow: inset 0 0 0 1px #d97706; background-image: repeating-linear-gradient(135deg, color-mix(in srgb, #d97706 80%, transparent) 0 2px, transparent 2px 5px); }
+.month-day-note { grid-column: 1 / -1; color: var(--muted); font-size: .76rem; font-style: italic; }
+
+.month-people { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.month-people[hidden] { display: none; }
+.month-people header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.month-people h3 { margin: 0; font-size: .95rem; }
+.month-people header span { color: var(--muted); font-size: .78rem; }
+.month-people-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0 24px; margin: 0; padding: 6px 16px 10px; list-style: none; }
+.month-people-list button { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 56px; align-items: center; gap: 10px; width: 100%; padding: 7px 0; background: none; border: 0; border-bottom: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.month-people-list button:hover .month-person-name { color: var(--skills-color); }
+.month-person-name { overflow: hidden; font-size: .85rem; text-overflow: ellipsis; white-space: nowrap; }
+.month-person-bar { position: relative; height: 6px; background: color-mix(in srgb, var(--border) 60%, transparent); border-radius: 999px; }
+.month-person-bar::after { position: absolute; inset: 0 auto 0 0; width: calc(var(--share) * 100%); background: var(--skills-color); border-radius: inherit; content: ""; }
+.month-people-list strong { text-align: right; font-size: .84rem; font-variant-numeric: tabular-nums; }
+body.detail-open .month-row { --stat-w: 52px; gap: 8px; }
+body.detail-open .month-row > span:nth-child(4) { display: none; }
+body.detail-open .month-row { grid-template-columns: var(--day-w) minmax(0, 1fr) var(--stat-w) var(--stat-w); }
+
+/* Patička karty: akce se při nedostatku místa zalomí pod palce místo ořezu */
+.card-footer { flex-wrap: wrap; row-gap: 6px; }
+.card-footer-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; margin-left: auto; overflow: visible; }
+.card-footer-actions .card-link, .sales-card-button { white-space: nowrap; }

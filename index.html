@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.10.0">
+  <meta name="app-build" content="5.11.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=95">
+    <link rel="stylesheet" href="styles.css?v=96">
 </head>
 <body>
 
@@ -247,6 +247,11 @@
           <h2 id="shiftsDayTitle">Dnes</h2>
           <p id="shiftsDaySubtitle" class="shifts-subtitle"></p>
         </div>
+        <div class="shifts-controls">
+        <div class="shifts-mode" role="group" aria-label="Rozsah rozpisu">
+          <button class="shifts-mode-button" type="button" data-shifts-mode="day" aria-pressed="true">Den</button>
+          <button class="shifts-mode-button" type="button" data-shifts-mode="month" aria-pressed="false">Celý měsíc</button>
+        </div>
         <div class="shifts-day-nav" role="group" aria-label="Výběr dne">
           <button id="shiftsPrevDay" class="toolbar-action shifts-step" type="button" aria-label="Předchozí den">‹</button>
           <button class="shifts-day-chip" type="button" data-shift-offset="-1">Včera</button>
@@ -255,16 +260,18 @@
           <button id="shiftsNextDay" class="toolbar-action shifts-step" type="button" aria-label="Další den">›</button>
           <input id="shiftsDateInput" class="shifts-date-input" type="date" aria-label="Vybrat datum">
         </div>
+        </div>
       </div>
       <div class="shifts-summary" aria-label="Souhrn dne">
-        <span><strong id="shiftsPeopleKpi">0</strong> lidí na směně</span>
-        <span><strong id="shiftsHoursKpi">0 h</strong> obsazeno</span>
-        <span id="shiftsFreeCard"><strong id="shiftsFreeKpi">0 h</strong> volných</span>
+        <span><strong id="shiftsPeopleKpi">0</strong> <span id="shiftsPeopleLabel">lidí na směně</span></span>
+        <span><strong id="shiftsHoursKpi">0 h</strong> <span id="shiftsHoursLabel">obsazeno</span></span>
+        <span id="shiftsFreeCard"><strong id="shiftsFreeKpi">0 h</strong> <span id="shiftsFreeLabel">volných</span></span>
         <span id="shiftsReportsCard"><strong id="shiftsReportsKpi">0</strong> <span id="shiftsReportsLabel">na prodeji</span></span>
       </div>
       <div id="shiftsBoard" class="shifts-timeline"></div>
       <div id="shiftsAttention" class="shifts-attention"></div>
-      <div id="shiftsEmpty" class="empty-state" hidden><strong>Na tento den není v rozpisu žádná směna</strong><span>Rozpis se načítá z Google tabulky v rozmezí 2 měsíců zpět a 6 týdnů dopředu.</span></div>
+      <div id="shiftsMonth" class="shifts-month" hidden></div>
+      <div id="shiftsEmpty" class="empty-state" hidden><strong>Na tento den není v rozpisu žádná směna</strong><span>Rozpis se načítá z Google tabulky od začátku měsíce před třemi měsíci do 6 týdnů dopředu.</span></div>
     </section>
 
     <section id="salesDashboard" class="sales-dashboard" hidden>
@@ -305,7 +312,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v94</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v95</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -634,6 +641,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=94"></script>
+  <script type="module" src="app.js?v=95"></script>
 </body>
 </html>
