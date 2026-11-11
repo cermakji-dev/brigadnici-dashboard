@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=104";
+} from "./logic.mjs?v=105";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -400,6 +400,7 @@ elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.appFeedbackDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.appFeedbackButton.addEventListener("click", () => {
   elements.appFeedbackForm.reset();
+  elements.appFeedbackCategory.syncCustomSelect?.();
   elements.appFeedbackStatus.textContent = "";
   elements.appFeedbackDialog.showModal();
 });
@@ -4323,7 +4324,10 @@ function initializeCustomSelects() {
     [elements.departmentMatchMode, false],
     [elements.salesPeriodFilter, true],
     [elements.salesPersonFilter, false],
-    [elements.salesStatusFilter, false]
+    [elements.salesStatusFilter, false],
+    [elements.teamPeriodSelect, true],
+    [elements.bulkSalesDate, false],
+    [document.querySelector("#appFeedbackCategory"), false]
   ].forEach(([select, monthGrid]) => enhanceSelect(select, monthGrid));
 
   document.addEventListener("click", event => {
@@ -4388,6 +4392,7 @@ function enhanceSelect(select, monthGrid = false) {
       wrapper.classList.add("is-open");
       menu.hidden = false;
       button.setAttribute("aria-expanded", "true");
+      menu.querySelector(".is-selected")?.scrollIntoView({ block: "nearest" });
     }
   });
   sync();

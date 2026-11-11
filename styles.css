@@ -1673,3 +1673,12 @@ body.detail-open .sales-kpis { grid-template-columns: repeat(3, minmax(0, 1fr));
 .profile-past-heading { margin-top: 18px !important; }
 .profile-upcoming-list.is-past li { color: var(--muted); }
 .profile-upcoming-list.is-past li strong { color: var(--text); font-weight: 600; }
+
+/* v105 – všechny rozbalovací výběry ve stejném vlastním stylu */
+.team-period .custom-select { min-width: 210px; }
+.team-period .custom-select-menu { left: auto; right: 0; width: 400px; }
+.team-period .custom-select-button, .bulk-sales-date .custom-select-button { min-height: 40px; padding: 8px 12px; font-size: .9rem; }
+.bulk-sales-date .custom-select { min-width: 230px; }
+.bulk-sales-date .custom-select-menu { max-height: 236px; }
+dialog .custom-select { position: relative; }
+#appFeedbackDialog .custom-select { width: 100%; }
