@@ -1363,3 +1363,8 @@ button.timeline-block:hover { border-color: var(--skills-color); background: col
 .free-shifts .shift-suggestions { justify-content: flex-end; }
 .free-shifts .suggestion-chip { padding: 4px 10px; font-size: .78rem; }
 .shift-alert.is-report { border-radius: 16px; }
+
+/* Rozbalovací seznamy nad kartami a tabulkou */
+.team-controls { z-index: 30; }
+.sales-toolbar { position: relative; z-index: 30; }
+.free-shifts li { grid-template-columns: 110px minmax(0, 1fr); }

@@ -4,7 +4,7 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  suggestReplacements, summarizeShifts
+  summarizeShifts
 } from "./logic.mjs?v=94";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
@@ -2539,7 +2539,6 @@ function createTimelineBlock(block, position, span) {
 function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReports }) {
   const cards = [];
   if (!past && freeBlocks.length) {
-    const activePeople = Object.values(state.people);
     const card = document.createElement("section");
     card.className = "free-shifts";
     const heading = document.createElement("header");
@@ -2558,29 +2557,7 @@ function renderShiftsAttention({ key, past, freeBlocks, dayShifts, pendingReport
       const department = document.createElement("span");
       department.className = "free-shift-department";
       department.textContent = `${block.department || "Oddělení neuvedeno"} · ${formatNumber(block.hours)} h`;
-      const suggestions = document.createElement("div");
-      suggestions.className = "shift-suggestions";
-      const candidates = suggestReplacements(block, activePeople, dayShifts);
-      if (!candidates.length) {
-        const none = document.createElement("span");
-        none.className = "shift-suggestions-caption";
-        none.textContent = "Nikdo zaškolený není volný";
-        suggestions.append(none);
-      }
-      suggestions.append(...candidates.map(person => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "suggestion-chip";
-        button.title = `${formatNumber(person.hours || 0)} h tento měsíc · ${formatNumber(person.hours60 || 0)} h za 60 dní`;
-        const name = document.createElement("strong");
-        name.textContent = person.name;
-        const hours = document.createElement("small");
-        hours.textContent = `${formatNumber(person.hours || 0)} h`;
-        button.append(name, hours);
-        button.addEventListener("click", () => openPerson(person.id));
-        return button;
-      }));
-      item.append(time, department, suggestions);
+      item.append(time, department);
       return item;
     }));
     card.append(heading, list);
