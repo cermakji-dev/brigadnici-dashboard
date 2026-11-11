@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts
-} from "./logic.mjs?v=96";
+} from "./logic.mjs?v=97";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -356,16 +356,18 @@ document.addEventListener("click", event => {
   if (!elements.alertsPanel.classList.contains("is-open")) return;
   if (!elements.alertsPanel.contains(event.target) && !elements.alertsToggle.contains(event.target)) setAlertsOpen(false);
 });
-// Detail brigádníka je boční panel (nemodální dialog): seznam zůstává vidět
-// a kliknutím na jinou kartu se detail přepne.
-elements.dialog.addEventListener("close", () => {
-  setDetailLayout(false, elements.personId.value);
-  markSelectedPerson(null);
-});
-document.addEventListener("keydown", event => {
-  if (event.key !== "Escape" || !elements.dialog.open || document.querySelector("dialog:modal")) return;
-  if (event.target.closest?.("input, textarea, select") && event.target.closest("#personDialog") === null) return;
-  elements.dialog.close();
+// Detail brigádníka je velké okno uprostřed (modální dialog). Mezi lidmi
+// se přepíná šipkami v záhlaví nebo klávesami ← →, záložka zůstává stejná.
+elements.dialog.addEventListener("close", () => markSelectedPerson(null));
+elements.dialog.addEventListener("click", closeDialogFromBackdrop);
+document.querySelector("#profilePrev").addEventListener("click", () => stepPerson(-1));
+document.querySelector("#profileNext").addEventListener("click", () => stepPerson(1));
+elements.dialog.addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (document.querySelector("dialog:modal") !== elements.dialog) return;
+  event.preventDefault();
+  stepPerson(event.key === "ArrowLeft" ? -1 : 1);
 });
 window.addEventListener("resize", updateTopbarOffset);
 elements.feedbackDialog.addEventListener("click", closeDialogFromBackdrop);
@@ -3211,31 +3213,28 @@ function updateTopbarOffset() {
   if (topbar) document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
 }
 
-// Otevření/zavření panelu změní šířku seznamu. Aby karty „neuskočily“,
-// zachová se počet sloupců (karty se jen zúží) a kliknutá karta zůstane
-// na obrazovce na stejném místě.
-const MIN_CARD_WIDTH_WITH_DETAIL = 220;
-function setDetailLayout(open, anchorId) {
-  const grids = [elements.peopleGrid];
-  const anchor = anchorId ? document.querySelector(`#peopleGrid [data-person-id="${CSS.escape(anchorId)}"], .people-table [data-person-id="${CSS.escape(anchorId)}"]`) : null;
-  const anchorTop = anchor?.getBoundingClientRect().top;
-  if (open) {
-    const columns = getComputedStyle(elements.peopleGrid).gridTemplateColumns.split(" ").filter(Boolean).length;
-    document.body.classList.add("detail-open");
-    const gap = parseFloat(getComputedStyle(elements.peopleGrid).columnGap) || 0;
-    const width = elements.peopleGrid.clientWidth;
-    // Co nejvíc sloupců (nejvýš tolik, kolik bylo), aby se karty přeskládaly co nejméně.
-    const fitting = Math.max(1, Math.floor((width + gap) / (MIN_CARD_WIDTH_WITH_DETAIL + gap)));
-    const keep = Math.min(columns, fitting);
-    grids.forEach(grid => { grid.style.gridTemplateColumns = keep > 1 ? `repeat(${keep}, minmax(0, 1fr))` : ""; });
-  } else {
-    document.body.classList.remove("detail-open");
-    grids.forEach(grid => { grid.style.gridTemplateColumns = ""; });
-  }
-  if (anchor && Number.isFinite(anchorTop)) {
-    const shift = anchor.getBoundingClientRect().top - anchorTop;
-    if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "instant" });
-  }
+// Pořadí lidí tak, jak jsou právě zobrazení v seznamu (respektuje hledání,
+// filtry i řazení). Když detail otevřený odjinud není v seznamu, šipky zmizí.
+function visiblePersonOrder() {
+  const selector = currentView === "table" ? ".people-table tbody [data-person-id]" : "#peopleGrid [data-person-id]";
+  return [...new Set([...document.querySelectorAll(selector)].map(element => element.dataset.personId))].filter(id => state.people[id]);
+}
+
+function updateProfileNav(id) {
+  const order = visiblePersonOrder();
+  const index = order.indexOf(id);
+  const nav = document.querySelector(".profile-nav");
+  nav.hidden = index < 0 || order.length < 2;
+  document.querySelector("#profilePrev").disabled = index <= 0;
+  document.querySelector("#profileNext").disabled = index < 0 || index >= order.length - 1;
+  document.querySelector("#profilePosition").textContent = index >= 0 ? `${index + 1} / ${order.length}` : "";
+}
+
+function stepPerson(step) {
+  const order = visiblePersonOrder();
+  const index = order.indexOf(elements.personId.value);
+  const next = order[index + step];
+  if (index >= 0 && next) openPerson(next);
 }
 
 function markSelectedPerson(id) {
@@ -3281,10 +3280,9 @@ async function openPerson(id) {
   renderAttendanceHistory(person);
   renderFeedbackHistory(person);
   renderAuditHistory(person);
+  updateProfileNav(person.id);
   if (!switching) {
-    updateTopbarOffset();
-    setDetailLayout(true, person.id);
-    elements.dialog.show();
+    elements.dialog.showModal();
     elements.dialog.querySelector(".profile-tab.is-active")?.focus({ preventScroll: true });
   }
   elements.dialog.querySelector(".profile-tab-panel.is-active")?.scrollTo({ top: 0 });
