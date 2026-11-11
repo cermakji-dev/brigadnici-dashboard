@@ -182,7 +182,14 @@ Deno.serve(async request => {
     const monthPrefix = period.slice(0, 7);
     const freeHours = Math.round(shifts.filter(row => row.free && row.date.startsWith(monthPrefix)).reduce((sum, row) => sum + (row.end - row.start) / 60, 0) * 100) / 100;
     const unmatched = [...new Set(shifts.filter(row => !row.free && !row.workerId).map(row => row.name))].slice(0, 50);
-    if (shifts.length && !dryRun) {
+    // Rozpis se přepisuje jen při změně (jinak by se každých 5 minut
+    // zbytečně mazalo a znovu vkládalo ~3000 řádků).
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([dateKey(from), dateKey(to), shifts])));
+    const shiftsHash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+    const { data: lastRun } = await supabase.from("sheets_sync_runs").select("details").eq("status", "success")
+      .order("started_at", { ascending: false }).limit(1).maybeSingle();
+    const shiftsUnchanged = (lastRun?.details as { shifts_hash?: string } | null)?.shifts_hash === shiftsHash;
+    if (shifts.length && !dryRun && !shiftsUnchanged) {
       const { error } = await supabase.rpc("replace_shifts", { p_from: dateKey(from), p_to: dateKey(to), p_rows: shifts });
       if (error) throw error;
     }
@@ -210,7 +217,7 @@ Deno.serve(async request => {
     }
 
     const totalHours = [...attendance.values()].reduce((sum, hours) => sum + hours, 0);
-    const details = { months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
+    const details = { shifts_hash: shiftsHash, shifts_written: !shiftsUnchanged, months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
     const result = { status: dryRun ? "dry_run" : "success", period, sheet: sheetName, seen: summary.length, changed: changed.filter(row => row.period === period).length, created: dryRun ? [...candidates.values()] : created, totalHours, plannedHours, ...details,
       sample: dryRun ? shifts.filter(row => row.date >= todayKey).slice(0, 15) : undefined };
     if (runId) {

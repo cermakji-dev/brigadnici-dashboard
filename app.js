@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=99";
+} from "./logic.mjs?v=100";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -1323,8 +1323,24 @@ async function importAttendance(file) {
   }
 }
 
+// Knihovna pro Excel (~900 kB) se stahuje až při ručním nahrání souboru,
+// běžný provoz čte data ze Supabase a nepotřebuje ji.
+const XLSX_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+let xlsxLoading = null;
+function ensureXlsx() {
+  if (typeof XLSX !== "undefined") return Promise.resolve();
+  xlsxLoading ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = XLSX_URL;
+    script.onload = () => resolve();
+    script.onerror = () => { xlsxLoading = null; reject(new Error("Knihovna pro Excel se nenačetla. Zkontrolujte připojení k internetu a zkuste to znovu.")); };
+    document.head.append(script);
+  });
+  return xlsxLoading;
+}
+
 async function prepareWorkbook(file, requireCurrentMonth = false) {
-  if (typeof XLSX === "undefined") throw new Error("Knihovna pro Excel se nenačetla. Zkontrolujte připojení k internetu a zkuste to znovu.");
+  await ensureXlsx();
   pendingWorkbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
   pendingWorkbookName = file.name;
   const compatible = pendingWorkbook.SheetNames.filter(name => findWorkbookHeader(pendingWorkbook.Sheets[name]));
@@ -1791,8 +1807,9 @@ function renderTeam() {
 
   visibleTeamPeople = people;
   elements.exportTeamButton.disabled = people.length === 0;
-  elements.peopleGrid.replaceChildren(...people.map(createCard));
-  renderPeopleTable(people);
+  // Vykresluje se jen zobrazený pohled (karty, nebo tabulka) – polovina práce i DOMu.
+  if (currentView === "table") { renderPeopleTable(people); elements.peopleGrid.replaceChildren(); }
+  else { elements.peopleGrid.replaceChildren(...people.map(createCard)); elements.peopleTableBody.replaceChildren(); }
   elements.skeletonGrid.hidden = true;
   elements.peopleGrid.hidden = people.length === 0 || currentView !== "cards";
   elements.peopleTableWrap.hidden = people.length === 0 || currentView !== "table";
@@ -2097,7 +2114,19 @@ function setMainView(view) {
   if (view === "shifts") renderShiftsDashboard();
 }
 
-function personByRemoteId(id) { return Object.values(state.people).find(person => person.remoteId === id); }
+// Rychlé dohledání podle ID z databáze (volá se pro každý řádek směn i prodejů).
+let remoteIdIndex = new Map();
+let remoteIdIndexSource = null;
+function personByRemoteId(id) {
+  if (!id) return undefined;
+  let person = remoteIdIndexSource === state.people ? remoteIdIndex.get(id) : undefined;
+  if (!person || person.remoteId !== id) {
+    remoteIdIndex = new Map(Object.values(state.people).filter(item => item.remoteId).map(item => [item.remoteId, item]));
+    remoteIdIndexSource = state.people;
+    person = remoteIdIndex.get(id);
+  }
+  return person;
+}
 function salesRevenue(day) { return Number(day.hardware || 0) + Number(day.services || 0); }
 function salesAsr(day) { return day.salesHours > 0 ? salesRevenue(day) / day.salesHours : 0; }
 function salesAros(day) { return day.hardware > 0 ? day.services / day.hardware * 100 : null; }
