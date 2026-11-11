@@ -4,8 +4,8 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  summarizeShifts
-} from "./logic.mjs?v=97";
+  summarizeShifts, salesByPerson, salesByWeek
+} from "./logic.mjs?v=98";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -32,6 +32,11 @@ let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
 let salesDays = [];
 let visibleSalesRows = [];
+const SALES_MODE_KEY = "brigadnici-sales-mode";
+let salesMode = (() => { try { return localStorage.getItem(SALES_MODE_KEY) === "people" ? "people" : "days"; } catch { return "days"; } })();
+// Rozepsané reporty přímo v tabulce (id dne → hodnoty) a ručně rozbalené/sbalené dny.
+const salesDrafts = new Map();
+const salesDayOpen = new Map();
 let visibleTeamPeople = [];
 const nextShiftsByPerson = new Map();
 // Rozpis směn z databáze (plní ho serverová synchronizace každých 5 minut).
@@ -151,6 +156,11 @@ const elements = {
   feedbackQuickReasons: document.querySelector("#feedbackQuickReasons"),
   topbarMenuButton: document.querySelector("#topbarMenuButton"), topbarMenu: document.querySelector("#topbarMenu"),
   teamViewSections: [...document.querySelectorAll(".team-view-section")], salesDashboard: document.querySelector("#salesDashboard"),
+  salesNoData: document.querySelector("#salesNoData"), salesNoDataTitle: document.querySelector("#salesNoDataTitle"), salesNoDataText: document.querySelector("#salesNoDataText"),
+  salesNoDataFill: document.querySelector("#salesNoDataFill"), salesKpis: document.querySelector(".sales-kpis"), salesTrend: document.querySelector("#salesTrend"),
+  salesDaysWrap: document.querySelector("#salesDaysWrap"), salesPeopleWrap: document.querySelector("#salesPeopleWrap"), salesPeopleBody: document.querySelector("#salesPeopleBody"),
+  salesModeButtons: [...document.querySelectorAll("[data-sales-mode]")], salesInlineBar: document.querySelector("#salesInlineBar"),
+  salesInlineText: document.querySelector("#salesInlineText"), salesInlineSave: document.querySelector("#salesInlineSave"), salesInlineDiscard: document.querySelector("#salesInlineDiscard"),
   salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesArosKpi: document.querySelector("#salesArosKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
   salesPeriodFilter: document.querySelector("#salesPeriodFilter"), salesStatusFilter: document.querySelector("#salesStatusFilter"), salesTableBody: document.querySelector("#salesTableBody"), salesEmpty: document.querySelector("#salesEmpty"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
@@ -300,6 +310,14 @@ elements.exportSalesButton.addEventListener("click", exportSalesCsv);
 elements.salesPersonFilter.addEventListener("change", renderSalesDashboard);
 elements.tableSortButtons.forEach(button => button.addEventListener("click", () => setTableSort(button.dataset.sortKey)));
 elements.salesSortButtons.forEach(button => button.addEventListener("click", () => setSalesTableSort(button.dataset.salesSortKey)));
+elements.salesModeButtons.forEach(button => button.addEventListener("click", () => {
+  salesMode = button.dataset.salesMode === "people" ? "people" : "days";
+  try { localStorage.setItem(SALES_MODE_KEY, salesMode); } catch { /* jen pohodlí */ }
+  renderSalesDashboard();
+}));
+elements.salesNoDataFill.addEventListener("click", () => openBulkSales());
+elements.salesInlineSave.addEventListener("click", () => saveInlineSales());
+elements.salesInlineDiscard.addEventListener("click", () => { salesDrafts.clear(); renderSalesDashboard(); });
 elements.departmentFilters.forEach(input => input.addEventListener("change", renderTeam));
 elements.departmentMatchMode.addEventListener("change", renderTeam);
 elements.clearDepartmentFilters.addEventListener("click", () => {
@@ -2099,7 +2117,8 @@ function renderSalesDashboard() {
       || String(b.date).localeCompare(String(a.date));
   });
   updateSalesSortIndicators();
-  const { revenue, hours, asr, aros, targetPercent } = summarizeSales(rows);
+  // Souhrn za vybrané období a člověka; filtr stavu mění jen tabulku.
+  const { revenue, hours, asr, aros, targetPercent } = summarizeSales(periodRows);
   const missing = periodRows.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   const globalMissing = salesDays.filter(day => day.status === "pending" && day.date < dateKey(now)).length;
   elements.salesRevenueKpi.textContent = formatCurrency(revenue);
@@ -2113,17 +2132,348 @@ function renderSalesDashboard() {
   elements.salesEmpty.hidden = rows.length > 0;
   elements.exportSalesButton.disabled = rows.length === 0;
   visibleSalesRows = rows;
-  elements.salesTableBody.replaceChildren(...rows.map(day => {
-    const person = personByRemoteId(day.workerId);
+
+  // Dokud v měsíci není nic vyplněno, místo řady nul jen krátká výzva.
+  const reportedCount = periodRows.filter(day => day.status === "reported").length;
+  const noData = periodRows.length > 0 && reportedCount === 0;
+  elements.salesKpis.hidden = noData;
+  elements.salesNoData.hidden = !noData;
+  if (noData) {
+    const monthLabel = selectedMonth === "all" ? "vybrané období" : new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" }).format(parseDateKey(`${selectedMonth}-01`));
+    elements.salesNoDataTitle.textContent = `Za ${monthLabel} zatím žádný vyplněný report`;
+    elements.salesNoDataText.textContent = missing ? `Chybí ${missing} ${missing === 1 ? "report" : missing < 5 ? "reporty" : "reportů"}. Vyplnit je jde rovnou v tabulce níže.` : "Prodejní směny se objeví po skončení dne.";
+    elements.salesNoDataFill.hidden = missing === 0;
+  }
+
+  elements.salesModeButtons.forEach(button => {
+    const active = button.dataset.salesMode === salesMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  renderSalesTrend(periodRows);
+  const peopleMode = salesMode === "people";
+  elements.salesDaysWrap.hidden = peopleMode || rows.length === 0;
+  elements.salesPeopleWrap.hidden = !peopleMode || rows.length === 0;
+  if (peopleMode) renderSalesPeople(rows);
+  else renderSalesDays(rows);
+  updateInlineSalesBar();
+}
+
+// Dny: řádky seskupené po dnech (při řazení podle data), chybějící reporty
+// se vyplňují rovnou v řádku.
+function renderSalesDays(rows) {
+  const todayKey = dateKey(new Date());
+  const grouped = currentSalesSort.key === "date";
+  elements.salesDaysWrap.querySelector("table").classList.toggle("is-grouped", grouped);
+  const output = [];
+  let currentDate = null;
+  rows.forEach(day => {
+    if (grouped && day.date !== currentDate) {
+      currentDate = day.date;
+      output.push(createSalesDayHeader(day.date, rows.filter(item => item.date === day.date), todayKey));
+    }
+    const row = createSalesRow(day, todayKey);
+    if (grouped && !isSalesDayOpen(day.date, rows)) row.hidden = true;
+    output.push(row);
+  });
+  elements.salesTableBody.replaceChildren(...output);
+}
+
+function isSalesDayOpen(date, rows) {
+  if (salesDayOpen.has(date)) return salesDayOpen.get(date);
+  // Výchozí stav: dny s chybějícím reportem rozbalené, hotové sbalené.
+  return rows.some(day => day.date === date && day.status === "pending");
+}
+
+function createSalesDayHeader(date, dayRows, todayKey) {
+  const open = isSalesDayOpen(date, dayRows);
+  const row = document.createElement("tr");
+  row.className = "sales-day-head";
+  row.classList.toggle("is-open", open);
+  const cell = document.createElement("td");
+  cell.colSpan = 9;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "sales-day-toggle";
+  toggle.setAttribute("aria-expanded", String(open));
+  const label = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "numeric" }).format(parseDateKey(date));
+  toggle.innerHTML = '<i aria-hidden="true"></i><strong></strong><span></span>';
+  toggle.querySelector("strong").textContent = label.charAt(0).toUpperCase() + label.slice(1);
+  const pending = dayRows.filter(day => day.status === "pending").length;
+  const summary = summarizeSales(dayRows);
+  const parts = [`${dayRows.length} ${dayRows.length === 1 ? "člověk" : dayRows.length < 5 ? "lidé" : "lidí"}`];
+  if (summary.hours) parts.push(`ASR ${formatCurrency(summary.asr)}/h`);
+  toggle.querySelector("span").textContent = parts.join(" · ");
+  toggle.addEventListener("click", () => { salesDayOpen.set(date, !open); renderSalesDashboard(); });
+  const status = document.createElement("span");
+  status.className = `sales-day-status ${pending ? "is-pending" : "is-done"}`;
+  status.textContent = pending ? `chybí ${pending}` : "hotovo";
+  cell.append(toggle, status);
+  if (pending && date < todayKey) {
+    const fill = document.createElement("button");
+    fill.type = "button";
+    fill.className = "sales-row-action";
+    fill.textContent = "Vyplnit den";
+    fill.addEventListener("click", () => openBulkSales(date));
+    cell.append(fill);
+  }
+  row.append(cell);
+  return row;
+}
+
+function createSalesRow(day, todayKey) {
+  const person = personByRemoteId(day.workerId);
+  const row = document.createElement("tr");
+  row.dataset.id = day.id;
+  const percent = salesTargetPercent(day);
+  const editable = day.status === "pending" && day.date < todayKey;
+  row.classList.toggle("is-editable", editable);
+  const cells = Array.from({ length: 9 }, () => document.createElement("td"));
+  const name = document.createElement("strong");
+  name.textContent = person?.name || "Neznámý brigádník";
+  cells[0].append(name);
+  cells[1].textContent = new Intl.DateTimeFormat("cs-CZ").format(parseDateKey(day.date));
+  cells[1].className = "sales-date-cell";
+  cells[7].className = "sales-author";
+  cells[7].textContent = day.updatedByEmail || "";
+  if (editable) {
+    const draft = salesDrafts.get(day.id) || {};
+    const input = (field, placeholder, label, step = "1") => {
+      const element = document.createElement("input");
+      element.type = "number"; element.min = "0"; element.step = step; element.inputMode = "decimal";
+      element.className = "sales-inline-input"; element.dataset.field = field;
+      element.placeholder = placeholder; element.setAttribute("aria-label", `${label} – ${person?.name || ""}`);
+      element.value = draft[field] ?? "";
+      element.addEventListener("input", () => updateSalesDraft(row, day));
+      element.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); saveInlineSales(); } });
+      return element;
+    };
+    const hours = input("hours", formatNumber(day.plannedHours), "Prodejní hodiny", "0.5");
+    const hoursWrap = document.createElement("span");
+    hoursWrap.className = "sales-inline-field";
+    hoursWrap.append(hours, document.createTextNode(" h"));
+    cells[2].append(hoursWrap);
+    const revenue = document.createElement("div");
+    revenue.className = "sales-inline-revenue";
+    revenue.append(input("hardware", "železo Kč", "Železo Kč"), input("services", "služby Kč", "Služby Kč"));
+    cells[3].append(revenue);
+    cells[4].className = "sales-inline-asr";
+    cells[4].textContent = "—";
+    cells[5].textContent = "—";
+    const badge = document.createElement("span");
+    badge.className = "sales-result pending";
+    badge.textContent = "Chybí report";
+    cells[6].append(badge);
+    const notSales = document.createElement("button");
+    notSales.type = "button";
+    notSales.className = "sales-row-action is-quiet";
+    notSales.textContent = "Nebyl";
+    notSales.title = "Označit, že nebyl na prodeji";
+    notSales.addEventListener("click", () => markNotSales(day));
+    cells[8].append(notSales);
+    if (draft.hours || draft.hardware || draft.services) queueMicrotask(() => updateSalesDraft(row, day));
+  } else {
+    const reported = day.status === "reported";
+    cells[2].textContent = `${formatNumber(reported ? day.salesHours : day.plannedHours)} h`;
+    cells[3].textContent = reported ? formatCurrency(salesRevenue(day)) : "—";
+    if (reported) cells[3].title = `Železo ${formatCurrency(day.hardware)} · Služby ${formatCurrency(day.services)}`;
+    cells[4].textContent = reported ? `${formatCurrency(salesAsr(day))}/h` : "—";
+    cells[5].textContent = reported ? formatAros(salesAros(day)) : "—";
+    const badge = document.createElement("span");
+    badge.className = `sales-result ${reported ? salesPerformanceClass(percent) : day.status}`;
+    badge.textContent = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
+    cells[6].append(badge);
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = `sales-row-action${day.status === "pending" ? " is-fill" : ""}`;
+    action.textContent = day.status === "pending" ? "Doplnit" : "Detail";
+    action.addEventListener("click", () => openSalesReport(day));
+    cells[8].append(action);
+  }
+  row.append(...cells);
+  return row;
+}
+
+function readSalesDraft(row) {
+  const read = field => row.querySelector(`[data-field="${field}"]`)?.value.trim() ?? "";
+  return { hours: read("hours"), hardware: read("hardware"), services: read("services") };
+}
+
+// Hodnoty k uložení: prázdné hodiny = plánované hodiny ze směny.
+function salesDraftValues(day, draft) {
+  const any = Boolean(draft.hours || draft.hardware || draft.services);
+  const hours = draft.hours === "" ? Number(day.plannedHours) : Number(draft.hours);
+  const complete = any && hours > 0 && draft.hardware !== "" && draft.services !== "" && Number(draft.hardware) >= 0 && Number(draft.services) >= 0;
+  return { any, complete, hours, hardware: Number(draft.hardware), services: Number(draft.services) };
+}
+
+function updateSalesDraft(row, day) {
+  const draft = readSalesDraft(row);
+  if (draft.hours || draft.hardware || draft.services) salesDrafts.set(day.id, draft);
+  else salesDrafts.delete(day.id);
+  const values = salesDraftValues(day, draft);
+  const asrCell = row.querySelector(".sales-inline-asr");
+  const arosCell = asrCell?.nextElementSibling;
+  if (values.complete) {
+    const asr = (values.hardware + values.services) / values.hours;
+    asrCell.textContent = `${formatCurrency(asr)}/h`;
+    arosCell.textContent = formatAros(values.hardware > 0 ? values.services / values.hardware * 100 : null);
+    const badge = row.querySelector(".sales-result");
+    const percent = asr / SALES_ASR_TARGET * 100;
+    badge.className = `sales-result ${salesPerformanceClass(percent)}`;
+    badge.textContent = `${Math.round(percent)} % TGT`;
+  } else {
+    asrCell.textContent = "—";
+    arosCell.textContent = "—";
+    const badge = row.querySelector(".sales-result");
+    badge.className = "sales-result pending";
+    badge.textContent = "Chybí report";
+  }
+  row.classList.toggle("is-draft", values.any);
+  row.classList.toggle("is-incomplete", values.any && !values.complete);
+  updateInlineSalesBar();
+}
+
+function updateInlineSalesBar() {
+  const entries = [...salesDrafts].map(([id, draft]) => {
+    const day = salesDays.find(item => item.id === id);
+    return day ? salesDraftValues(day, draft) : null;
+  }).filter(Boolean);
+  const ready = entries.filter(values => values.complete).length;
+  const incomplete = entries.length - ready;
+  elements.salesInlineBar.hidden = entries.length === 0;
+  elements.salesInlineSave.disabled = ready === 0;
+  elements.salesInlineSave.textContent = ready ? `Uložit ${ready} ${ready === 1 ? "report" : ready < 5 ? "reporty" : "reportů"}` : "Uložit";
+  elements.salesInlineText.textContent = incomplete
+    ? `${incomplete} ${incomplete === 1 ? "řádek není úplně vyplněný" : incomplete < 5 ? "řádky nejsou úplně vyplněné" : "řádků není úplně vyplněných"} – chybí železo nebo služby.`
+    : "Hodiny se předvyplní z rozpisu, stačí zadat železo a služby.";
+}
+
+async function saveInlineSales() {
+  const changes = [...salesDrafts].map(([id, draft]) => {
+    const day = salesDays.find(item => item.id === id);
+    const values = day ? salesDraftValues(day, draft) : null;
+    return values?.complete ? { day, values } : null;
+  }).filter(Boolean);
+  if (!changes.length) { updateInlineSalesBar(); return; }
+  elements.salesInlineSave.disabled = true;
+  elements.salesInlineSave.textContent = "Ukládám…";
+  const results = await Promise.all(changes.map(({ day, values }) => supabaseClient.from("sales_days")
+    .update({ status: "reported", sales_hours: values.hours, hardware_revenue: values.hardware, services_revenue: values.services, updated_by: null, updated_by_email: editorLabel() })
+    .eq("id", day.id).select("*").single()
+    .then(result => ({ day, ...result }))));
+  const failed = results.filter(result => result.error);
+  results.filter(result => !result.error).forEach(result => {
+    Object.assign(result.day, mapSalesDay(result.data));
+    salesDrafts.delete(result.day.id);
+  });
+  renderSalesDashboard();
+  renderAlerts();
+  renderTeam();
+  if (currentMainView === "shifts") renderShiftsDashboard();
+  const saved = results.length - failed.length;
+  if (failed.length) setMessage(`Uloženo ${saved}, nepodařilo se ${failed.length}: ${failed[0].error.message}`, true);
+  else setMessage(`Uloženo ${saved} ${saved === 1 ? "report" : saved < 5 ? "reporty" : "reportů"}.`);
+}
+
+async function markNotSales(day) {
+  const previous = { status: day.status, sales_hours: null, hardware_revenue: null, services_revenue: null };
+  const apply = async payload => {
+    const { data, error } = await supabaseClient.from("sales_days")
+      .update({ ...payload, updated_by: null, updated_by_email: editorLabel() }).eq("id", day.id).select("*").single();
+    if (error) { setMessage(`Nepodařilo se uložit: ${error.message}`, true); return false; }
+    Object.assign(day, mapSalesDay(data));
+    salesDrafts.delete(day.id);
+    renderSalesDashboard(); renderAlerts(); renderTeam();
+    return true;
+  };
+  const name = personByRemoteId(day.workerId)?.name || "Brigádník";
+  if (await apply({ status: "not_sales", sales_hours: null, hardware_revenue: null, services_revenue: null })) {
+    setMessage(`${name}: nebyl na prodeji.`, false, () => apply(previous));
+  }
+}
+
+// Lidé: žebříček za vybrané období.
+function renderSalesPeople(rows) {
+  const people = salesByPerson(rows);
+  elements.salesPeopleBody.replaceChildren(...people.map((item, index) => {
+    const person = personByRemoteId(item.workerId);
     const row = document.createElement("tr");
-    const percent = salesTargetPercent(day);
-    const stateLabel = day.status === "pending" ? "Chybí report" : day.status === "not_sales" ? "Nebyl na prodeji" : `${Math.round(percent)} % TGT`;
-    row.innerHTML = `<td><strong></strong></td><td>${new Intl.DateTimeFormat("cs-CZ").format(new Date(`${day.date}T00:00:00`))}</td><td>${formatNumber(day.status === "reported" ? day.salesHours : day.plannedHours)} h</td><td>${day.status === "reported" ? formatCurrency(day.hardware) : "—"}</td><td>${day.status === "reported" ? formatCurrency(day.services) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesRevenue(day)) : "—"}</td><td>${day.status === "reported" ? formatCurrency(salesAsr(day)) + "/h" : "—"}</td><td>${day.status === "reported" ? formatAros(salesAros(day)) : "—"}</td><td><span class="sales-result ${day.status === "reported" ? salesPerformanceClass(percent) : day.status}">${stateLabel}</span></td><td class="sales-author"></td><td><button class="sales-row-action${day.status === "pending" ? " is-fill" : ""}" type="button">${day.status === "pending" ? "Doplnit" : "Detail"}</button></td>`;
-    row.querySelector("strong").textContent = person?.name || "Neznámý brigádník";
-    row.querySelector(".sales-author").textContent = day.updatedByEmail || "";
-    row.querySelector("button").addEventListener("click", () => openSalesReport(day));
+    const percent = item.hours ? item.asr / SALES_ASR_TARGET * 100 : 0;
+    const cells = Array.from({ length: 9 }, () => document.createElement("td"));
+    cells[0].className = "sales-rank";
+    cells[0].textContent = item.reported ? index + 1 : "–";
+    const nameButton = document.createElement("button");
+    nameButton.type = "button";
+    nameButton.className = "sales-person-link";
+    nameButton.textContent = person?.name || "Neznámý brigádník";
+    if (person) nameButton.addEventListener("click", () => { openPerson(person.id); activateProfileTab("sales"); });
+    cells[1].append(nameButton);
+    cells[2].textContent = `${item.reported} / ${item.days}`;
+    cells[3].textContent = item.hours ? `${formatNumber(item.hours)} h` : "—";
+    cells[4].textContent = item.revenue ? formatCurrency(item.revenue) : "—";
+    cells[5].textContent = item.hours ? `${formatCurrency(item.asr)}/h` : "—";
+    cells[6].textContent = item.hours ? formatAros(item.aros) : "—";
+    if (item.hours) {
+      const meter = document.createElement("div");
+      meter.className = `sales-target-meter ${salesPerformanceClass(percent)}`;
+      meter.style.setProperty("--share", Math.min(1, percent / 150).toFixed(3));
+      meter.innerHTML = "<span></span><strong></strong>";
+      meter.querySelector("strong").textContent = `${Math.round(percent)} %`;
+      cells[7].append(meter);
+    } else cells[7].textContent = "—";
+    cells[8].textContent = item.missing || "–";
+    if (item.missing) cells[8].className = "sales-missing-count";
+    row.append(...cells);
     return row;
   }));
+}
+
+// Týmové ASR po týdnech s čárou cíle.
+function renderSalesTrend(rows) {
+  const weeks = salesByWeek(rows);
+  elements.salesTrend.hidden = weeks.length === 0;
+  if (!weeks.length) { elements.salesTrend.replaceChildren(); return; }
+  // Šířka podle počtu týdnů, aby pár sloupců nebylo roztažených přes celou stránku.
+  const slotWidth = 96, height = 150, top = 22, bottom = 26, left = 8, right = 46;
+  const width = left + right + slotWidth * Math.max(weeks.length, 4);
+  const max = Math.max(SALES_ASR_TARGET * 1.25, ...weeks.map(week => week.asr)) * 1.05;
+  const plotHeight = height - top - bottom;
+  const y = value => top + plotHeight - (value / max) * plotHeight;
+  const slot = slotWidth;
+  const barWidth = Math.min(64, slot * 0.6);
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", weeks.map(week => `týden od ${week.week}: ${Math.round(week.asr)} Kč/h`).join(", "));
+  const make = (tag, attrs, text) => {
+    const element = document.createElementNS(svgNS, tag);
+    Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+    if (text !== undefined) element.textContent = text;
+    svg.append(element);
+    return element;
+  };
+  make("line", { x1: left, x2: width - right, y1: top + plotHeight, y2: top + plotHeight, class: "trend-axis" });
+  weeks.forEach((week, index) => {
+    const x = left + slot * index + (slot - barWidth) / 2;
+    const met = week.asr >= SALES_ASR_TARGET;
+    const bar = make("rect", { x, y: y(week.asr), width: barWidth, height: Math.max(2, top + plotHeight - y(week.asr)), rx: 4, class: met ? "trend-bar is-met" : "trend-bar" });
+    const startLabel = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(parseDateKey(week.week));
+    const title = document.createElementNS(svgNS, "title");
+    title.textContent = `Týden od ${startLabel}: ASR ${formatCurrency(week.asr)}/h · ${week.reports} ${week.reports === 1 ? "report" : week.reports < 5 ? "reporty" : "reportů"}`;
+    bar.append(title);
+    make("text", { x: x + barWidth / 2, y: y(week.asr) - 6, class: "trend-value", "text-anchor": "middle" }, formatNumber(Math.round(week.asr)));
+    make("text", { x: x + barWidth / 2, y: height - 8, class: "trend-label", "text-anchor": "middle" }, `od ${startLabel}`);
+  });
+  make("line", { x1: left, x2: width - right, y1: y(SALES_ASR_TARGET), y2: y(SALES_ASR_TARGET), class: "trend-target" });
+  make("text", { x: width - right + 6, y: y(SALES_ASR_TARGET) + 4, class: "trend-target-label" }, "TGT");
+  const header = document.createElement("header");
+  header.innerHTML = "<h3>Týmové ASR po týdnech</h3><span></span>";
+  header.querySelector("span").textContent = `cíl ${formatCurrency(SALES_ASR_TARGET)}/h`;
+  elements.salesTrend.replaceChildren(header, svg);
 }
 
 function syncSalesPersonOptions() {

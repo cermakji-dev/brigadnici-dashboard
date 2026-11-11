@@ -27,7 +27,7 @@ test("hodnocení nejde odeslat dvakrát dvojklikem", () => {
 
 test("autor prodejního reportu se nevkládá jako HTML", () => {
   assert.doesNotMatch(app, /\$\{day\.updatedByEmail/);
-  assert.match(app, /\.sales-author"\)\.textContent = day\.updatedByEmail/);
+  assert.match(app, /cells\[7\]\.textContent = day\.updatedByEmail/);
 });
 
 test("aplikace běží bez přihlášení a neposílá staré přihlášení", () => {

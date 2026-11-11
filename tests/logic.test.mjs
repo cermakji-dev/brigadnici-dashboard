@@ -172,3 +172,30 @@ test("brigádníci z rozpisu se objeví s nulovými hodinami, i když chybí v m
     photo: ""
   });
 });
+
+test("prodeje po lidech: výkon jen z vyplněných reportů, chybějící se počítají zvlášť", async () => {
+  const { salesByPerson } = await import("../logic.mjs");
+  const rows = salesByPerson([
+    { workerId: "a", status: "reported", salesHours: 4, hardware: 20000, services: 6000 },
+    { workerId: "a", status: "pending", plannedHours: 6 },
+    { workerId: "b", status: "reported", salesHours: 2, hardware: 30000, services: 0 },
+    { workerId: "c", status: "pending", plannedHours: 5 }
+  ]);
+  assert.deepEqual(rows.map(row => row.workerId), ["b", "a", "c"]);
+  assert.equal(rows[1].asr, 6500);
+  assert.equal(rows[1].missing, 1);
+  assert.equal(rows[1].reported, 1);
+  assert.equal(rows[2].reported, 0);
+});
+
+test("prodeje po týdnech začínají pondělím", async () => {
+  const { salesByWeek, weekStartKey } = await import("../logic.mjs");
+  assert.equal(weekStartKey("2026-11-11"), "2026-11-09");
+  assert.equal(weekStartKey("2026-11-08"), "2026-11-02");
+  const weeks = salesByWeek([
+    { date: "2026-11-10", status: "reported", salesHours: 2, hardware: 10000, services: 0 },
+    { date: "2026-11-03", status: "reported", salesHours: 4, hardware: 20000, services: 6000 },
+    { date: "2026-11-11", status: "pending" }
+  ]);
+  assert.deepEqual(weeks.map(week => [week.week, week.asr]), [["2026-11-02", 6500], ["2026-11-09", 5000]]);
+});

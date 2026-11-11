@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.13.0">
+  <meta name="app-build" content="5.14.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=98">
+    <link rel="stylesheet" href="styles.css?v=99">
 </head>
 <body>
 
@@ -287,25 +287,41 @@
         <article><span>Plnění TGT</span><strong id="salesTargetKpi">0 %</strong></article>
         <article class="attention"><span>Chybí report</span><strong id="salesMissingKpi">0</strong></article>
       </div>
+      <div id="salesNoData" class="sales-no-data" hidden>
+        <div><strong id="salesNoDataTitle">Zatím žádný vyplněný report</strong><span id="salesNoDataText"></span></div>
+        <button id="salesNoDataFill" class="button button-primary" type="button">Vyplnit chybějící</button>
+      </div>
       <div class="sales-toolbar">
+        <div class="shifts-mode sales-mode" role="group" aria-label="Zobrazení prodejů">
+          <button class="shifts-mode-button" type="button" data-sales-mode="days" aria-pressed="true">Dny</button>
+          <button class="shifts-mode-button" type="button" data-sales-mode="people" aria-pressed="false">Lidé</button>
+        </div>
+        <span class="toolbar-spacer"></span>
         <select id="salesPeriodFilter" aria-label="Měsíc prodejních výsledků"><option value="all">Všechny měsíce</option></select>
         <select id="salesPersonFilter" aria-label="Brigádník"><option value="all">Všichni brigádníci</option></select>
         <select id="salesStatusFilter" aria-label="Stav prodejních výsledků"><option value="all">Všechny stavy</option><option value="pending">Chybí report</option><option value="below">Pod TGT</option><option value="met">TGT splněn</option><option value="not_sales">Nebyl na prodeji</option></select>
         <button id="bulkSalesButton" class="toolbar-action toolbar-action-primary" type="button" title="Vyplnit reporty všech brigádníků za jeden den">Vyplnit den</button>
         <button id="exportSalesButton" class="toolbar-action" type="button" title="Stáhnout zobrazené řádky jako CSV pro Excel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Export</button>
       </div>
-      <div class="sales-table-wrap"><table class="sales-table"><thead><tr>
+      <section id="salesTrend" class="sales-trend" hidden aria-label="Týmové ASR po týdnech"></section>
+      <div id="salesDaysWrap" class="sales-table-wrap"><table class="sales-table"><thead><tr>
         <th><button class="table-sort" type="button" data-sales-sort-key="name">Brigádník <span>↕</span></button></th>
         <th aria-sort="descending"><button class="table-sort is-active" type="button" data-sales-sort-key="date">Datum <span>↓</span></button></th>
         <th><button class="table-sort" type="button" data-sales-sort-key="hours">Hodiny <span>↕</span></button></th>
-        <th><button class="table-sort" type="button" data-sales-sort-key="hardware">Železo <span>↕</span></button></th>
-        <th><button class="table-sort" type="button" data-sales-sort-key="services">Služby <span>↕</span></button></th>
-        <th><button class="table-sort" type="button" data-sales-sort-key="revenue">Celkem <span>↕</span></button></th>
+        <th><button class="table-sort" type="button" data-sales-sort-key="revenue">Obrat <span>↕</span></button></th>
         <th><button class="table-sort" type="button" data-sales-sort-key="asr">ASR <span>↕</span></button></th>
         <th><button class="table-sort" type="button" data-sales-sort-key="aros">ARoS <span>↕</span></button></th>
         <th><button class="table-sort" type="button" data-sales-sort-key="status">Stav <span>↕</span></button></th>
         <th>Autor</th><th></th>
       </tr></thead><tbody id="salesTableBody"></tbody></table></div>
+      <div id="salesPeopleWrap" class="sales-table-wrap" hidden><table class="sales-table sales-people-table"><thead><tr>
+        <th>#</th><th>Brigádník</th><th>Reporty</th><th>Hodiny</th><th>Obrat</th><th>ASR</th><th>ARoS</th><th>Plnění TGT</th><th>Chybí</th>
+      </tr></thead><tbody id="salesPeopleBody"></tbody></table></div>
+      <div id="salesInlineBar" class="sales-inline-bar" hidden>
+        <span id="salesInlineText"></span>
+        <button id="salesInlineDiscard" class="button" type="button">Zrušit</button>
+        <button id="salesInlineSave" class="button button-primary" type="button">Uložit</button>
+      </div>
       <div id="salesEmpty" class="empty-state"><h3>Zatím bez prodejních dat</h3><p>Směny ze sloupců Prodej a Výdej / prodej se načtou z Google Sheets.</p></div>
     </section>
   </main>
@@ -313,7 +329,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v97</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v98</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -647,6 +663,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=97"></script>
+  <script type="module" src="app.js?v=98"></script>
 </body>
 </html>

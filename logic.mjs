@@ -414,18 +414,28 @@ export const suggestReplacements = (freeBlock, people, dayShifts, limit = 3) => 
     .map(item => item.person);
 };
 
+// Klíč nezávislý na pořadí slov: „Ondřej Kolebač“ = „Kolebač Ondřej“.
+export const nameTokensKey = name => {
+  const parts = slugFromName(name).split("-").filter(Boolean);
+  return parts.length >= 2 ? [...parts].sort().join("-") : "";
+};
+
 // Výběr jména pro zápis do rozpisu: preferuje ručně založené karty před AUTO_.
+// Přesná shoda má přednost; jinak se zkusí stejná jména v jiném pořadí.
 export const buildWorkerLookup = workers => {
   const byName = new Map();
+  const byTokens = new Map();
   [...workers]
     .sort((a, b) => Number(String(a.external_user_id || a.userId || "").startsWith("AUTO_")) - Number(String(b.external_user_id || b.userId || "").startsWith("AUTO_")))
     .forEach(worker => {
       [worker.full_name ?? worker.name, ...(worker.aliases || [])].forEach(name => {
         const key = slugFromName(name);
         if (key && !byName.has(key)) byName.set(key, worker);
+        const tokens = nameTokensKey(name);
+        if (tokens && !byTokens.has(tokens)) byTokens.set(tokens, worker);
       });
     });
-  return name => byName.get(slugFromName(name)) || null;
+  return name => byName.get(slugFromName(name)) || byTokens.get(nameTokensKey(name)) || null;
 };
 
 // Rozložení bloků v řádku časové osy: překrývající se bloky dostanou
@@ -447,4 +457,46 @@ export const timelineRange = (blocks, fallback = [480, 1200]) => {
   const start = Math.min(fallback[0], ...blocks.map(block => block.start));
   const end = Math.max(fallback[1], ...blocks.map(block => block.end));
   return [Math.floor(start / 60) * 60, Math.ceil(end / 60) * 60];
+};
+
+// ---------------------------------------------------------------------------
+// Prodejní výkon: souhrny po lidech a po týdnech.
+// Den: { workerId, date, status, salesHours, hardware, services, plannedHours }
+// ---------------------------------------------------------------------------
+
+// Žebříček za vybrané dny: jen vyplněné reporty se počítají do výkonu,
+// chybějící se jen sčítají.
+export const salesByPerson = days => {
+  const groups = new Map();
+  days.forEach(day => {
+    if (!day.workerId) return;
+    if (!groups.has(day.workerId)) groups.set(day.workerId, []);
+    groups.get(day.workerId).push(day);
+  });
+  return [...groups].map(([workerId, list]) => ({
+    workerId,
+    ...summarizeSales(list),
+    days: list.length,
+    reported: list.filter(day => day.status === "reported").length,
+    missing: list.filter(day => day.status === "pending").length
+  })).sort((a, b) => (b.reported > 0) - (a.reported > 0) || b.asr - a.asr || b.revenue - a.revenue);
+};
+
+// Pondělí týdne, do kterého datum („RRRR-MM-DD“) patří.
+export const weekStartKey = key => {
+  const [year, month, day] = String(key).slice(0, 10).split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return dateKey(date);
+};
+
+// Týmové ASR po týdnech (jen týdny s aspoň jedním vyplněným reportem), od nejstaršího.
+export const salesByWeek = days => {
+  const groups = new Map();
+  days.filter(day => day.status === "reported").forEach(day => {
+    const key = weekStartKey(day.date);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(day);
+  });
+  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([week, list]) => ({ week, ...summarizeSales(list), reports: list.length }));
 };
