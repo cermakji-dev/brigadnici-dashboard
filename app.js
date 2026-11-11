@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, toCsv, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=105";
+} from "./logic.mjs?v=106";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -146,6 +146,7 @@ const elements = {
   shiftsViewButton: document.querySelector("#shiftsViewButton"), shiftsFreeBadge: document.querySelector("#shiftsFreeBadge"),
   shiftsDashboard: document.querySelector("#shiftsDashboard"), shiftsDayTitle: document.querySelector("#shiftsDayTitle"),
   shiftsDaySubtitle: document.querySelector("#shiftsDaySubtitle"), shiftsDateInput: document.querySelector("#shiftsDateInput"),
+  shiftsDatePicker: document.querySelector("#shiftsDatePicker"), shiftsDateLabel: document.querySelector("#shiftsDateLabel"),
   shiftsPrevDay: document.querySelector("#shiftsPrevDay"), shiftsNextDay: document.querySelector("#shiftsNextDay"),
   shiftsDayChips: [...document.querySelectorAll("[data-shift-offset]")], shiftsBoard: document.querySelector("#shiftsBoard"),
   shiftsAttention: document.querySelector("#shiftsAttention"), shiftsEmpty: document.querySelector("#shiftsEmpty"),
@@ -281,6 +282,12 @@ elements.shiftsNextDay.addEventListener("click", () => shiftsMode === "month" ? 
 elements.shiftsModeButtons.forEach(button => button.addEventListener("click", () => setShiftsMode(button.dataset.shiftsMode)));
 elements.teamPeriodSelect.addEventListener("change", () => setTeamPeriod(elements.teamPeriodSelect.value));
 elements.shiftsDateInput.addEventListener("change", () => { if (elements.shiftsDateInput.value) setShiftDay(parseDateKey(elements.shiftsDateInput.value)); });
+// Celé tlačítko s datem otevře kalendář prohlížeče.
+elements.shiftsDatePicker.addEventListener("click", event => {
+  if (event.target === elements.shiftsDateInput) return;
+  event.preventDefault();
+  try { elements.shiftsDateInput.showPicker(); } catch { elements.shiftsDateInput.focus(); }
+});
 elements.bulkSalesButton.addEventListener("click", () => openBulkSales());
 elements.bulkSalesDate.addEventListener("change", () => renderBulkSalesRows(elements.bulkSalesDate.value));
 elements.bulkSalesForm.addEventListener("submit", saveBulkSales);
@@ -2912,7 +2919,7 @@ function renderShiftsDashboard() {
   elements.shiftsPrevDay.setAttribute("aria-label", monthMode ? "Předchozí měsíc" : "Předchozí den");
   elements.shiftsNextDay.setAttribute("aria-label", monthMode ? "Další měsíc" : "Další den");
   elements.shiftsDayChips.forEach(chip => { chip.hidden = monthMode; });
-  elements.shiftsDateInput.hidden = monthMode;
+  elements.shiftsDatePicker.hidden = monthMode;
   elements.shiftsMonth.hidden = !monthMode;
   if (monthMode) { renderShiftsMonth(); return; }
   setShiftsSummaryLabels(false);
@@ -2923,6 +2930,9 @@ function renderShiftsDashboard() {
   const longDate = new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long" }).format(day);
   elements.shiftsDayTitle.textContent = label ? `${label} · ${longDate}` : longDate.charAt(0).toUpperCase() + longDate.slice(1);
   elements.shiftsDateInput.value = key;
+  // „St 11. 11. 2026“ – den v týdnu je vidět i při překlikávání šipkami.
+  const weekday = new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(day);
+  elements.shiftsDateLabel.textContent = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }).format(day)}`;
   elements.shiftsDayChips.forEach(chip => chip.classList.toggle("is-active", shiftDayLabel(day) === chip.textContent.trim()));
 
   const dayShifts = shiftRows.filter(shift => shift.date === key);
