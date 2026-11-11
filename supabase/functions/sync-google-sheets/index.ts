@@ -2,10 +2,12 @@
 // (hlavička x-sync-secret) a ručně tlačítko v aplikaci (bez tajemství, ale
 // nejvýš jednou za minutu).
 //
-// Zapisuje: docházku všech měsíců až po aktuální ze souhrnů měsíčních listů
-// (attendance_totals), rozpis směn od 1. dne měsíce před třemi měsíci do +45 dní
-// (shifts), očekávané prodejní směny (sales_days) a nové karty pro neznámá
-// jména z aktuálního měsíce (workers).
+// Zapisuje: hodiny za každý měsíc spočítané z rozpisu měsíčního listu
+// (attendance_totals; ruční souhrn „Jméno / Počet zapsaných hodin“ v tabulce
+// měl chybné rozsahy a chyběla v něm jména), rozpis směn od 1. dne měsíce před
+// třemi měsíci do +45 dní (shifts), prodejní reporty pro naplánované prodejní
+// směny (sales_days) a neaktivní karty pro neznámá jména z rozpisu (workers) –
+// aktivní tým se spravuje jinde.
 //
 // Nasazení: supabase functions deploy sync-google-sheets --no-verify-jwt
 // (logic.mjs v této složce jen re-exportuje ../../../logic.mjs).
@@ -13,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.53.0";
 import * as XLSX from "npm:xlsx@0.18.5";
 import {
   addDays, automaticWorkerId, buildShiftRows, buildWorkerLookup, dateKey, firstDayOfMonth, isLikelyWorkerName,
-  normalizeText, parseHours, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell
+  monthlyRosterHours, normalizeText, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell
 } from "./logic.mjs";
 
 const SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
@@ -30,7 +32,6 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const errorMessage = (error: unknown) => error instanceof Error
   ? error.message
   : typeof error === "object" && error && "message" in error ? String((error as { message: unknown }).message) : String(error);
-const SUMMARY_STOP = ["pocet volnych smen", "pocet obsazenych smen", "% obsazeni", "planovane hodiny", "z toho log (obsazene)"];
 
 type Worker = { id: string; external_user_id: string; full_name: string; aliases: string[] | null; active: boolean };
 type Matrix = unknown[][];
@@ -40,29 +41,6 @@ const pragueToday = () => {
   const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return new Date(Number(value.year), Number(value.month) - 1, Number(value.day));
 };
-
-function readSummary(matrix: Matrix) {
-  for (let headerRow = 0; headerRow < Math.min(matrix.length, 12); headerRow += 1) {
-    const cells = (matrix[headerRow] || []).map(normalizeText);
-    const nameColumn = cells.findIndex(cell => ["jmeno", "brigadnik", "name"].includes(cell));
-    const hoursColumn = cells.findIndex(cell => ["pocet zapsanych hodin", "pocet hodin", "hodiny", "hours"].includes(cell));
-    if (nameColumn < 0 || hoursColumn < 0) continue;
-    const rows: { name: string; hours: number }[] = [];
-    for (let index = headerRow + 1; index < matrix.length; index += 1) {
-      const name = String(matrix[index]?.[nameColumn] ?? "").trim();
-      if (!name) continue;
-      if (SUMMARY_STOP.includes(normalizeText(name))) break;
-      if (isLikelyWorkerName(name)) rows.push({ name, hours: parseHours(matrix[index][hoursColumn]) });
-    }
-    let plannedHours: number | null = null;
-    for (const row of matrix) {
-      const index = row.findIndex(cell => normalizeText(cell) === "planovane hodiny");
-      if (index >= 0) { plannedHours = parseHours(row[index + 1]); break; }
-    }
-    return { rows, plannedHours };
-  }
-  throw new Error("Aktuální list nemá souhrn se sloupci Jméno a Počet zapsaných hodin.");
-}
 
 async function isScheduled(request: Request) {
   const expected = Deno.env.get("SYNC_CRON_SECRET");
@@ -111,16 +89,15 @@ Deno.serve(async request => {
     const sheetName = workbook.SheetNames.find(name => periodFromSheetName(name) === period);
     if (!sheetName) throw new Error(`V tabulce chybí list pro ${period.slice(0, 7)}.`);
     const currentMatrix = matrices.get(sheetName)!;
-    const { rows: summary, plannedHours } = readSummary(currentMatrix);
 
     const { data: workerRows, error: workerError } = await supabase.from("workers").select("id, external_user_id, full_name, aliases, active");
     if (workerError) throw workerError;
     const workers = workerRows as Worker[];
     let lookup = buildWorkerLookup(workers);
 
-    // Neznámá jména ze souhrnu i z rozpisu aktuálního měsíce dostanou kartu nováčka.
+    // Neznámá jména z rozpisu aktuálního měsíce dostanou kartu (neaktivní –
+    // aktivní tým se spravuje jinde, karta slouží k přiřazení hodin a směn).
     const candidates = new Map<string, string>();
-    summary.forEach(row => { if (!lookup(row.name)) candidates.set(normalizeText(row.name), row.name); });
     forEachShiftCell(currentMatrix, ({ text }) => {
       resolveShiftCell(text, lookup).forEach(entry => {
         if (!entry.free && !entry.worker && isLikelyWorkerName(entry.name)) candidates.set(normalizeText(entry.name), entry.name);
@@ -131,7 +108,7 @@ Deno.serve(async request => {
       for (const name of candidates.values()) {
         const { data, error } = await supabase.from("workers").upsert({
           external_user_id: automaticWorkerId(name), full_name: name, role: "Sales Support", status: "Nováček",
-          active: true, skills: 0, reliability: 100, departments: [], aliases: [], notes: ""
+          active: false, skills: 0, reliability: 100, departments: [], aliases: [], notes: ""
         }, { onConflict: "external_user_id" }).select("id, external_user_id, full_name, aliases, active").single();
         if (error) throw error;
         workers.push(data as Worker);
@@ -141,31 +118,35 @@ Deno.serve(async request => {
       lookup = buildWorkerLookup(workers);
     }
 
-    // Docházka ze souhrnů všech měsíčních listů až po aktuální měsíc
-    // (zapisují se jen změněné hodnoty). Nové karty vznikají jen pro aktuální měsíc,
-    // u starších měsíců se páruje jen na existující brigádníky.
+    // Hodiny za každý měsíc až po aktuální, spočítané z rozpisu daného listu
+    // (zapisují se jen změněné hodnoty).
     const attendanceRows: { worker_id: string; period: string; hours: number; source_name: string; imported_at: string }[] = [];
     const attendance = new Map<string, number>();
+    let plannedHours: number | null = null;
     const monthSheets = workbook.SheetNames.map(name => ({ name, sheetPeriod: periodFromSheetName(name) }))
       .filter(item => item.sheetPeriod && item.sheetPeriod <= period);
     for (const { name, sheetPeriod } of monthSheets) {
-      let rows: { name: string; hours: number }[];
-      try { rows = name === sheetName ? summary : readSummary(matrices.get(name)!).rows; } catch { continue; }
-      const totals = new Map<string, number>();
-      rows.forEach(row => {
-        const worker = lookup(row.name) as Worker | null;
-        if (!worker || (sheetPeriod === period && !worker.active)) return;
-        totals.set(worker.id, (totals.get(worker.id) || 0) + row.hours);
-      });
-      if (sheetPeriod === period) totals.forEach((hours, id) => attendance.set(id, hours));
-      totals.forEach((hours, worker_id) => attendanceRows.push({ worker_id, period: sheetPeriod!, hours, source_name: `Google Sheets – ${name}`, imported_at: new Date().toISOString() }));
+      const roster = monthlyRosterHours(matrices.get(name)!, sheetPeriod!, lookup);
+      if (sheetPeriod === period) {
+        roster.hours.forEach((hours, id) => attendance.set(id, hours));
+        plannedHours = roster.planned;
+      }
+      roster.hours.forEach((hours, worker_id) => attendanceRows.push({ worker_id, period: sheetPeriod!, hours, source_name: `Rozpis – ${name}`, imported_at: new Date().toISOString() }));
     }
+    const summary = [...attendance.keys()];
     let changed: typeof attendanceRows = [];
     if (attendanceRows.length) {
       const periods = [...new Set(attendanceRows.map(row => row.period))];
       const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, period, hours").in("period", periods);
       if (error) throw error;
       const old = new Map((existing ?? []).map(row => [`${row.worker_id}|${row.period}`, Number(row.hours)]));
+      // Kdo v rozpisu daného měsíce už není, má za ten měsíc 0 h.
+      const fresh = new Set(attendanceRows.map(row => `${row.worker_id}|${row.period}`));
+      (existing ?? []).forEach(row => {
+        if (!fresh.has(`${row.worker_id}|${row.period}`) && Number(row.hours) !== 0) {
+          attendanceRows.push({ worker_id: row.worker_id, period: row.period, hours: 0, source_name: "Rozpis – bez směn", imported_at: new Date().toISOString() });
+        }
+      });
       changed = attendanceRows.filter(row => old.get(`${row.worker_id}|${row.period}`) !== row.hours);
       if (changed.length && !dryRun) {
         for (let index = 0; index < changed.length; index += 500) {

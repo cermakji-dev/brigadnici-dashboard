@@ -509,3 +509,24 @@ export const salesByWeek = days => {
   });
   return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([week, list]) => ({ week, ...summarizeSales(list), reports: list.length }));
 };
+
+// Hodiny za měsíc přímo z rozpisu měsíčního listu: každá buňka se jménem je
+// jeden slot (obvykle hodina), počítá se skutečná délka slotu. Stejná metoda
+// jako souhrn v tabulce, ale pro každého v rozpisu a bez ručního seznamu.
+export const monthlyRosterHours = (matrix, periodKey, lookup) => {
+  const prefix = String(periodKey).slice(0, 7);
+  const hours = new Map();
+  let free = 0;
+  let unmatched = 0;
+  forEachShiftCell(matrix, ({ date, slot, text }) => {
+    if (!date || !dateKey(date).startsWith(prefix)) return;
+    resolveShiftCell(text, lookup).forEach(entry => {
+      if (entry.free) { free += slot.hours; return; }
+      if (!entry.worker) { if (isLikelyWorkerName(entry.name)) unmatched += slot.hours; return; }
+      hours.set(entry.worker.id, (hours.get(entry.worker.id) || 0) + slot.hours);
+    });
+  });
+  hours.forEach((value, key) => hours.set(key, roundHours(value)));
+  const occupied = roundHours([...hours.values()].reduce((sum, value) => sum + value, 0) + unmatched);
+  return { hours, occupied, free: roundHours(free), planned: roundHours(occupied + free) };
+};

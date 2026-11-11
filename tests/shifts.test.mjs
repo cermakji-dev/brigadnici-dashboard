@@ -135,3 +135,24 @@ test("jméno v obráceném pořadí se spáruje se stejným brigádníkem", asyn
   assert.equal(lookup("Hrubantová Veronika")?.id, "b");
   assert.equal(lookup("Veronika Nováková"), null);
 });
+
+test("hodiny za měsíc se počítají z rozpisu pro každého, i se jménem obráceně", async () => {
+  const { monthlyRosterHours, buildWorkerLookup } = await import("../logic.mjs");
+  const lookup = buildWorkerLookup([{ id: "k", full_name: "Kolebač Ondřej" }, { id: "l", full_name: "Lískovcová Lucie" }]);
+  const matrix = [
+    ["", 46327],
+    ["Určení:", "Výdej", "Prodej"],
+    ["8-9 h", "Ondřej Kolebač", "Lískovcová Lucie"],
+    ["9-10 h", "Kolebač Ondřej", "VOLNÁ SMĚNA"],
+    ["Celkem hod.:", 4],
+    ["", 46357],
+    ["Určení:", "Výdej"],
+    ["8-9 h", "Kolebač Ondřej"],
+    ["Celkem hod.:", 1]
+  ];
+  const result = monthlyRosterHours(matrix, "2026-11-01", lookup);
+  assert.equal(result.hours.get("k"), 2);
+  assert.equal(result.hours.get("l"), 1);
+  assert.equal(result.free, 1);
+  assert.equal(result.planned, 4);
+});
