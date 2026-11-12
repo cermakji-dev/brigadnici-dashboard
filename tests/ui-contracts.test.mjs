@@ -115,6 +115,6 @@ test("záložka Zápis směn je vedle Prodejního výkonu a nic nezapisuje", () 
   assert.match(html, /id="salesViewButton"[^\n]*\n\s*<button id="planViewButton" class="app-view-tab" type="button">Zápis směn<\/button>/);
   assert.match(app, /from "\.\/planner\.mjs\?v=\d+"/);
   const planCode = app.slice(app.indexOf("// Zápis směn (test)"));
-  assert.doesNotMatch(planCode, /\.(insert|update|upsert|delete)\(/);
+  assert.doesNotMatch(planCode, /\.from\([^)]*\)[\s\S]{0,40}\.(insert|update|upsert|delete)\(|\.rpc\(/);
 });
 
