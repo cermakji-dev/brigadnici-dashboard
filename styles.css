@@ -1679,3 +1679,43 @@ dialog .custom-select { position: relative; }
 .topbar { z-index: 60; }
 .toast { z-index: 70; }
 .advanced-filters { border-radius: 0 0 15px 15px; }
+
+/* v127 – detail týdne v grafu Týmové ASR */
+.trend-chart { overflow-x: auto; }
+.trend-hit { fill: transparent; cursor: pointer; outline: none; transition: fill 120ms; }
+.trend-hit:hover, .trend-hit:focus-visible { fill: color-mix(in srgb, var(--brand-purple) 9%, transparent); }
+.trend-hit.is-selected { fill: color-mix(in srgb, var(--brand-purple) 15%, transparent); }
+.trend-bar, .trend-value, .trend-label { pointer-events: none; }
+.trend-bar.is-selected { stroke: var(--text); stroke-width: 1.5; }
+.trend-detail { display: grid; gap: 14px; margin: 8px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.trend-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.trend-detail-head h4 { margin: 0; font-size: .95rem; }
+.trend-detail-close { padding: 6px 11px; background: var(--brand-soft); color: var(--text); border: 1px solid var(--border); border-radius: 9px; cursor: pointer; font: inherit; font-size: .78rem; font-weight: 650; }
+.trend-detail-close:hover { border-color: color-mix(in srgb, var(--brand-purple) 55%, var(--border)); }
+.trend-detail-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.trend-detail-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.trend-day { display: grid; gap: 2px; padding: 9px 10px; background: var(--brand-soft); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; }
+.trend-day span { color: var(--muted); font-size: .72rem; font-weight: 650; }
+.trend-day strong { font-size: 1rem; }
+.trend-day small { color: var(--muted); font-size: .7rem; }
+.trend-day.is-empty { opacity: .55; }
+.trend-day.below { border-left-color: var(--negative); }
+.trend-day.near { border-left-color: #f59e0b; }
+.trend-day.met, .trend-day.excellent { border-left-color: var(--positive); }
+.trend-detail-table-wrap { overflow-x: auto; }
+.trend-detail-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.trend-detail-table th { padding: 7px 10px; color: var(--muted); font-size: .72rem; font-weight: 700; text-align: left; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--border); }
+.trend-detail-table td { padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); white-space: nowrap; }
+.trend-detail-table td:first-child { white-space: normal; }
+.trend-detail-table td strong { display: block; }
+.trend-detail-table td small { color: var(--muted); font-size: .72rem; }
+.trend-detail-table tr:last-child td { border-bottom: 0; }
+@media (max-width: 760px) {
+  .trend-detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trend-detail-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.trend-detail-stats .profile-stat { display: grid; gap: 3px; padding: 10px 12px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 10px; }
+.trend-detail-stats .profile-stat > strong { font-size: 1.05rem; }
+.trend-detail-stats .profile-stat > span { color: var(--muted); font-size: .72rem; font-weight: 650; }
+.trend-detail-stats .profile-stat .sales-result { font-size: .8rem; }
+@media (max-width: 760px) { .sales-trend header { flex-wrap: wrap; gap: 4px 10px; } }
