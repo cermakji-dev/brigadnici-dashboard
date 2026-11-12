@@ -1674,3 +1674,8 @@ dialog .custom-select { position: relative; }
 .editor-name-action.is-missing { color: var(--muted); border-color: transparent; background: transparent; }
 
 @media (max-width: 760px) { .topbar > .app-view-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .app-view-tab { white-space: nowrap; } }
+
+/* v126 – horní lišta vždy nad panelem filtrů (dřív přes ni „duchoval“) a spodní rohy panelu */
+.topbar { z-index: 60; }
+.toast { z-index: 70; }
+.advanced-filters { border-radius: 0 0 15px 15px; }
