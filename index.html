@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.31.1">
+  <meta name="app-build" content="5.32.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=124">
+    <link rel="stylesheet" href="styles.css?v=125">
 </head>
 <body>
 
@@ -40,10 +40,6 @@
       <button id="salesViewButton" class="app-view-tab" type="button">Prodejní výkon <span id="salesPendingBadge" class="tab-badge" hidden>0</span></button>
     </nav>
     <div class="header-actions">
-      <button id="alertsToggle" class="topbar-icon-button alerts-bell" type="button" aria-expanded="false" aria-controls="alertsPanel" title="Co je potřeba vyřešit">
-        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>
-        <span class="visually-hidden">Upozornění</span><strong id="alertsEarCount" class="alerts-bell-count">0</strong>
-      </button>
       <button id="editorNameButton" class="topbar-action editor-name-action" type="button" title="Jméno, pod kterým se ukládají vaše změny"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Podepsat se</span></button>
       <div class="topbar-menu">
         <button id="topbarMenuButton" class="topbar-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="topbarMenu" title="Další možnosti">
@@ -109,24 +105,6 @@
       </div>
     </section>
 
-    <div id="alertsDrawer" class="alerts-drawer">
-    <aside id="alertsPanel" class="alerts-panel" aria-labelledby="alertsHeading" aria-hidden="true">
-      <div class="alerts-heading">
-        <div>
-          <p class="step-label">Centrum úkolů</p>
-          <h2 id="alertsHeading">Co je potřeba vyřešit</h2>
-          <p id="alertsSummary" class="alerts-summary">Vše důležité na jednom místě.</p>
-        </div>
-        <div class="alerts-heading-actions">
-          <button id="alertsClear" class="alerts-clear" type="button">Vyprázdnit</button>
-          <span id="alertsCount" class="alerts-count">0</span>
-          <button id="alertsClose" class="icon-button" type="button" aria-label="Zavřít upozornění">×</button>
-        </div>
-      </div>
-      <div id="alertsList" class="alerts-list"></div>
-      <p id="alertsEmpty" class="alerts-empty"><strong>Všechno je vyřešené</strong><span>Aktuálně není potřeba nic řešit.</span></p>
-    </aside>
-    </div>
 
     <section class="overview team-view-section" aria-labelledby="overviewHeading">
       <div class="section-heading">
@@ -334,7 +312,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v123</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v124</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -668,6 +646,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=123"></script>
+  <script type="module" src="app.js?v=124"></script>
 </body>
 </html>

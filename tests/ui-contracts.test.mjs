@@ -77,7 +77,7 @@ test("oznámení s Vrátit zpět funguje i nad otevřeným dialogem", () => {
 });
 
 test("nové části rozhraní existují", () => {
-  for (const id of ["shiftsViewButton", "shiftsDashboard", "bulkSalesDialog", "feedbackQuickReasons", "topbarMenu", "alertsToggle"]) {
+  for (const id of ["shiftsViewButton", "shiftsDashboard", "bulkSalesDialog", "feedbackQuickReasons", "topbarMenu"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
 });
@@ -117,3 +117,8 @@ test("modul Zápis směn je odstraněný", () => {
   assert.doesNotMatch(app, /planner\.mjs|roster\.mjs|export\.mjs|initPlanView/);
 });
 
+
+test("zvoneček s upozorněními je odstraněný", () => {
+  assert.doesNotMatch(html, /alertsToggle|alertsPanel/);
+  assert.doesNotMatch(app, /renderAlerts|setAlertsOpen/);
+});

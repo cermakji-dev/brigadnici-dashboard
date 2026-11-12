@@ -5,11 +5,10 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=123";
+} from "./logic.mjs?v=124";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
-const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const SORT_KEY = "brigadnici-dashboard-sort";
 const EDITOR_KEY = "brigadnici-editor-name";
 const SORT_OPTIONS = {
@@ -61,8 +60,6 @@ let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards"
 let currentSort = loadSavedSort();
 let currentSalesSort = { key: "date", direction: "desc" };
 const activeQuickFilters = new Set();
-const dismissedAlertSignatures = new Set(loadDismissedAlerts());
-let visibleAlertSignatures = [];
 let teamRenderFrame = 0;
 let monthRosterKnown = false;
 const monthRosterPersonIds = new Set();
@@ -113,16 +110,6 @@ const elements = {
   resetAllFilters: document.querySelector("#resetAllFilters"),
   attendancePeople: document.querySelector("#attendancePeople"),
   attendanceHours: document.querySelector("#attendanceHours"),
-  alertsPanel: document.querySelector("#alertsPanel"),
-  alertsDrawer: document.querySelector("#alertsDrawer"),
-  alertsToggle: document.querySelector("#alertsToggle"),
-  alertsClose: document.querySelector("#alertsClose"),
-  alertsClear: document.querySelector("#alertsClear"),
-  alertsEarCount: document.querySelector("#alertsEarCount"),
-  alertsList: document.querySelector("#alertsList"),
-  alertsCount: document.querySelector("#alertsCount"),
-  alertsSummary: document.querySelector("#alertsSummary"),
-  alertsEmpty: document.querySelector("#alertsEmpty"),
   searchInput: document.querySelector("#searchInput"),
   clearSearchButton: document.querySelector("#clearSearchButton"),
   visiblePeopleKpi: document.querySelector("#visiblePeopleKpi"),
@@ -365,11 +352,7 @@ elements.salesReportForm.addEventListener("submit", saveSalesReport);
 elements.salesReportDialog.addEventListener("click", closeDialogFromBackdrop);
 elements.markNotSalesButton.addEventListener("click", markSalesDayNotSales);
 [elements.salesReportHours, elements.salesReportHardware, elements.salesReportServices].forEach(input => input.addEventListener("input", updateSalesReportPreview));
-elements.alertsToggle.addEventListener("click", () => setAlertsOpen(!elements.alertsPanel.classList.contains("is-open")));
-elements.alertsClose.addEventListener("click", () => setAlertsOpen(false));
-elements.alertsClear.addEventListener("click", clearCurrentAlerts);
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && elements.alertsPanel.classList.contains("is-open")) setAlertsOpen(false);
   const typing = event.target.matches?.("input, textarea, select, [contenteditable='true']");
   if (event.key === "/" && !typing) {
     event.preventDefault();
@@ -380,10 +363,6 @@ document.addEventListener("keydown", event => {
     elements.clearSearchButton.hidden = true;
     renderTeam();
   }
-});
-document.addEventListener("click", event => {
-  if (!elements.alertsPanel.classList.contains("is-open")) return;
-  if (!elements.alertsPanel.contains(event.target) && !elements.alertsToggle.contains(event.target)) setAlertsOpen(false);
 });
 // Detail brigádníka je velké okno uprostřed (modální dialog). Mezi lidmi
 // se přepíná šipkami v záhlaví nebo klávesami ← →, záložka zůstává stejná.
@@ -928,7 +907,7 @@ async function saveOnboarding() {
     if (!statusError) person.status = "Aktivní";
   }
   renderTeam();
-  renderAlerts();
+ 
   setMessage("Nástupní úkoly byly uloženy.");
 }
 
@@ -1419,7 +1398,7 @@ async function syncSalesExpectations(workbook) {
   if (staleIds.length) await supabaseClient.from("sales_days").delete().in("id", staleIds).eq("status", "pending");
   const { data } = await supabaseClient.from("sales_days").select("*").gte("shift_date", salesCutoffKey()).order("shift_date", { ascending: false });
   if (data) salesDays = data.map(mapSalesDay);
-  renderSalesDashboard(); renderAlerts();
+  renderSalesDashboard();
 }
 
 function salesCutoffKey() {
@@ -1793,7 +1772,7 @@ function render() {
   renderTeam();
   renderSyncStatus();
   renderSalesDashboard();
-  renderAlerts();
+ 
   renderShiftsBadge();
 }
 
@@ -1985,133 +1964,6 @@ function metricCell(value, type) {
   return `<span class="table-metric"><span>${safeValue} %</span><i><b style="width:${safeValue}%;background:${color}"></b></i></span>`;
 }
 
-function renderAlerts() {
-  // Upozornění se týkají jen aktuálního aktivního týmu.
-  const people = Object.values(state.people).filter(person => person.active);
-  const medianHours = median(people.map(person => Number(person.hours || 0)).filter(hours => hours > 0));
-  const alerts = [];
-
-  people.forEach(person => {
-    const reasons = [];
-    incompleteOnboardingTasks(person.onboarding).forEach(text => reasons.push({ type: "onboarding", text }));
-    const previousReliability = previousAuditValue(person, "reliability");
-    if (previousReliability !== null && Number(person.reliability) < Number(previousReliability)) {
-      reasons.push({ type: "attendance", text: `Docházka klesla z ${previousReliability} na ${person.reliability} %` });
-    } else if (Number(person.reliability) < 40) {
-      reasons.push({ type: "attendance", text: `Nízká docházková morálka (${person.reliability} %)` });
-    }
-    if (medianHours > 0 && Number(person.hours || 0) > 0 && Number(person.hours || 0) < medianHours * 0.5) {
-      reasons.push({ type: "hours", text: `Málo hodin (${formatNumber(person.hours || 0)} oproti mediánu ${formatNumber(medianHours)})` });
-    }
-    const negative = feedbackCount(person, "negative");
-    const positive = feedbackCount(person, "positive");
-    if (negative >= 2 && negative > positive) {
-      reasons.push({ type: "feedback", text: `Převažují palce dolů (${negative} 👎 / ${positive} 👍)` });
-    }
-    const pendingSales = salesDays.filter(day => day.workerId === person.remoteId && day.status === "pending" && day.date < dateKey(new Date()));
-    if (pendingSales.length) reasons.push({ type: "sales", text: `Chybí ${pendingSales.length} prodejní report${pendingSales.length > 1 ? "y" : ""}`, salesDayId: pendingSales[0].id });
-    if (reasons.length) alerts.push({ person, reasons });
-  });
-
-  alerts.forEach(alert => { alert.signature = alertSignature(alert.person, alert.reasons); });
-  const currentSignatures = new Set(alerts.map(alert => alert.signature));
-  let dismissedChanged = false;
-  [...dismissedAlertSignatures].forEach(signature => {
-    if (!currentSignatures.has(signature)) {
-      dismissedAlertSignatures.delete(signature);
-      dismissedChanged = true;
-    }
-  });
-  if (dismissedChanged) saveDismissedAlerts();
-  const visibleAlerts = alerts.filter(alert => !dismissedAlertSignatures.has(alert.signature));
-  visibleAlertSignatures = visibleAlerts.map(alert => alert.signature);
-  elements.alertsCount.textContent = visibleAlerts.length;
-  elements.alertsEarCount.textContent = visibleAlerts.length;
-  elements.alertsSummary.textContent = visibleAlerts.length
-    ? `${visibleAlerts.length} ${visibleAlerts.length === 1 ? "člověk potřebuje" : visibleAlerts.length < 5 ? "lidé potřebují" : "lidí potřebuje"} pozornost.`
-    : "Vše důležité na jednom místě.";
-  elements.alertsClear.hidden = visibleAlerts.length === 0;
-  elements.alertsToggle.classList.toggle("has-alerts", visibleAlerts.length > 0);
-  elements.alertsEmpty.hidden = visibleAlerts.length > 0;
-  elements.alertsList.hidden = visibleAlerts.length === 0;
-  elements.alertsList.replaceChildren(...visibleAlerts.map(({ person, reasons }) => {
-    const item = document.createElement("article");
-    item.className = "alert-item";
-    item.tabIndex = 0;
-    const title = document.createElement("strong");
-    title.textContent = person.name;
-    const head = document.createElement("span");
-    head.className = "alert-item-head";
-    const action = document.createElement("span");
-    action.className = "alert-item-action";
-    action.textContent = reasons.some(reason => reason.salesDayId) ? "Doplnit report" : "Otevřít detail";
-    const dismiss = document.createElement("button");
-    dismiss.type = "button";
-    dismiss.className = "alert-dismiss";
-    dismiss.setAttribute("aria-label", `Skrýt upozornění pro ${person.name}`);
-    dismiss.title = "Označit jako přečtené";
-    dismiss.textContent = "×";
-    head.append(title, action, dismiss);
-    const badges = document.createElement("span");
-    badges.className = "alert-reasons";
-    reasons.forEach(reason => {
-      const badge = document.createElement("span");
-      badge.className = `alert-reason ${reason.type}`;
-      badge.textContent = reason.text;
-      badges.append(badge);
-    });
-    item.append(head, badges);
-    const openAlert = () => {
-      setAlertsOpen(false);
-      const salesReason = reasons.find(reason => reason.salesDayId);
-      if (salesReason) openSalesReport(salesDays.find(day => day.id === salesReason.salesDayId));
-      else openPerson(person.id);
-    };
-    item.addEventListener("click", event => { if (!event.target.closest(".alert-dismiss")) openAlert(); });
-    item.addEventListener("keydown", event => { if (event.key === "Enter") openAlert(); });
-    dismiss.addEventListener("click", event => {
-      event.stopPropagation();
-      dismissedAlertSignatures.add(alertSignature(person, reasons));
-      saveDismissedAlerts();
-      renderAlerts();
-    });
-    return item;
-  }));
-}
-
-function alertSignature(person, reasons) {
-  return `${person.remoteId || person.id}|${reasons.map(reason => `${reason.type}:${reason.text}`).sort().join("|")}`;
-}
-
-function loadDismissedAlerts() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(DISMISSED_ALERTS_KEY));
-    return Array.isArray(saved) ? saved : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDismissedAlerts() {
-  localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlertSignatures]));
-}
-
-function clearCurrentAlerts() {
-  visibleAlertSignatures.forEach(signature => dismissedAlertSignatures.add(signature));
-  saveDismissedAlerts();
-  renderAlerts();
-  setMessage("Aktuální upozornění byla vyprázdněna.");
-}
-
-function setAlertsOpen(open) {
-  elements.alertsDrawer.classList.toggle("is-open", open);
-  elements.alertsPanel.classList.toggle("is-open", open);
-  elements.alertsToggle.classList.toggle("is-open", open);
-  elements.alertsPanel.setAttribute("aria-hidden", String(!open));
-  elements.alertsToggle.setAttribute("aria-expanded", String(open));
-  if (open) requestAnimationFrame(() => elements.alertsClose.focus({ preventScroll: true }));
-}
-
 function setTopbarMenuOpen(open) {
   elements.topbarMenu.hidden = !open;
   elements.topbarMenuButton.setAttribute("aria-expanded", String(open));
@@ -2165,7 +2017,7 @@ function setTeamPeriod(period) {
   teamPeriod = period;
   applyTeamPeriod();
   renderTeam();
-  renderAlerts();
+ 
 }
 
 function previousAuditValue(person, field) {
@@ -2495,7 +2347,7 @@ async function saveInlineSales() {
     salesDrafts.delete(result.day.id);
   });
   renderSalesDashboard();
-  renderAlerts();
+ 
   renderTeam();
   if (currentMainView === "shifts") renderShiftsDashboard();
   const saved = results.length - failed.length;
@@ -2511,7 +2363,7 @@ async function markNotSales(day) {
     if (error) { setMessage(`Nepodařilo se uložit: ${error.message}`, true); return false; }
     Object.assign(day, mapSalesDay(data));
     salesDrafts.delete(day.id);
-    renderSalesDashboard(); renderAlerts(); renderTeam();
+    renderSalesDashboard(); renderTeam();
     return true;
   };
   const name = personByRemoteId(day.workerId)?.name || "Brigádník";
@@ -2773,7 +2625,7 @@ async function updateSalesDay(changes, successMessage) {
     Object.assign(day, mapSalesDay(data));
     elements.salesReportDialog.close();
     renderSalesDashboard();
-    renderAlerts();
+   
     renderTeam();
     const person = personByRemoteId(day.workerId);
     if (person && elements.dialog.open && elements.personId.value === person.id) renderProfileSales(person);
@@ -3474,7 +3326,7 @@ async function saveBulkSales(event) {
   const failed = results.filter(result => result.error);
   results.filter(result => !result.error).forEach(result => Object.assign(result.day, mapSalesDay(result.data)));
   renderSalesDashboard();
-  renderAlerts();
+ 
   renderTeam();
   if (currentMainView === "shifts") renderShiftsDashboard();
   if (failed.length) {
