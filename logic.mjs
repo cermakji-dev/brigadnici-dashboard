@@ -222,10 +222,26 @@ export const excelCellDate = cells => {
 // Blok začíná řádkem s datem, za ním následuje řádek „Určení:“ s názvy
 // oddělení ve sloupcích B–G a pak řádky se směnami („9-10“, „14:30-15h“…)
 // až po řádek „Celkem hod…“. Pro každou buňku se jménem zavolá onCell.
-export const forEachShiftCell = (matrix, onCell) => {
+export const forEachShiftCell = (matrix, onCell, periodKey = null) => {
+  let [periodYear, periodMonth] = periodKey ? String(periodKey).split("-").map(Number) : [];
+  if (!periodYear) {
+    // Bez názvu listu: rok a měsíc, který mají v listu skoro všechny dny.
+    const counts = new Map();
+    for (let rowIndex = 0; rowIndex < matrix.length - 1; rowIndex += 1) {
+      if (normalizeText(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
+      const date = excelCellDate((matrix[rowIndex] || []).slice(0, 8));
+      if (date) { const key = `${date.getFullYear()}-${date.getMonth() + 1}`; counts.set(key, (counts.get(key) || 0) + 1); }
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top && top[1] >= 3) [periodYear, periodMonth] = top[0].split("-").map(Number);
+  }
   for (let rowIndex = 0; rowIndex < matrix.length - 1; rowIndex += 1) {
     if (normalizeText(matrix[rowIndex + 1]?.[0]).replace(/:$/, "") !== "urceni") continue;
-    const date = excelCellDate((matrix[rowIndex] || []).slice(0, 8));
+    let date = excelCellDate((matrix[rowIndex] || []).slice(0, 8));
+    // Překlep v roce (např. 18. 11. 2025 v listu Listopad26): měsíc sedí, rok se vezme z listu.
+    if (date && periodYear && date.getMonth() + 1 === periodMonth && date.getFullYear() !== periodYear) {
+      date = new Date(periodYear, date.getMonth(), date.getDate());
+    }
     const assignments = (matrix[rowIndex + 1] || []).slice(1, 7);
     for (let shiftRow = rowIndex + 2; shiftRow < matrix.length; shiftRow += 1) {
       const row = matrix[shiftRow] || [];
@@ -304,7 +320,7 @@ export const resolveShiftCell = (text, lookup) => {
 };
 
 // Převede matici listu na řádky směn v rozmezí dat (včetně krajních dní).
-export const buildShiftRows = (matrix, { from, to, lookup }) => {
+export const buildShiftRows = (matrix, { from, to, lookup, period = null }) => {
   const rows = [];
   forEachShiftCell(matrix, ({ date, slot, text, column, assignment }) => {
     if (!date || date < from || date > to) return;
@@ -318,7 +334,7 @@ export const buildShiftRows = (matrix, { from, to, lookup }) => {
       workerId: entry.worker?.id ?? null,
       free: entry.free
     }));
-  });
+  }, period);
   return rows;
 };
 
@@ -535,7 +551,7 @@ export const monthlyRosterHours = (matrix, periodKey, lookup) => {
       if (!entry.worker) { if (isLikelyWorkerName(entry.name)) unmatched += slot.hours; return; }
       hours.set(entry.worker.id, (hours.get(entry.worker.id) || 0) + slot.hours);
     });
-  });
+  }, periodKey);
   hours.forEach((value, key) => hours.set(key, roundHours(value)));
   const occupied = roundHours([...hours.values()].reduce((sum, value) => sum + value, 0) + unmatched);
   return { hours, occupied, free: roundHours(free), planned: roundHours(occupied + free) };

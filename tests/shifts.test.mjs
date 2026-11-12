@@ -181,3 +181,27 @@ test("zkrácené jméno se spáruje, jen když je jednoznačné", async () => {
   assert.equal(lookup("Patejdl Štěpán")?.id, "p");
   assert.equal(lookup("Novák Jan"), null);
 });
+
+test("překlep v roce data v listu se opraví podle názvu listu", async () => {
+  const { buildShiftRows: build, buildWorkerLookup: lookupOf } = await import("../logic.mjs");
+  const matrix = [
+    ["", 45979, "", "", "", "", "", "", "", "SMĚNA 2"], // 18. 11. 2025 – v listu Listopad26 překlep
+    ["Určení:", "↓ Výdej ↓"],
+    ["8-9 h", "Novák Petr"],
+    ["", "", "", "", "", "", "", "Celkem hod.:", 1]
+  ];
+  const lookup = lookupOf([{ id: "a", full_name: "Novák Petr" }]);
+  const rows = build(matrix, { from: new Date(2026, 10, 1), to: new Date(2026, 10, 30), lookup, period: "2026-11-01" });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].date, "2026-11-18");
+});
+
+test("překlep v roce se opraví i bez názvu listu podle ostatních dnů", async () => {
+  const { buildShiftRows: build, buildWorkerLookup: lookupOf } = await import("../logic.mjs");
+  const block = serial => [["", serial], ["Určení:", "↓ Výdej ↓"], ["8-9 h", "Novák Petr"], ["", "", "", "", "", "", "", "Celkem hod.:", 1]];
+  // 17. 11. 2026, 18. 11. 2025 (překlep), 19. 11. 2026, 20. 11. 2026
+  const matrix = [...block(46343), ...block(45979), ...block(46345), ...block(46346)];
+  const lookup = lookupOf([{ id: "a", full_name: "Novák Petr" }]);
+  const dates = build(matrix, { from: new Date(2026, 10, 1), to: new Date(2026, 10, 30), lookup }).map(row => row.date);
+  assert.deepEqual(dates, ["2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"]);
+});
