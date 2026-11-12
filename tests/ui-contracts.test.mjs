@@ -30,13 +30,13 @@ test("autor prodejního reportu se nevkládá jako HTML", () => {
   assert.match(app, /cells\[7\]\.textContent = day\.updatedByEmail/);
 });
 
-test("prohlížení je veřejné, úpravy jen pod přihlášeným účtem", () => {
-  assert.doesNotMatch(html, /id="authGate"/);
-  assert.match(html, /id="loginPassword" type="password"/);
-  assert.match(app, /signInWithPassword/);
-  assert.match(app, /persistSession: true/);
+test("modul nemá vlastní přihlášení, přebírá token z Insightu", () => {
+  assert.doesNotMatch(html, /type="password"|id="editorDialog"/);
+  assert.doesNotMatch(app, /signInWithPassword|x-editor-name/);
+  assert.match(app, /accessToken: async \(\) => currentAccessToken\(\)/);
+  assert.match(app, /autoRefreshToken: false/);
+  assert.match(app, /type !== "insight-auth"/);
   assert.match(app, /guardWrites\(supabaseClient\)/);
-  assert.doesNotMatch(app, /x-editor-name/);
 });
 
 test("profil má záložku docházky a přehledy už nemají export", () => {

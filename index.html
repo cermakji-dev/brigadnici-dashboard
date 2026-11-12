@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.19.0">
+  <meta name="app-build" content="5.20.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=109">
+    <link rel="stylesheet" href="styles.css?v=110">
 </head>
 <body>
 
@@ -44,7 +44,7 @@
         <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>
         <span class="visually-hidden">Upozornění</span><strong id="alertsEarCount" class="alerts-bell-count">0</strong>
       </button>
-      <button id="editorNameButton" class="topbar-action editor-name-action is-missing" type="button" title="Přihlášení pro úpravy"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Přihlásit se</span></button>
+      <span id="editorNameButton" class="topbar-action editor-name-action is-missing" title="Přihlášení přebírá modul z Insightu"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> <span id="editorNameLabel">Jen prohlížení</span></span>
       <div class="topbar-menu">
         <button id="topbarMenuButton" class="topbar-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="topbarMenu" title="Další možnosti">
           <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg><span class="visually-hidden">Další možnosti</span>
@@ -334,7 +334,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v108</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v109</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -480,26 +480,6 @@
         <p id="restoreWorkerStatus" class="message" role="status"></p>
       </div>
       <div class="dialog-actions"><button id="cancelRestoreWorker" class="button button-secondary" type="button" hidden>Zrušit obnovu</button><button id="confirmRestoreWorker" class="button button-primary" type="submit" hidden>Obnovit brigádníka</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="editorDialog" class="simple-dialog login-dialog">
-    <form id="editorForm">
-      <div class="dialog-heading">
-        <div><p class="step-label">Účet Insight / Supabase</p><h2 id="loginTitle">Přihlášení</h2></div>
-        <button id="closeEditorDialog" class="icon-button" type="button" aria-label="Zavřít">×</button>
-      </div>
-      <div id="loginFields">
-        <p class="section-copy">Prohlížet může kdokoli. Úpravy (palce, poznámky, reporty, nástup) se ukládají pod vaším přihlášeným účtem a zapisují do historie změn.</p>
-        <label>E-mail<input id="loginEmail" type="email" required autocomplete="username" placeholder="jmeno@firma.cz"></label>
-        <label>Heslo<input id="loginPassword" type="password" required autocomplete="current-password"></label>
-      </div>
-      <div id="loginSignedIn" class="login-signed-in" hidden>
-        <p class="section-copy">Přihlášen(a) jako <strong id="loginWho"></strong></p>
-        <p id="loginRole" class="login-role"></p>
-      </div>
-      <p id="loginStatus" class="message" role="status"></p>
-      <div class="dialog-actions"><button id="skipEditorName" class="button button-secondary" type="button">Zavřít</button><button id="logoutButton" class="button button-secondary" type="button" hidden>Odhlásit se</button><button id="loginSubmit" class="button button-primary" type="submit">Přihlásit se</button></div>
     </form>
   </dialog>
 
@@ -676,6 +656,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=108"></script>
+  <script type="module" src="app.js?v=109"></script>
 </body>
 </html>

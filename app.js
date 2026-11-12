@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=108";
+} from "./logic.mjs?v=109";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -13,6 +13,9 @@ const DISMISSED_ALERTS_KEY = "brigadnici-dismissed-alerts";
 const SORT_KEY = "brigadnici-dashboard-sort";
 // Přihlášený účet Supabase a jeho členství v app_members (oprávnění k úpravám).
 const authState = { user: null, member: null, checked: false };
+// Domény Insightu, které smí modulu předat přihlášení, a token od nich.
+const HOST_ORIGINS = window.APP_CONFIG?.hostOrigins || ["https://insightp7.pages.dev"];
+let hostAccessToken = null;
 const SORT_OPTIONS = {
   name: { key: "name", direction: "asc" },
   "hours-desc": { key: "hours", direction: "desc" },
@@ -77,19 +80,6 @@ const elements = {
   appContent: [...document.querySelectorAll(".app-content")],
   editorNameButton: document.querySelector("#editorNameButton"),
   editorNameLabel: document.querySelector("#editorNameLabel"),
-  editorDialog: document.querySelector("#editorDialog"),
-  editorForm: document.querySelector("#editorForm"),
-  loginEmail: document.querySelector("#loginEmail"),
-  loginPassword: document.querySelector("#loginPassword"),
-  loginFields: document.querySelector("#loginFields"),
-  loginSignedIn: document.querySelector("#loginSignedIn"),
-  loginWho: document.querySelector("#loginWho"),
-  loginRole: document.querySelector("#loginRole"),
-  loginStatus: document.querySelector("#loginStatus"),
-  loginSubmit: document.querySelector("#loginSubmit"),
-  logoutButton: document.querySelector("#logoutButton"),
-  closeEditorDialog: document.querySelector("#closeEditorDialog"),
-  skipEditorName: document.querySelector("#skipEditorName"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   syncRefreshButton: document.querySelector("#syncRefreshButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
@@ -268,12 +258,7 @@ const elements = {
 
 elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
 updateThemeControls();
-elements.editorNameButton.addEventListener("click", () => openEditorDialog());
-elements.editorForm.addEventListener("submit", submitLogin);
-elements.logoutButton.addEventListener("click", logout);
-elements.closeEditorDialog.addEventListener("click", () => elements.editorDialog.close());
-elements.skipEditorName.addEventListener("click", () => elements.editorDialog.close());
-elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
+listenForHostSession();
 renderEditorName();
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets());
 elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets());
@@ -714,10 +699,7 @@ async function initializeApp() {
     return;
   }
   createSupabaseClient();
-  try {
-    const { data } = await supabaseClient.auth.getSession();
-    await applySession(data?.session || null);
-  } catch { await applySession(null); }
+  await refreshIdentity();
   showAppLoader("Načítám profily brigádníků…");
   try {
     await loadRemoteState();
@@ -735,20 +717,70 @@ async function initializeApp() {
   }
 }
 
-// Prohlížení je veřejné (role anon). Úpravy jdou jen pod přihlášeným účtem
-// Supabase (stejné účty jako Insight) – databáze sama doplní autora změny
-// do historie (trigger stamp_editor / audit_worker_change), z klienta se nic
-// podvrhnout nedá. Člen = e-mail v tabulce app_members.
+// Modul nemá vlastní přihlášení – používá přihlášení Insightu (stejný projekt
+// Supabase). Token přijde jedním ze dvou způsobů:
+//  1) Insight modul vloží jako <iframe> a pošle token zprávou
+//     { type: "insight-auth", access_token } (viz insight-embed.js),
+//  2) modul běží na stejné doméně jako Insight a sdílí jeho uloženou relaci.
+// Token si modul nikdy sám neobnovuje (to dělá Insight), takže se relace
+// v Insightu nerozbije. Autora změny doplňuje databáze z tokenu
+// (trigger stamp_editor / audit_worker_change), z klienta se podvrhnout nedá.
+
+function sharedSessionToken() {
+  try {
+    const ref = new URL(window.APP_CONFIG.supabaseUrl).hostname.split(".")[0];
+    const stored = JSON.parse(localStorage.getItem(`sb-${ref}-auth-token`) || "null");
+    return stored?.access_token || null;
+  } catch {
+    return null;
+  }
+}
+
+function jwtPayload(token) {
+  try {
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent([...atob(part)].map(c => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+// Platný token přihlášeného uživatele, nebo null (pak jde dotaz jako veřejné čtení).
+function currentAccessToken() {
+  const token = hostAccessToken || sharedSessionToken();
+  const payload = token ? jwtPayload(token) : null;
+  if (!payload?.sub || (payload.exp && payload.exp * 1000 < Date.now() + 5000)) return null;
+  // Token z jiného projektu Supabase by databáze odmítla i pro čtení.
+  if (payload.iss && !payload.iss.startsWith(window.APP_CONFIG.supabaseUrl)) return null;
+  return token;
+}
+
 function createSupabaseClient() {
   const config = window.APP_CONFIG;
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "brigadnici-auth" }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    accessToken: async () => currentAccessToken()
   });
   guardWrites(supabaseClient);
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    // Callback nesmí čekat na další volání Supabase (deadlock v auth-js).
-    setTimeout(() => { void applySession(session, event); }, 0);
+}
+
+function listenForHostSession() {
+  window.addEventListener("message", event => {
+    if (!HOST_ORIGINS.includes(event.origin) || event.data?.type !== "insight-auth") return;
+    const token = typeof event.data.access_token === "string" ? event.data.access_token : null;
+    if (token === hostAccessToken) return;
+    hostAccessToken = token;
+    if (supabaseClient) void refreshIdentity();
   });
+  // Ostatní karty Insightu na stejné doméně (přihlášení / odhlášení).
+  window.addEventListener("storage", event => {
+    if (event.key?.endsWith("-auth-token") && supabaseClient) void refreshIdentity();
+  });
+  if (window.parent !== window) {
+    document.documentElement.classList.add("is-embedded");
+    HOST_ORIGINS.forEach(origin => { try { window.parent.postMessage({ type: "brigadnici-ready" }, origin); } catch { /* jiný hostitel */ } });
+  }
 }
 
 // Zápis bez přihlášení se vůbec neodešle: vrátí chybu stejného tvaru jako
@@ -756,7 +788,7 @@ function createSupabaseClient() {
 function guardWrites(client) {
   const denied = () => {
     promptLogin();
-    const result = { data: null, error: { message: authState.user ? "Váš účet nemá oprávnění k úpravám." : "Pro úpravy se přihlaste." } };
+    const result = { data: null, error: { message: authState.user ? "Váš účet nemá oprávnění k úpravám." : "Pro úpravy se přihlaste v Insightu." } };
     const chain = new Proxy(function () {}, {
       get: (target, key) => key === "then" ? (resolve, reject) => Promise.resolve(result).then(resolve, reject) : () => chain
     });
@@ -775,24 +807,26 @@ function guardWrites(client) {
   client.rpc = (...args) => canEdit() ? rpc(...args) : denied();
 }
 
-
 function canEdit() {
-  return Boolean(authState.user && authState.member);
+  return Boolean(authState.user && authState.member && currentAccessToken());
 }
 
-async function applySession(session, event = "") {
-  const user = session?.user || null;
-  const sameUser = authState.checked && authState.user?.id === user?.id;
+async function refreshIdentity() {
+  const token = currentAccessToken();
+  const payload = token ? jwtPayload(token) : null;
+  const user = payload ? { id: payload.sub, email: (payload.email || "").toLowerCase() } : null;
+  const changed = authState.user?.id !== user?.id;
   authState.user = user;
   if (!user) authState.member = null;
-  else if (!sameUser) {
-    const { data } = await supabaseClient.from("app_members").select("email, display_name, role").eq("email", (user.email || "").toLowerCase()).maybeSingle();
+  else if (changed || !authState.checked) {
+    const { data } = await supabaseClient.from("app_members").select("email, display_name, role").eq("email", user.email).maybeSingle();
     authState.member = data || null;
   }
+  const wasChecked = authState.checked;
   authState.checked = true;
   renderEditorName();
   document.body.classList.toggle("is-readonly", !canEdit());
-  if (!sameUser && event && event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED") void refreshData().catch(() => {});
+  if (wasChecked && changed) void refreshData().catch(() => {});
 }
 
 function showLoadError(text) {
@@ -807,20 +841,22 @@ function editorName() {
   return (authState.member?.display_name || authState.user.email || "").trim();
 }
 
-// Text ukládaný do sloupců *_by_email u palců, poznámek, reportů a nástupu.
+// Text ukládaný do sloupců *_by_email (databáze ho stejně přepíše podle tokenu).
 function editorLabel() {
   return editorName() || "Neuvedeno";
 }
 
 function renderEditorName() {
   const name = editorName();
-  elements.editorNameLabel.textContent = name || "Přihlásit se";
+  elements.editorNameLabel.textContent = name || "Jen prohlížení";
   elements.editorNameButton.classList.toggle("is-missing", !name);
-  elements.editorNameButton.classList.toggle("is-readonly-user", Boolean(authState.user) && !authState.member);
-  elements.editorNameButton.title = name ? (authState.member ? `Přihlášen(a): ${name}` : `${name} – bez oprávnění k úpravám`) : "Přihlášení pro úpravy";
+  elements.editorNameButton.classList.toggle("is-readonly-user", !canEdit());
+  elements.editorNameButton.title = !name
+    ? "Nepřihlášeno – pro úpravy otevřete modul v Insightu"
+    : authState.member ? `Změny se ukládají pod účtem ${name}` : `${name} – účet nemá oprávnění k úpravám`;
 }
 
-// Před otevřením formuláře pro úpravu: bez oprávnění rovnou nabídne přihlášení.
+// Před otevřením formuláře pro úpravu: bez oprávnění jen upozorní.
 function requireEdit() {
   if (canEdit()) return true;
   loginPromptedAt = 0;
@@ -832,64 +868,9 @@ let loginPromptedAt = 0;
 function promptLogin() {
   if (Date.now() - loginPromptedAt < 1500) return;
   loginPromptedAt = Date.now();
-  if (authState.user && !authState.member) {
-    setMessage("Váš účet nemá oprávnění k úpravám. Požádejte o přidání mezi editory.", true);
-    return;
-  }
-  setMessage("Pro úpravy se přihlaste.", true);
-  if (!elements.editorDialog.open) openEditorDialog();
-}
-
-function openEditorDialog() {
-  const signedIn = Boolean(authState.user);
-  elements.loginFields.hidden = signedIn;
-  elements.loginSignedIn.hidden = !signedIn;
-  elements.loginSubmit.hidden = signedIn;
-  elements.logoutButton.hidden = !signedIn;
-  elements.loginEmail.required = !signedIn;
-  elements.loginPassword.required = !signedIn;
-  elements.loginStatus.textContent = "";
-  elements.loginStatus.classList.remove("error");
-  if (signedIn) {
-    elements.loginWho.textContent = editorName();
-    elements.loginRole.textContent = authState.member
-      ? `Změny se ukládají pod tímto účtem${authState.member.display_name ? ` (${authState.user.email})` : ""}.`
-      : "Tento účet zatím nemá oprávnění k úpravám – může jen prohlížet.";
-  } else {
-    elements.loginPassword.value = "";
-  }
-  if (!elements.editorDialog.open) elements.editorDialog.showModal();
-  if (!signedIn) (elements.loginEmail.value ? elements.loginPassword : elements.loginEmail).focus();
-}
-
-async function submitLogin(event) {
-  event.preventDefault();
-  if (authState.user) return;
-  const email = elements.loginEmail.value.trim();
-  const password = elements.loginPassword.value;
-  if (!email || !password) return;
-  elements.loginSubmit.disabled = true;
-  elements.loginStatus.classList.remove("error");
-  elements.loginStatus.textContent = "Přihlašuji…";
-  try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    await applySession(data.session, "SIGNED_IN");
-    elements.editorDialog.close();
-    setMessage(canEdit() ? `Přihlášen(a) jako ${editorName()}. Změny se ukládají pod tímto účtem.` : "Přihlášeno, ale účet nemá oprávnění k úpravám.", !canEdit());
-  } catch (error) {
-    elements.loginStatus.classList.add("error");
-    elements.loginStatus.textContent = /invalid/i.test(error?.message || "") ? "Nesprávný e-mail nebo heslo." : `Přihlášení se nezdařilo: ${error?.message || "neznámá chyba"}`;
-  } finally {
-    elements.loginSubmit.disabled = false;
-  }
-}
-
-async function logout() {
-  await supabaseClient.auth.signOut();
-  await applySession(null, "SIGNED_OUT");
-  elements.editorDialog.close();
-  setMessage("Odhlášeno. Aplikace je teď jen pro čtení.");
+  setMessage(authState.user
+    ? "Váš účet nemá oprávnění k úpravám. Požádejte o přidání mezi editory."
+    : "Pro úpravy se přihlaste v Insightu – modul převezme vaše přihlášení.", true);
 }
 
 function toggleTheme() {
