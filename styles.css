@@ -1908,3 +1908,13 @@ dialog .custom-select { position: relative; }
 :root[data-theme="dark"] .plan-sheet.is-smena-1 caption, :root[data-theme="dark"] .plan-sheet.is-smena-1 thead th:not(.plan-count-head) { background: #6b5a1e; color: #fff6d6; border-color: #85712a; }
 :root[data-theme="dark"] .plan-sheet.is-smena-2 caption, :root[data-theme="dark"] .plan-sheet.is-smena-2 thead th:not(.plan-count-head) { background: #3f5a2f; color: #eef6e8; border-color: #4e6e3b; }
 .plan-sheet.is-painting td.plan-paint { touch-action: none; }
+
+/* v117 – výběr buněk tažením a zápis části směny */
+.plan-sheet td.plan-pick { cursor: cell; user-select: none; touch-action: none; font-size: .74rem; color: #1b1d21; }
+.plan-sheet td.plan-pick:hover { background: #ffe14d; }
+.plan-sheet td.plan-pick.is-selected { background: #9ec1ff; color: #10306f; font-weight: 700; box-shadow: inset 0 0 0 1px #2563eb; }
+:root[data-theme="dark"] .plan-sheet td.plan-pick { color: #fffde0; }
+:root[data-theme="dark"] .plan-sheet td.plan-pick.is-selected { background: #2b4f9e; color: #fff; }
+.plan-popover .plan-link { justify-self: start; font-size: .8rem; }
+.plan-popover-option { flex-wrap: wrap; text-align: left; }
+.plan-popover-option.is-over small { color: var(--negative); font-weight: 700; }
