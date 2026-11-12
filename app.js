@@ -5,12 +5,13 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=117";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=117";
+} from "./logic.mjs?v=118";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=118";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
-  daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, draftToTsv, isFreeValue
-} from "./roster.mjs?v=117";
+  daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, isFreeValue
+} from "./roster.mjs?v=118";
+import { buildXlsx, buildHtml, buildTsv } from "./export.mjs?v=118";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -4852,9 +4853,28 @@ function planMonthLabel(month = elements.planMonth.value) {
 
 function renderRosterBar() {
   const bar = elements.planRosterBar;
+  const exportButtons = () => {
+    const wrap = document.createElement("div");
+    wrap.className = "plan-export";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "toolbar-action";
+    copy.textContent = "Kopírovat do Google tabulky";
+    copy.title = "Zkopíruje rozpis i s barvami – v Google tabulce stačí vložit do A1";
+    copy.addEventListener("click", exportRosterToClipboard);
+    const download = document.createElement("button");
+    download.type = "button";
+    download.className = "toolbar-action";
+    download.textContent = "Stáhnout Excel";
+    download.title = "Soubor .xlsx ve stejném vzhledu – otevře se v Excelu i v Google tabulkách";
+    download.addEventListener("click", downloadRosterXlsx);
+    wrap.append(copy, download);
+    return wrap;
+  };
   if (planSource === "google") {
     bar.className = "plan-roster-bar is-google";
     bar.innerHTML = '<p>Rozpis na tento měsíc je už v Google tabulce – tady ho jen čtete a bot do něj navrhuje lidi.</p>';
+    bar.append(exportButtons());
     return;
   }
   if (planSource === "none") {
@@ -4901,11 +4921,6 @@ function renderRosterBar() {
     commit.addEventListener("click", commitProposals);
     actions.append(commit);
   }
-  const exportButton = document.createElement("button");
-  exportButton.type = "button";
-  exportButton.className = "toolbar-action";
-  exportButton.textContent = "Kopírovat pro Google tabulku";
-  exportButton.addEventListener("click", exportRosterToClipboard);
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "plan-link plan-danger";
@@ -4919,7 +4934,7 @@ function renderRosterBar() {
     }
     void deleteRosterDraft();
   });
-  actions.append(exportButton, remove);
+  actions.append(exportButtons(), remove);
   bar.append(modes, save, actions);
   renderRosterSaveState();
 }
@@ -4973,13 +4988,82 @@ function commitProposals() {
   draftChanged();
 }
 
+// Model exportu = přesně to, co je vidět v tabulce (včetně návrhu bota a ručních zápisů).
+function buildPlanExportModel() {
+  const shifts = planMonthShifts || [];
+  const painting = planSource === "draft" && planEditMode === "paint";
+  const proposed = new Map();
+  if (!painting) {
+    (planResult?.assignments || []).forEach(item => item.segments.forEach(segment => {
+      for (let m = segment.start; m < segment.end; m += 60) proposed.set(planCellKey(item.date, segment.column, m), item.person.label);
+    }));
+    planManual.forEach(entry => { for (let m = entry.start; m < entry.end; m += 60) proposed.set(planCellKey(entry.date, entry.column, m), entry.name); });
+  }
+  const cellsByKey = new Map(shifts.map(shift => [planCellKey(shift.date, shift.column, shift.start), shift]));
+  const dates = planSource === "draft" ? Object.keys(planDraft.days).sort() : [...new Set(shifts.map(shift => shift.date))].sort();
+  const labelOf = date => new Intl.DateTimeFormat("cs-CZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(parseDateKey(date));
+  const days = dates.map(date => {
+    const columns = planSource === "draft"
+      ? planDraft.days[date].columns.map((department, index) => [index + 1, department])
+      : [...new Map(shifts.filter(shift => shift.date === date).map(shift => [shift.column, shift.department])).entries()].sort((a, b) => a[0] - b[0]).slice(0, 6);
+    let total = 0;
+    const rows = rosterHours().map(minute => {
+      const cells = columns.map(([column]) => {
+        const key = planCellKey(date, column, minute);
+        const name = proposed.get(key);
+        const shift = cellsByKey.get(key);
+        if (name) return { text: name, type: "new" };
+        if (shift?.free) return { text: FREE_LABEL, type: "free" };
+        if (shift) return { text: shift.name, type: "taken" };
+        return { text: "", type: "none" };
+      });
+      const count = cells.filter(cell => cell.type !== "none").length;
+      total += count;
+      return { label: `${minute / 60}-${minute / 60 + 1} h`, cells, count };
+    });
+    return { date, label: labelOf(date), smena: shiftNumber(date), columns: columns.map(([, department]) => department || ""), rows, total };
+  });
+  const team = planTeamData();
+  return { days, people: team.people.map(person => ({ name: person.name, hours: person.hours })), stats: team };
+}
+
+function planSheetName() {
+  const [year, number] = elements.planMonth.value.split("-").map(Number);
+  const month = new Intl.DateTimeFormat("cs-CZ", { month: "long" }).format(new Date(year, number - 1, 1));
+  return `${month.charAt(0).toLocaleUpperCase("cs")}${month.slice(1)}${String(year).slice(2)}`;
+}
+
+function downloadRosterXlsx() {
+  const model = buildPlanExportModel();
+  if (!model.days.length) return;
+  const blob = new Blob([buildXlsx(model, planSheetName())], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement("a"), { href: url, download: `Rozpis ${planSheetName()}.xlsx` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  setMessage("Rozpis je stažený jako Excel – vypadá stejně jako tady. Do Google tabulky ho nahrajete přes Soubor → Importovat.");
+}
+
+// Kopie s barvami: Google tabulka při vložení převezme barvy, tučné písmo i sloučené buňky.
 async function exportRosterToClipboard() {
-  if (!planDraft) return;
+  const model = buildPlanExportModel();
+  if (!model.days.length) return;
+  const html = buildHtml(model);
+  const text = buildTsv(model);
   try {
-    await navigator.clipboard.writeText(draftToTsv(planDraft));
-    setMessage("Rozpis je zkopírovaný. V Google tabulce založte nový list, klikněte do buňky A1 a vložte (Ctrl+V).");
+    if (window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" })
+      })]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+    setMessage("Rozpis je zkopírovaný i s barvami. V Google tabulce založte nový list, klikněte do A1 a vložte (Ctrl+V).");
   } catch {
-    setMessage("Kopírování se nepodařilo – prohlížeč nepovolil schránku.", true);
+    setMessage("Kopírování se nepodařilo – prohlížeč nepovolil schránku. Použijte „Stáhnout Excel“.", true);
   }
 }
 
@@ -5108,10 +5192,8 @@ function renderRosterRules() {
 }
 
 // Souhrn vedle rozpisu jako v Google tabulce: hodiny lidí a obsazenost měsíce.
-function renderPlanTeamSummary() {
-  const box = elements.planTeamSummary;
-  if (planSource === "none") { box.hidden = true; box.replaceChildren(); return; }
-  box.hidden = false;
+// Data souhrnu (stejná pro obrazovku i export).
+function planTeamData() {
   const shifts = planMonthShifts || [];
   const painting = planSource === "draft" && planEditMode === "paint";
   const hours = new Map();
@@ -5139,6 +5221,22 @@ function renderPlanTeamSummary() {
       proposedTotal += (entry.end - entry.start) / 60;
     });
   }
+  const people = [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], "cs")).map(([k, name]) => ({
+    key: k, name, proposed: Math.round((proposedHours.get(k) || 0) * 10) / 10,
+    hours: Math.round(((hours.get(k) || 0) + (proposedHours.get(k) || 0)) * 10) / 10
+  }));
+  const free = Math.round(shifts.filter(shift => shift.free).length - proposedTotal);
+  const taken = Math.round(shifts.filter(shift => !shift.free).length + proposedTotal);
+  const planned = free + taken;
+  const log = shifts.filter(shift => !shift.free && /(^|[^a-z])log/i.test(normalize(shift.department))).length;
+  return { people, free, taken, planned, log, percent: planned ? Math.round(taken / planned * 100) : 0 };
+}
+
+function renderPlanTeamSummary() {
+  const box = elements.planTeamSummary;
+  if (planSource === "none") { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = false;
+  const data = planTeamData();
   const table = document.createElement("table");
   table.className = "plan-team-table";
   table.createTHead().insertRow().append(
@@ -5146,37 +5244,27 @@ function renderPlanTeamSummary() {
     Object.assign(document.createElement("th"), { textContent: "Počet zapsaných hodin" })
   );
   const body = table.createTBody();
-  [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], "cs")).forEach(([k, name]) => {
-    const total = (hours.get(k) || 0) + (proposedHours.get(k) || 0);
+  data.people.forEach(person => {
     const row = body.insertRow();
-    if (total > 85) row.className = "is-over";
-    row.insertCell().textContent = name;
+    if (person.hours > 85) row.className = "is-over";
+    row.insertCell().textContent = person.name;
     const cell = row.insertCell();
-    cell.textContent = String(Math.round(total * 10) / 10);
-    if (proposedHours.get(k)) cell.append(Object.assign(document.createElement("small"), { textContent: ` (+${Math.round(proposedHours.get(k) * 10) / 10})`, title: "Navrženo botem / zapsáno ručně, zatím neuloženo" }));
+    cell.textContent = String(person.hours);
+    if (person.proposed) cell.append(Object.assign(document.createElement("small"), { textContent: ` (+${person.proposed})`, title: "Navrženo botem / zapsáno ručně, zatím neuloženo" }));
   });
-  const free = shifts.filter(shift => shift.free).length - proposedTotal;
-  const taken = shifts.filter(shift => !shift.free).length + proposedTotal;
-  const planned = free + taken;
-  const log = shifts.filter(shift => !shift.free && /(^|[^a-z])log/i.test(normalize(shift.department))).length;
   const stats = document.createElement("table");
   stats.className = "plan-team-stats";
-  const statRow = (label, value, className = "") => {
-    const row = stats.insertRow();
-    if (className) row.className = className;
+  const statRow = (target, label, value) => {
+    const row = target.insertRow();
     row.append(Object.assign(document.createElement("th"), { textContent: label }), Object.assign(document.createElement("td"), { textContent: value }));
   };
-  statRow("Počet volných směn", String(Math.round(free)));
-  statRow("Počet obsazených směn", String(Math.round(taken)));
-  statRow("% obsazení", planned ? `${Math.round(taken / planned * 100)}%` : "–");
+  statRow(stats, "Počet volných směn", String(data.free));
+  statRow(stats, "Počet obsazených směn", String(data.taken));
+  statRow(stats, "% obsazení", data.planned ? `${data.percent}%` : "–");
   const totals = document.createElement("table");
   totals.className = "plan-team-stats is-green";
-  const totalRow = (label, value) => {
-    const row = totals.insertRow();
-    row.append(Object.assign(document.createElement("th"), { textContent: label }), Object.assign(document.createElement("td"), { textContent: value }));
-  };
-  totalRow("Plánované hodiny", String(Math.round(planned)));
-  totalRow("Z toho LOG (obsazené)", String(log));
+  statRow(totals, "Plánované hodiny", String(data.planned));
+  statRow(totals, "Z toho LOG (obsazené)", String(data.log));
   box.replaceChildren(table, stats, totals);
 }
 
