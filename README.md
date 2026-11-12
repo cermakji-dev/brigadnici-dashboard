@@ -74,23 +74,9 @@ Profily, docházka, hodnocení, poznámky a prodejní reporty se ukládají v Su
 Bezpečné schéma pro Supabase, RLS pravidla a auditní historii najdete ve složce `supabase/`. Po vytvoření Supabase projektu pokračujte podle `supabase/README.md`. **Od 28. 10. 2026 je aplikace veřejná bez přihlášení.** Kdokoli s odkazem může data číst i měnit. Jméno u změn se bere z pole „Podepisovat jako“ (uložené jen v prohlížeči), takže ho nelze ověřit. Databázová pravidla jsou v `supabase/2026-10-28-public-access.sql`. Přihlášení vrátíte spuštěním `supabase/2026-10-28-public-access-revert.sql` a nasazením verze v86.
 
 
-## Vložení do Insightu
+## Přístup
 
-Modul nemá vlastní přihlášení – přebírá přihlášeného uživatele Insightu
-(Insight musí používat stejný projekt Supabase). V Insightu stačí:
-
-```html
-<div id="brigadnici"></div>
-<script type="module">
-  import { mountBrigadnici } from "https://cermakji-dev.github.io/brigadnici-dashboard/insight-embed.js";
-  mountBrigadnici(document.querySelector("#brigadnici"), supabase); // klient Supabase Insightu
-</script>
-```
-
-- Bez přihlášení je modul jen pro čtení.
-- Upravovat smí členové tabulky `app_members`; autora každé změny zapisuje
-  databáze podle tokenu (`stamp_editor`, `audit_worker_change`).
-- Token obnovuje jen Insight, modul ho jen používá.
-- Pokud Insight běží na stejné doméně jako modul, sdílí se uložená relace
-  Supabase i bez `insight-embed.js`.
-- Další povolené domény hostitele: `hostOrigins` v `config.js`.
+Aplikace je zatím bez přihlášení: prohlížet i upravovat může kdokoli s odkazem.
+Kdo se nepovinně „podepíše“ (jméno se uloží jen v prohlížeči), toho jméno se
+zapíše k palcům, poznámkám, reportům a do historie změn; jinak „Veřejný přístup“.
+Viz supabase/2026-11-12-public-access-again.sql.
