@@ -4,8 +4,8 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=125";
+  summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey
+} from "./logic.mjs?v=126";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -35,6 +35,7 @@ let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
 let salesDays = [];
 let visibleSalesRows = [];
+let salesTrendWeek = null; // vybraný týden v grafu ASR (detail pod grafem)
 const SALES_MODE_KEY = "brigadnici-sales-mode";
 let salesMode = (() => { try { return localStorage.getItem(SALES_MODE_KEY) === "people" ? "people" : "days"; } catch { return "days"; } })();
 // Rozepsané reporty přímo v tabulce (id dne → hodnoty) a ručně rozbalené/sbalené dny.
@@ -2439,11 +2440,18 @@ function renderSalesTrend(rows) {
   weeks.forEach((week, index) => {
     const x = left + slot * index + (slot - barWidth) / 2;
     const met = week.asr >= SALES_ASR_TARGET;
-    const bar = make("rect", { x, y: y(week.asr), width: barWidth, height: Math.max(2, top + plotHeight - y(week.asr)), rx: 4, class: met ? "trend-bar is-met" : "trend-bar" });
+    const selected = week.week === salesTrendWeek;
+    // Průhledná plocha přes celý sloupec – kliká se snadno i na nízký sloupec.
+    const hit = make("rect", { x: left + slot * index + 4, y: 0, width: slot - 8, height, rx: 8, class: `trend-hit${selected ? " is-selected" : ""}`, tabindex: 0, role: "button", "aria-pressed": String(selected) });
+    const pick = () => { salesTrendWeek = selected ? null : week.week; renderSalesTrend(rows); };
+    hit.addEventListener("click", pick);
+    hit.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(); } });
+    const bar = make("rect", { x, y: y(week.asr), width: barWidth, height: Math.max(2, top + plotHeight - y(week.asr)), rx: 4, class: `${met ? "trend-bar is-met" : "trend-bar"}${selected ? " is-selected" : ""}` });
     const startLabel = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" }).format(parseDateKey(week.week));
     const title = document.createElementNS(svgNS, "title");
     title.textContent = `Týden od ${startLabel}: ASR ${formatCurrency(week.asr)}/h · ${week.reports} ${week.reports === 1 ? "report" : week.reports < 5 ? "reporty" : "reportů"}`;
-    bar.append(title);
+    title.textContent += " · kliknutím zobrazíte detail";
+    hit.append(title);
     make("text", { x: x + barWidth / 2, y: y(week.asr) - 6, class: "trend-value", "text-anchor": "middle" }, formatNumber(Math.round(week.asr)));
     make("text", { x: x + barWidth / 2, y: height - 8, class: "trend-label", "text-anchor": "middle" }, `od ${startLabel}`);
   });
@@ -2451,8 +2459,92 @@ function renderSalesTrend(rows) {
   make("text", { x: width - right + 6, y: y(SALES_ASR_TARGET) + 4, class: "trend-target-label" }, "TGT");
   const header = document.createElement("header");
   header.innerHTML = "<h3>Týmové ASR po týdnech</h3><span></span>";
-  header.querySelector("span").textContent = `cíl ${formatCurrency(SALES_ASR_TARGET)}/h`;
-  elements.salesTrend.replaceChildren(header, svg);
+  header.querySelector("span").textContent = `cíl ${formatCurrency(SALES_ASR_TARGET)}/h · kliknutím na sloupec zobrazíte detail`;
+  const chart = document.createElement("div");
+  chart.className = "trend-chart";
+  chart.append(svg);
+  const parts = [header, chart];
+  const chosen = weeks.find(week => week.week === salesTrendWeek);
+  if (chosen) parts.push(renderSalesWeekDetail(chosen, rows));
+  elements.salesTrend.replaceChildren(...parts);
+}
+
+// Detail jednoho týdne: souhrn, rozpad po lidech a po dnech.
+function renderSalesWeekDetail(week, rows) {
+  const days = rows.filter(day => day.status === "reported" && weekStartKey(day.date) === week.week);
+  const start = parseDateKey(week.week);
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  const short = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" });
+  const box = document.createElement("div");
+  box.className = "trend-detail";
+  const head = document.createElement("div");
+  head.className = "trend-detail-head";
+  const title = document.createElement("h4");
+  title.textContent = `Týden ${short.format(start)} – ${short.format(end)}`;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "trend-detail-close";
+  close.textContent = "Zavřít";
+  close.addEventListener("click", () => { salesTrendWeek = null; renderSalesTrend(rows); });
+  head.append(title, close);
+
+  const percent = week.targetPercent;
+  const stats = document.createElement("div");
+  stats.className = "trend-detail-stats";
+  stats.innerHTML = `<div class="profile-stat"><strong>${formatCurrency(week.asr)}/h</strong><span>ASR týmu</span></div><div class="profile-stat"><strong><span class="sales-result ${salesPerformanceClass(percent)}">${Math.round(percent)} % TGT</span></strong><span>plnění cíle</span></div><div class="profile-stat"><strong>${formatCurrency(week.revenue)}</strong><span>obrat · ${formatNumber(week.hours)} h</span></div><div class="profile-stat"><strong>${formatAros(week.aros)}</strong><span>ARoS</span></div>`;
+
+  // Po lidech, nejlepší nahoře.
+  const byPerson = new Map();
+  days.forEach(day => { if (!byPerson.has(day.workerId)) byPerson.set(day.workerId, []); byPerson.get(day.workerId).push(day); });
+  const people = [...byPerson].map(([id, list]) => ({ id, name: personByRemoteId(id)?.name || "Neznámý brigádník", list, ...summarizeSales(list) }))
+    .sort((a, b) => b.asr - a.asr || a.name.localeCompare(b.name, "cs"));
+  const table = document.createElement("table");
+  table.className = "trend-detail-table";
+  table.createTHead().insertRow().append(...["Brigádník", "Dny", "Hodiny", "Obrat", "ASR", "Plnění TGT"].map(text => Object.assign(document.createElement("th"), { textContent: text })));
+  const body = table.createTBody();
+  people.forEach(person => {
+    const row = body.insertRow();
+    const name = row.insertCell();
+    const strong = document.createElement("strong");
+    strong.textContent = person.name;
+    const dates = document.createElement("small");
+    dates.textContent = person.list.map(day => new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(parseDateKey(day.date))).sort().join(", ");
+    name.append(strong, dates);
+    row.insertCell().textContent = String(person.list.length);
+    row.insertCell().textContent = `${formatNumber(person.hours)} h`;
+    row.insertCell().textContent = formatCurrency(person.revenue);
+    row.insertCell().textContent = person.hours ? `${formatCurrency(person.asr)}/h` : "—";
+    const result = row.insertCell();
+    const badge = document.createElement("span");
+    badge.className = `sales-result ${salesPerformanceClass(person.targetPercent)}`;
+    badge.textContent = `${Math.round(person.targetPercent)} %`;
+    result.append(badge);
+  });
+
+  // Po dnech: Po–Ne, ASR týmu za den.
+  const strip = document.createElement("div");
+  strip.className = "trend-detail-days";
+  for (let index = 0; index < 7; index += 1) {
+    const date = new Date(start); date.setDate(date.getDate() + index);
+    const key = dateKey(date);
+    const list = days.filter(day => day.date === key);
+    const sum = summarizeSales(list);
+    const cell = document.createElement("div");
+    cell.className = `trend-day${list.length ? ` ${salesPerformanceClass(sum.targetPercent)}` : " is-empty"}`;
+    const label = document.createElement("span");
+    label.textContent = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(date);
+    const value = document.createElement("strong");
+    value.textContent = list.length ? `${formatNumber(Math.round(sum.asr))}` : "—";
+    const meta = document.createElement("small");
+    meta.textContent = list.length ? `${list.length} ${list.length === 1 ? "člověk" : list.length < 5 ? "lidé" : "lidí"} · ${formatNumber(sum.hours)} h` : "bez reportu";
+    cell.append(label, value, meta);
+    strip.append(cell);
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "trend-detail-table-wrap";
+  wrap.append(table);
+  box.append(head, stats, strip, wrap);
+  return box;
 }
 
 function syncSalesPersonOptions() {
