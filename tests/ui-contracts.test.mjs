@@ -55,6 +55,7 @@ test("verze souborů pro obejití mezipaměti GitHub Pages sedí", () => {
   const appVersion = html.match(/app\.js\?v=(\d+)/)[1];
   assert.match(app, new RegExp(`logic\\.mjs\\?v=${appVersion}"`));
   assert.match(app, new RegExp(`planner\\.mjs\\?v=${appVersion}"`));
+  assert.match(app, new RegExp(`roster\\.mjs\\?v=${appVersion}"`));
   assert.match(html, new RegExp(`<span>v${appVersion}</span>`));
 });
 
@@ -111,10 +112,14 @@ test("knihovna pro Excel se načítá až při ručním importu, Supabase má pe
   assert.match(html, /supabase-js@\d+\.\d+\.\d+/);
 });
 
-test("záložka Zápis směn je vedle Prodejního výkonu a nic nezapisuje", () => {
+test("záložka Zápis směn je vedle Prodejního výkonu a zapisuje jen rozpracovaný rozpis a pravidla", () => {
   assert.match(html, /id="salesViewButton"[^\n]*\n\s*<button id="planViewButton" class="app-view-tab" type="button">Zápis směn<\/button>/);
   assert.match(app, /from "\.\/planner\.mjs\?v=\d+"/);
+  assert.match(app, /from "\.\/roster\.mjs\?v=\d+"/);
   const planCode = app.slice(app.indexOf("// Zápis směn (test)"));
-  assert.doesNotMatch(planCode, /\.from\([^)]*\)[\s\S]{0,40}\.(insert|update|upsert|delete)\(|\.rpc\(/);
+  const writes = [...planCode.matchAll(/\.from\("([a-z_]+)"\)[\s\S]{0,60}?\.(insert|update|upsert|delete)\(/g)].map(match => match[1]);
+  assert.ok(writes.length > 0);
+  assert.deepEqual([...new Set(writes)].sort(), ["roster_drafts", "roster_rules"]);
+  assert.doesNotMatch(planCode, /\.rpc\(/);
 });
 

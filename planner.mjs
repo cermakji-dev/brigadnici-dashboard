@@ -39,7 +39,8 @@ export const departmentsOfColumn = label => {
 const toMinutes = (hours, minutes = 0) => Number(hours) * 60 + Number(minutes || 0);
 const validHour = minutes => minutes >= 6 * 60 && minutes <= 22 * 60;
 
-const DATE_RE = /(?<![\d:])(\d{1,2})\s*\.\s*(\d{1,2})(?!\d)(?:\s*\.\s*(?:\d{4}|\d{2})(?!\d))?\.?/g;
+// Rok jen jako „1.11.2026“, „1. 11. 2026“ nebo „1.11.26“ – nesmí spolknout čas („3.11. 10-20“).
+const DATE_RE = /(?<![\d:])(\d{1,2})\s*\.\s*(\d{1,2})(?!\d)(?:\.\s?\d{4}(?!\d)|\.\d{2}(?![\d\-–:/.]))?\.?/g;
 
 // Data v řádku („1.11,7.11“, „3.11. 10-20“) pro daný měsíc.
 export const datesInLine = (line, year, month) => {

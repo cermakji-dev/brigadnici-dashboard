@@ -120,3 +120,12 @@ test("pevný čas má přednost před „jak vyjde“", () => {
   const flex = plan.assignments.find(item => item.person.personKey === "flex");
   assert.equal(flex.start, 900);
 });
+
+test("čas hned za datem se nesplete s rokem", () => {
+  const people = parseShiftRequests("Ondřej Hejda\n3.11. 10-20\n4.11.2026 8-14\n5. 11. 2026 12-20\n1.11. 10/11/12-20", { year: 2026, month: 11, findWorker });
+  const r = Object.fromEntries(people[0].requests.map(item => [item.date, item.options]));
+  assert.deepEqual(r["2026-11-03"], [{ start: 600, end: 1200 }]);
+  assert.deepEqual(r["2026-11-04"], [{ start: 480, end: 840 }]);
+  assert.deepEqual(r["2026-11-05"], [{ start: 720, end: 1200 }]);
+  assert.equal(r["2026-11-01"].length, 3);
+});

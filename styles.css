@@ -1812,3 +1812,53 @@ dialog .custom-select { position: relative; }
 .plan-popover-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: .82rem; cursor: pointer; }
 .plan-popover-option:hover { border-color: var(--skills-color); }
 .plan-popover-option small { color: var(--muted); font-size: .72rem; }
+
+/* v113 – tvorba rozpisu, pravidla, našeptávač */
+.plan-roster-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.plan-roster-bar:empty { display: none; }
+.plan-roster-bar.is-google p { margin: 0; color: var(--muted); font-size: .84rem; }
+.plan-roster-bar.is-empty { display: grid; justify-items: start; gap: 10px; }
+.plan-roster-bar.is-empty h3 { margin: 0; font-size: 1.05rem; }
+.plan-roster-bar.is-empty p { margin: 0; color: var(--muted); font-size: .86rem; max-width: 720px; }
+.plan-roster-bar.is-draft { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.plan-modes .shifts-mode-button { min-height: 38px; padding: 0 14px; }
+.plan-save-state { color: var(--muted); font-size: .78rem; }
+.plan-save-state.is-saved { color: var(--positive); }
+.plan-save-state.is-error { color: var(--negative); }
+.plan-bar-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.plan-danger { color: var(--negative); }
+.plan-check { display: flex; align-items: center; gap: 8px; font-size: .84rem; cursor: pointer; }
+.plan-rules { gap: 12px; }
+.plan-rules[hidden] { display: none; }
+.plan-rules summary { cursor: pointer; font-size: .92rem; }
+.plan-rules summary .plan-hint { display: inline; margin-left: 6px; }
+.plan-rule-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.plan-rule-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: .84rem; }
+.plan-rule-form { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-rule-form select { min-height: 36px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); font: inherit; font-size: .82rem; }
+.plan-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.plan-suggestions .plan-hint { width: 100%; }
+.plan-suggestion { padding: 5px 10px; border: 1px dashed color-mix(in srgb, var(--skills-color) 55%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--skills-color) 7%, transparent); color: var(--text); font: inherit; font-size: .78rem; cursor: pointer; }
+.plan-suggestion:hover { border-style: solid; }
+.plan-sheet caption { position: relative; }
+.plan-smena { margin-left: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.55); font-size: .72rem; letter-spacing: .03em; }
+.plan-day-tools { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; }
+.plan-day-tools button { padding: 0; border: 0; background: none; color: #1b1d21; font: inherit; font-size: .72rem; font-weight: 500; text-decoration: underline; cursor: pointer; opacity: .75; }
+.plan-day-tools button:hover { opacity: 1; }
+.plan-head-button { width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.plan-head-button:hover { text-decoration: underline; }
+.plan-sheet .plan-count-head, .plan-sheet .plan-count { width: 44px; background: var(--brand-soft); color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.plan-sheet tfoot td { height: 24px; border: 1px solid #bfc4cc; }
+.plan-sheet .plan-total-label { text-align: right; padding-right: 10px; color: var(--muted); font-weight: 600; }
+.plan-sheet.is-painting td.plan-paint { cursor: crosshair; user-select: none; font-size: .74rem; }
+.plan-sheet.is-painting td.plan-paint.is-none:hover { background: #fff7a8; }
+.plan-sheet.is-painting td.plan-paint.is-free:hover { background: #f3e600; }
+.plan-sheet td.is-taken { position: relative; }
+.plan-popover-departments { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.plan-popover-departments .plan-popover-option { justify-content: center; }
+.plan-popover-custom { display: flex; gap: 6px; }
+.plan-popover-custom input { flex: 1; min-height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); font: inherit; font-size: .8rem; }
+:root[data-theme="dark"] .plan-smena { background: rgba(0,0,0,.25); }
+:root[data-theme="dark"] .plan-day-tools button { color: #eef6e8; }
+:root[data-theme="dark"] .plan-sheet tfoot td { border-color: #3a4560; }
+:root[data-theme="dark"] .plan-sheet.is-painting td.plan-paint.is-none:hover { background: #5a5520; }
