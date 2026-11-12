@@ -5,13 +5,13 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=119";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=119";
+} from "./logic.mjs?v=120";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=120";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, isFreeValue
-} from "./roster.mjs?v=119";
-import { buildXlsx, buildHtml, buildTsv } from "./export.mjs?v=119";
+} from "./roster.mjs?v=120";
+import { buildXlsx, buildHtml, buildTsv } from "./export.mjs?v=120";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -4548,7 +4548,7 @@ function initPlanView() {
   document.addEventListener("click", event => {
     // Po tažení přes buňky přijde „click“ na společný řádek/tabulku – ten nabídku nezavírá.
     if (Date.now() - planSelectEndedAt < 400) return;
-    if (!event.target.closest(".plan-popover, .plan-cell-button, .plan-head-button, td.plan-pick")) closePlanPopover();
+    if (!event.target.closest(".plan-popover, .plan-cell-button, .plan-head-button, .plan-pick")) closePlanPopover();
   });
   document.addEventListener("keydown", event => { if (event.key === "Escape") closePlanPopover(); });
 }
@@ -5274,6 +5274,8 @@ function planMonthLabelOf(month) {
 }
 
 // Rozpis jako v Google tabulce: den pod dnem, hodiny × oddělení, vpravo počty.
+// Rozpis měsíce ve stejném vzhledu jako časová osa v Docházce: den = karta,
+// oddělení = řádky, hodiny 8–20 vodorovně, směny = bloky. SMĚNA 1 žlutě, 2 zeleně.
 function renderPlanSheet() {
   const shifts = planMonthShifts || [];
   if (planSource === "none") { elements.planCalendar.replaceChildren(); return; }
@@ -5297,19 +5299,18 @@ function renderPlanSheet() {
   }
   const dates = planSource === "draft" ? Object.keys(planDraft.days).sort()
     : [...new Set(shifts.map(shift => shift.date))].sort();
+  const from = 8 * 60;
+  const to = 20 * 60;
+  const span = to - from;
+  const position = minutes => `${((minutes - from) / span) * 100}%`;
+  const width = minutes => `calc(${(minutes / span) * 100}% - 3px)`;
 
   elements.planCalendar.replaceChildren(...dates.map(date => {
     const dayShifts = shifts.filter(shift => shift.date === date);
     const columns = planSource === "draft"
       ? planDraft.days[date].columns.map((department, index) => [index + 1, department])
       : [...new Map(dayShifts.map(shift => [shift.column, shift.department])).entries()].sort((a, b) => a[0] - b[0]);
-    const hours = planSource === "draft" ? rosterHours() : (() => {
-      const start = Math.min(...dayShifts.map(shift => shift.start));
-      const end = Math.max(...dayShifts.map(shift => shift.end));
-      return Array.from({ length: (end - start) / 60 }, (_, index) => start + index * 60);
-    })();
     const cells = new Map(dayShifts.map(shift => [planCellKey(date, shift.column, shift.start), shift]));
-    // Co je v buňce – souvislé stejné buňky se kreslí jako jeden blok (jako v kalendáři).
     const describe = (column, minute) => {
       const key = planCellKey(date, column, minute);
       const prop = proposed.get(key);
@@ -5321,20 +5322,22 @@ function renderPlanSheet() {
     };
     const smenaNumber = shiftNumber(date);
     const card = document.createElement("section");
-    card.className = `plan-day-card is-smena-${smenaNumber}`;
+    card.className = `plan-day is-smena-${smenaNumber}${painting ? " is-painting" : ""}`;
+    card.dataset.date = date;
+
     const header = document.createElement("header");
-    header.className = "plan-day-head";
+    header.className = "plan-day-bar";
+    const pill = document.createElement("span");
+    pill.className = "plan-smena-chip";
+    pill.textContent = `Směna ${smenaNumber}`;
     const title = document.createElement("h4");
     title.textContent = planDayLabel(date, "long");
-    const pill = document.createElement("span");
-    pill.className = "plan-smena-pill";
-    pill.textContent = `Směna ${smenaNumber}`;
     const totalNode = document.createElement("span");
-    totalNode.className = "plan-day-total";
-    header.append(title, pill, totalNode);
+    totalNode.className = "plan-day-sum";
+    header.append(pill, title, totalNode);
     if (painting) {
       const tools = document.createElement("span");
-      tools.className = "plan-day-tools";
+      tools.className = "plan-day-actions";
       const copy = document.createElement("button");
       copy.type = "button";
       copy.textContent = `Kopírovat na všechny ${["pondělky", "úterky", "středy", "čtvrtky", "pátky", "soboty", "neděle"][weekdayIndex(date)]}`;
@@ -5350,119 +5353,135 @@ function renderPlanSheet() {
       tools.append(copy, clear);
       header.append(tools);
     }
-    card.append(header);
 
-    const table = document.createElement("table");
-    table.className = `plan-lanes${painting ? " is-painting" : ""}`;
-    const colgroup = document.createElement("colgroup");
-    colgroup.append(Object.assign(document.createElement("col"), { className: "plan-col-time" }));
-    columns.forEach(() => colgroup.append(document.createElement("col")));
-    colgroup.append(Object.assign(document.createElement("col"), { className: "plan-col-count" }));
-    table.append(colgroup);
-    const head = table.createTHead().insertRow();
-    head.append(document.createElement("th"));
-    columns.forEach(([column, department]) => {
-      const th = document.createElement("th");
-      if (painting) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "plan-head-button";
-        button.textContent = department || "+ oddělení";
-        button.title = "Změnit oddělení sloupce";
-        button.addEventListener("click", event => openDepartmentPopover(event.currentTarget, date, column - 1));
-        th.append(button);
-      } else th.textContent = department || "";
-      head.append(th);
-    });
-    head.append(Object.assign(document.createElement("th"), { textContent: "lidí", className: "plan-count", title: "Počet lidí v hodině" }));
-    const body = table.createTBody();
+    const board = document.createElement("div");
+    board.className = "shifts-timeline plan-timeline";
+    board.style.setProperty("--timeline-hours", span / 60);
+    const scale = document.createElement("div");
+    scale.className = "timeline-scale";
+    scale.append(document.createElement("span"));
+    const ticks = document.createElement("div");
+    ticks.className = "timeline-ticks";
+    for (let minute = from; minute <= to; minute += 60) {
+      const tick = document.createElement("span");
+      tick.style.left = position(minute);
+      tick.textContent = `${minute / 60}:00`;
+      ticks.append(tick);
+    }
+    scale.append(ticks);
+
     let total = 0;
-    hours.forEach(minute => {
-      const row = body.insertRow();
-      row.append(Object.assign(document.createElement("th"), { textContent: `${minute / 60}:00`, className: "plan-time" }));
-      let count = 0;
-      columns.forEach(([column, department]) => {
+    const rows = columns.map(([column, department]) => {
+      const row = document.createElement("div");
+      row.className = "timeline-row";
+      const label = document.createElement(painting ? "button" : "div");
+      label.className = "timeline-label";
+      const name = document.createElement("strong");
+      name.textContent = department || (painting ? "+ oddělení" : "—");
+      const meta = document.createElement("small");
+      label.append(name, meta);
+      if (painting) {
+        label.type = "button";
+        label.classList.add("plan-label-button");
+        label.title = "Změnit oddělení";
+        label.addEventListener("click", event => openDepartmentPopover(event.currentTarget, date, column - 1));
+      }
+      const track = document.createElement("div");
+      track.className = "timeline-track";
+      track.style.setProperty("--lanes", 1);
+
+      // Souvislé úseky → bloky.
+      let freeHours = 0;
+      let filled = 0;
+      let minute = from;
+      while (minute < to) {
         const info = describe(column, minute);
-        const startsBlock = describe(column, minute - 60).id !== info.id || !hours.includes(minute - 60);
-        const endsBlock = describe(column, minute + 60).id !== info.id || !hours.includes(minute + 60);
-        let blockEnd = minute + 60;
-        if (startsBlock) while (hours.includes(blockEnd) && describe(column, blockEnd).id === info.id) blockEnd += 60;
-        const cell = row.insertCell();
-        if (info.type !== "none") count += 1;
-        cell.className = `plan-slot is-${info.type}${startsBlock ? " is-start" : ""}${endsBlock ? " is-end" : ""}`;
-        const label = text => {
-          const node = document.createElement("span");
-          node.className = "plan-slot-label";
-          node.textContent = text;
-          cell.append(node);
-        };
-        const removeButton = (title, onClick) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "plan-remove";
-          button.textContent = "✕";
-          button.title = title;
-          button.setAttribute("aria-label", title);
-          button.addEventListener("click", onClick);
-          cell.append(button);
-        };
-        if (painting) {
-          cell.dataset.date = date;
-          cell.dataset.column = String(column - 1);
-          cell.dataset.minute = String(minute);
-          if (info.type === "taken") {
-            if (startsBlock) label(info.shift.name);
-            cell.title = "Obsazeno – v režimu „Zapsat lidi“ jde odebrat";
-          } else {
-            cell.classList.add("plan-paint");
-            if (info.type === "free" && startsBlock) label(`Volno ${planRange(minute, blockEnd)}`);
-          }
-          return;
-        }
-        if (info.type === "new") {
-          const prop = info.prop;
-          if (startsBlock) {
-            label(prop.name);
-            removeButton(`Odebrat ${prop.name} (${planRange(prop.start, prop.end)})`, () => {
+        let end = minute + 60;
+        while (end < to && describe(column, end).id === info.id) end += 60;
+        if (info.type !== "none") {
+          const block = document.createElement("div");
+          block.className = "timeline-block plan-block";
+          block.style.left = position(minute);
+          block.style.width = width(end - minute);
+          block.style.setProperty("--lane", 0);
+          const strong = document.createElement("strong");
+          const small = document.createElement("small");
+          small.textContent = `${formatClock(minute)}–${formatClock(end)}`;
+          if (info.type === "free") {
+            block.classList.add("is-free");
+            strong.textContent = "Volno";
+            freeHours += (end - minute) / 60;
+          } else if (info.type === "new") {
+            block.classList.add("is-proposed");
+            strong.textContent = info.prop.name;
+            small.textContent += info.prop.kind === "auto" ? " · návrh" : " · ručně";
+            const prop = info.prop;
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "plan-block-remove";
+            remove.textContent = "✕";
+            remove.title = `Odebrat ${prop.name} (${planRange(prop.start, prop.end)})`;
+            remove.setAttribute("aria-label", remove.title);
+            remove.addEventListener("click", () => {
               if (prop.kind === "auto") planExcluded.add(`${prop.item.person.senderKey}|${date}`);
               else planManual = planManual.filter(entry => entry.id !== prop.entry.id);
               void runPlan();
             });
-          }
-        } else if (info.type === "free") {
-          // Výběr buněk tažením (i přes víc sloupců) → nabídka, koho zapsat.
-          cell.classList.add("plan-pick");
-          cell.dataset.date = date;
-          cell.dataset.column = String(column);
-          cell.dataset.minute = String(minute);
-          cell.dataset.department = department || "";
-          cell.title = "Přejeďte myší přes hodiny, které chcete zapsat";
-          if (startsBlock) label(`Volno ${planRange(minute, blockEnd)}`);
-        } else if (info.type === "taken") {
-          if (startsBlock) {
-            label(info.shift.name);
-            if (planSource === "draft") {
-              removeButton(`Vrátit na volnou směnu (${info.shift.name})`, () => {
+            block.append(remove);
+          } else {
+            strong.textContent = info.shift.name;
+            if (planSource === "draft" && !painting) {
+              const shiftName = info.shift.name;
+              const startMinute = minute;
+              const remove = document.createElement("button");
+              remove.type = "button";
+              remove.className = "plan-block-remove";
+              remove.textContent = "✕";
+              remove.title = `Vrátit na volnou směnu (${shiftName})`;
+              remove.setAttribute("aria-label", remove.title);
+              remove.addEventListener("click", () => {
                 const day = planDraft.days[date];
-                for (let m = minute; m < ROSTER_END_MINUTE; m += 60) {
+                for (let m = startMinute; m < ROSTER_END_MINUTE; m += 60) {
                   const key2 = rosterCellKey(column - 1, m);
-                  if (day.cells[key2] !== info.shift.name) break;
+                  if (day.cells[key2] !== shiftName) break;
                   day.cells[key2] = FREE_LABEL;
                 }
                 draftChanged();
               });
+              block.append(remove);
             }
           }
+          if (info.type !== "free") filled += (end - minute) / 60;
+          block.prepend(strong, small);
+          track.append(block);
         }
-      });
-      total += count;
-      row.append(Object.assign(document.createElement("td"), { textContent: count ? String(count) : "", className: "plan-count" }));
+        minute = end;
+      }
+      total += freeHours + filled;
+      meta.textContent = [filled ? `${filled} h obsazeno` : "", freeHours ? `${freeHours} h volno` : ""].filter(Boolean).join(" · ") || (painting ? "tažením vypíšete volno" : "");
+
+      // Hodinové „buňky“ pro výběr tažením (zápis lidí) a vypisování volna.
+      for (let hour = from; hour < to; hour += 60) {
+        const info = describe(column, hour);
+        const pickable = painting ? info.type !== "taken" : info.type === "free";
+        if (!pickable) continue;
+        const slot = document.createElement("span");
+        slot.className = painting ? `plan-hit plan-paint ${info.type === "free" ? "is-free" : "is-none"}` : "plan-hit plan-pick";
+        slot.style.left = position(hour);
+        slot.style.width = `${(60 / span) * 100}%`;
+        slot.dataset.date = date;
+        slot.dataset.column = String(painting ? column - 1 : column);
+        slot.dataset.minute = String(hour);
+        slot.dataset.department = department || "";
+        slot.title = painting ? "Tažením vypíšete / smažete volnou směnu" : "Přejeďte myší přes hodiny, které chcete zapsat";
+        track.append(slot);
+      }
+      row.append(label, track);
+      return row;
     });
-    totalNode.textContent = `${total} h celkem`;
-    const wrap = document.createElement("div");
-    wrap.className = "plan-lanes-wrap";
-    wrap.append(table);
-    card.append(wrap);
+    totalNode.textContent = `${total} h`;
+    board.append(scale, ...rows);
+    card.append(header, board);
     return card;
   }));
 }
@@ -5484,7 +5503,7 @@ function initRosterPainting() {
     planPaint.changed = true;
   };
   elements.planCalendar.addEventListener("pointerdown", event => {
-    const cell = event.target.closest("td.plan-paint");
+    const cell = event.target.closest(".plan-paint");
     if (!cell || event.button !== 0) return;
     event.preventDefault();
     cell.releasePointerCapture?.(event.pointerId);
@@ -5494,7 +5513,7 @@ function initRosterPainting() {
   // Myš i dotyk: buňka pod prstem se dohledá podle souřadnic.
   document.addEventListener("pointermove", event => {
     if (!planPaint) return;
-    apply(document.elementFromPoint(event.clientX, event.clientY)?.closest("td.plan-paint"));
+    apply(document.elementFromPoint(event.clientX, event.clientY)?.closest(".plan-paint"));
   });
   ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => {
     if (!planPaint) return;
@@ -5585,13 +5604,13 @@ function closePlanPopover(clearSelection = true) {
 let planSelect = null;
 let planSelectEndedAt = 0;
 function initPlanSelection() {
-  const tableOf = cell => cell.closest("table");
+  const tableOf = cell => cell.closest(".plan-day");
   const paint = () => {
     if (!planSelect) return;
     const { table, anchor, current } = planSelect;
     const [c1, c2] = [anchor.column, current.column].sort((a, b) => a - b);
     const [m1, m2] = [anchor.minute, current.minute].sort((a, b) => a - b);
-    table.querySelectorAll("td.plan-pick").forEach(cell => {
+    table.querySelectorAll(".plan-pick").forEach(cell => {
       const column = Number(cell.dataset.column);
       const minute = Number(cell.dataset.minute);
       cell.classList.toggle("is-selected", column >= c1 && column <= c2 && minute >= m1 && minute <= m2);
@@ -5599,7 +5618,7 @@ function initPlanSelection() {
   };
   const point = cell => ({ column: Number(cell.dataset.column), minute: Number(cell.dataset.minute) });
   elements.planCalendar.addEventListener("pointerdown", event => {
-    const cell = event.target.closest("td.plan-pick");
+    const cell = event.target.closest(".plan-pick");
     if (!cell || event.button !== 0) return;
     event.preventDefault();
     cell.releasePointerCapture?.(event.pointerId);
@@ -5609,7 +5628,7 @@ function initPlanSelection() {
   });
   document.addEventListener("pointermove", event => {
     if (!planSelect?.active) return;
-    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest("td.plan-pick");
+    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest(".plan-pick");
     if (!cell || tableOf(cell) !== planSelect.table) return;
     planSelect.current = point(cell);
     planSelect.last = cell;
@@ -5619,13 +5638,13 @@ function initPlanSelection() {
     if (!planSelect?.active) return;
     planSelect.active = false;
     planSelectEndedAt = Date.now();
-    const picked = [...planSelect.table.querySelectorAll("td.plan-pick.is-selected")];
+    const picked = [...planSelect.table.querySelectorAll(".plan-pick.is-selected")];
     if (picked.length) openSelectionPopover(planSelect.last, planSelect.date, picked);
   }));
 }
 
 function clearPlanSelection() {
-  planSelect?.table?.querySelectorAll("td.is-selected").forEach(cell => cell.classList.remove("is-selected"));
+  planSelect?.table?.querySelectorAll(".is-selected").forEach(cell => cell.classList.remove("is-selected"));
   planSelect = null;
 }
 
@@ -5665,8 +5684,8 @@ function openSelectionPopover(anchor, date, cells) {
 
   // Jedna buňka nebo kus sloupce → nabídnout celý souvislý volný úsek.
   if (segments.length === 1) {
-    const table = anchor.closest("table");
-    const free = new Set([...table.querySelectorAll(`td.plan-pick[data-column="${segments[0].column}"]`)].map(cell => Number(cell.dataset.minute)));
+    const table = anchor.closest(".plan-day");
+    const free = new Set([...table.querySelectorAll(`.plan-pick[data-column="${segments[0].column}"]`)].map(cell => Number(cell.dataset.minute)));
     let start = segments[0].start;
     let end = segments[0].end;
     while (free.has(start - 60)) start -= 60;
@@ -5677,11 +5696,11 @@ function openSelectionPopover(anchor, date, cells) {
       expand.className = "plan-link";
       expand.textContent = `Vybrat celý volný úsek ${planRange(start, end)}`;
       expand.addEventListener("click", () => {
-        table.querySelectorAll(`td.plan-pick[data-column="${segments[0].column}"]`).forEach(cell => {
+        table.querySelectorAll(`.plan-pick[data-column="${segments[0].column}"]`).forEach(cell => {
           const minute = Number(cell.dataset.minute);
           cell.classList.toggle("is-selected", minute >= start && minute < end);
         });
-        openSelectionPopover(anchor, date, [...table.querySelectorAll("td.plan-pick.is-selected")]);
+        openSelectionPopover(anchor, date, [...table.querySelectorAll(".plan-pick.is-selected")]);
       });
       pop.append(expand);
     }

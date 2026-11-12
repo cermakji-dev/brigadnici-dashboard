@@ -2040,3 +2040,39 @@ dialog .custom-select { position: relative; }
 :root[data-theme="dark"] .plan-lanes.is-painting .plan-slot.plan-paint.is-none:hover { background: #2a2410; }
 :root[data-theme="dark"] .plan-slot.plan-pick.is-selected, :root[data-theme="dark"] .plan-slot.is-selected { background: #1d4ed8; color: #fff; box-shadow: inset 0 0 0 2px #93c5fd; }
 :root[data-theme="dark"] .plan-slot.is-taken { background: var(--taken-bg); }
+
+/* v120 – rozpis ve stejném vzhledu jako časová osa v Docházce */
+.plan-calendar { gap: 16px; }
+.plan-day { --smena: #f59e0b; --smena-strong: #facc15; --smena-bg: #fef9c3; --smena-fg: #713f12;
+  display: grid; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--smena-strong); border-radius: 16px; box-shadow: var(--shadow); scroll-margin-top: 150px; }
+.plan-day.is-smena-2 { --smena: #16a34a; --smena-strong: #22c55e; --smena-bg: #dcfce7; --smena-fg: #14532d; }
+.plan-day-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: var(--smena-bg); border-bottom: 1px solid var(--border); }
+.plan-day-bar h4 { margin: 0; font-size: 1rem; color: var(--text); }
+.plan-day-bar h4::first-letter { text-transform: uppercase; }
+.plan-smena-chip { padding: 3px 10px; border-radius: 999px; background: var(--smena-strong); color: var(--smena-fg); font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.plan-day-sum { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.plan-day-actions { display: flex; gap: 14px; margin-left: auto; }
+.plan-day-actions button { padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: .78rem; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.plan-day-actions button:hover { color: var(--text); }
+.plan-timeline { padding: 4px 16px 12px; border: 0; border-radius: 0; background: transparent; }
+.plan-timeline .timeline-label { min-height: 46px; }
+.plan-label-button { padding: 8px 12px 8px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.plan-label-button:hover strong { color: var(--skills-color); }
+.plan-timeline .timeline-track { position: relative; }
+.plan-block { padding-right: 24px; }
+.plan-block.is-proposed { background: color-mix(in srgb, var(--brand-purple) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand-purple) 55%, var(--border)); box-shadow: inset 3px 0 0 var(--brand-purple); }
+.plan-block.is-proposed strong { color: var(--brand-purple); }
+:root[data-theme="dark"] .plan-block.is-proposed strong { color: #d8b4fe; }
+.plan-block-remove { position: absolute; top: 50%; right: 5px; width: 18px; height: 18px; margin-top: -9px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: .66rem; line-height: 18px; cursor: pointer; }
+.plan-block-remove:hover { background: color-mix(in srgb, var(--negative) 14%, transparent); color: var(--negative); }
+.plan-hit { position: absolute; z-index: 3; top: 6px; height: calc(var(--lane-h) - 6px); margin-left: 1px; border-radius: 6px; }
+.plan-hit.plan-pick { cursor: cell; touch-action: none; }
+.plan-hit.plan-pick:hover { background: color-mix(in srgb, #d97706 18%, transparent); }
+.plan-hit.is-selected { background: color-mix(in srgb, var(--skills-color) 35%, transparent); box-shadow: inset 0 0 0 2px var(--skills-color); }
+.plan-day.is-painting .plan-hit { cursor: crosshair; touch-action: none; }
+.plan-day.is-painting .plan-hit.is-none:hover { background: color-mix(in srgb, #d97706 12%, transparent); }
+.plan-day.is-painting .plan-hit.is-free { background: repeating-linear-gradient(135deg, var(--warning-soft) 0 6px, transparent 6px 12px); }
+.plan-day.is-painting .plan-hit.is-free:hover { background: color-mix(in srgb, #d97706 22%, transparent); }
+:root[data-theme="dark"] .plan-day { --smena-strong: #facc15; --smena-bg: #2a2410; --smena-fg: #1c1301; }
+:root[data-theme="dark"] .plan-day.is-smena-2 { --smena-strong: #4ade80; --smena-bg: #0f2a1a; --smena-fg: #04140a; }
+@media (max-width: 760px) { .plan-timeline { --label-w: 96px; } }
