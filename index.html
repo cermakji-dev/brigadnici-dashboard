@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.20.0">
+  <meta name="app-build" content="5.21.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=110">
+    <link rel="stylesheet" href="styles.css?v=111">
 </head>
 <body>
 
@@ -38,6 +38,7 @@
       <button id="teamViewButton" class="app-view-tab is-active" type="button">Tým</button>
       <button id="shiftsViewButton" class="app-view-tab" type="button">Docházka <span id="shiftsFreeBadge" class="tab-alert" hidden aria-label="Dnes je neobsazená směna">!</span></button>
       <button id="salesViewButton" class="app-view-tab" type="button">Prodejní výkon <span id="salesPendingBadge" class="tab-badge" hidden>0</span></button>
+      <button id="planViewButton" class="app-view-tab" type="button">Zápis směn</button>
     </nav>
     <div class="header-actions">
       <button id="alertsToggle" class="topbar-icon-button alerts-bell" type="button" aria-expanded="false" aria-controls="alertsPanel" title="Co je potřeba vyřešit">
@@ -281,6 +282,42 @@
       <div id="shiftsEmpty" class="empty-state" hidden><strong>Na tento den není v rozpisu žádná směna</strong><span>Rozpis se načítá z Google tabulky od začátku měsíce před třemi měsíci do 6 týdnů dopředu.</span></div>
     </section>
 
+    <section id="planDashboard" class="plan-dashboard" hidden aria-labelledby="planTitle">
+      <div class="sales-dashboard-heading plan-heading">
+        <div>
+          <p class="eyebrow">Testovací režim · nic se nezapisuje</p>
+          <h2 id="planTitle">Zápis směn</h2>
+          <p class="section-subtitle">Vložte odpovědi z WhatsAppu. Bot je rozdělí do slotů „VOLNÁ SMĚNA“ podle času, preferencí a limitu 85 h měsíčně.</p>
+        </div>
+        <label class="plan-month-label"><span>Měsíc</span><select id="planMonth" aria-label="Měsíc rozpisu"></select></label>
+      </div>
+      <div class="sales-kpis plan-kpis">
+        <article><span>Volné sloty</span><strong id="planFreeKpi">0 h</strong><small id="planFreeNote"></small></article>
+        <article><span>Žádosti</span><strong id="planRequestsKpi">0</strong><small id="planRequestsNote"></small></article>
+        <article><span>Navrženo</span><strong id="planAssignedKpi">0 h</strong><small id="planAssignedNote"></small></article>
+        <article class="attention"><span>Nevyhověno</span><strong id="planUnmetKpi">0</strong><small>dní bez směny</small></article>
+      </div>
+      <div class="plan-grid">
+        <div class="plan-card plan-input-card">
+          <div class="plan-card-head"><h3>Zprávy z WhatsAppu</h3><span class="plan-hint">Označte zprávy ve skupině, zkopírujte a vložte sem</span></div>
+          <textarea id="planInput" rows="14" spellcheck="false" placeholder="Eliška Kaštánková&#10;preferuji výdej&#10;3.11. 10-20&#10;11.11. 8-15&#10;&#10;Ondřej Hejda&#10;1.11, 7.11, 8.11 od 10:00 do 20:00"></textarea>
+          <div class="plan-input-actions">
+            <button id="planClear" class="button button-secondary" type="button">Vymazat</button>
+            <button id="planRun" class="button button-primary" type="button">Navrhnout obsazení</button>
+          </div>
+          <p id="planStatus" class="plan-status" role="status"></p>
+        </div>
+        <div class="plan-card">
+          <div class="plan-card-head"><h3>Kdo o co žádá</h3><span id="planPeopleNote" class="plan-hint"></span></div>
+          <div id="planPeople" class="plan-people"><p class="plan-empty">Zatím nic – vložte zprávy a klikněte na „Navrhnout obsazení“.</p></div>
+        </div>
+      </div>
+      <div class="plan-card plan-days-card">
+        <div class="plan-card-head"><h3>Návrh obsazení</h3><button id="planCopy" class="toolbar-action" type="button" disabled>Kopírovat návrh</button></div>
+        <div id="planDays" class="plan-days"><p class="plan-empty">Návrh se zobrazí tady, po dnech.</p></div>
+      </div>
+    </section>
+
     <section id="salesDashboard" class="sales-dashboard" hidden>
       <div class="sales-dashboard-heading">
         <div><p class="eyebrow">Výkon na prodejně</p><h2>Prodejní výkon</h2><p class="section-subtitle">ASR = (železo + služby) ÷ prodejní hodiny · TGT 6 500 Kč/h</p></div>
@@ -334,7 +371,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v109</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v110</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -656,6 +693,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=109"></script>
+  <script type="module" src="app.js?v=110"></script>
 </body>
 </html>

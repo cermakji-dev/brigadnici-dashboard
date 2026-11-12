@@ -4,8 +4,9 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  summarizeShifts, salesByPerson, salesByWeek
-} from "./logic.mjs?v=109";
+  summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
+} from "./logic.mjs?v=110";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=110";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -139,6 +140,13 @@ const elements = {
   tableSortButtons: [...document.querySelectorAll(".people-table .table-sort")],
   salesSortButtons: [...document.querySelectorAll(".sales-table .table-sort")],
   addWorkerButton: document.querySelector("#addWorkerButton"),
+  planViewButton: document.querySelector("#planViewButton"), planDashboard: document.querySelector("#planDashboard"),
+  planMonth: document.querySelector("#planMonth"), planInput: document.querySelector("#planInput"), planRun: document.querySelector("#planRun"),
+  planClear: document.querySelector("#planClear"), planStatus: document.querySelector("#planStatus"), planPeople: document.querySelector("#planPeople"),
+  planPeopleNote: document.querySelector("#planPeopleNote"), planDays: document.querySelector("#planDays"), planCopy: document.querySelector("#planCopy"),
+  planFreeKpi: document.querySelector("#planFreeKpi"), planFreeNote: document.querySelector("#planFreeNote"), planRequestsKpi: document.querySelector("#planRequestsKpi"),
+  planRequestsNote: document.querySelector("#planRequestsNote"), planAssignedKpi: document.querySelector("#planAssignedKpi"), planAssignedNote: document.querySelector("#planAssignedNote"),
+  planUnmetKpi: document.querySelector("#planUnmetKpi"),
   teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
   shiftsViewButton: document.querySelector("#shiftsViewButton"), shiftsFreeBadge: document.querySelector("#shiftsFreeBadge"),
   shiftsDashboard: document.querySelector("#shiftsDashboard"), shiftsDayTitle: document.querySelector("#shiftsDayTitle"),
@@ -267,6 +275,12 @@ elements.cardViewButton.addEventListener("click", () => setViewMode("cards"));
 elements.tableViewButton.addEventListener("click", () => setViewMode("table"));
 elements.teamViewButton.addEventListener("click", () => setMainView("team"));
 elements.salesViewButton.addEventListener("click", () => setMainView("sales"));
+elements.planViewButton.addEventListener("click", () => setMainView("plan"));
+elements.planRun.addEventListener("click", () => void runPlan());
+elements.planClear.addEventListener("click", () => { elements.planInput.value = ""; savePlanText(); planResult = null; renderPlanResult(); });
+elements.planInput.addEventListener("input", savePlanText);
+elements.planMonth.addEventListener("change", () => { planMonthShifts = null; void loadPlanMonth().then(() => { if (planResult) void runPlan(); else renderPlanKpis(); }); });
+elements.planCopy.addEventListener("click", copyPlan);
 elements.shiftsViewButton.addEventListener("click", () => setMainView("shifts"));
 elements.shiftsDayChips.forEach(chip => chip.addEventListener("click", () => setShiftDay(addDays(startOfDay(new Date()), Number(chip.dataset.shiftOffset)))));
 elements.shiftsPrevDay.addEventListener("click", () => shiftsMode === "month" ? setShiftMonth(-1) : setShiftDay(addDays(selectedShiftDay, -1)));
@@ -707,7 +721,7 @@ async function initializeApp() {
     elements.appContent.forEach(element => { element.hidden = false; });
     let savedView = "team";
     try { savedView = localStorage.getItem(MAIN_VIEW_KEY) || "team"; } catch { /* výchozí pohled */ }
-    if (["shifts", "sales"].includes(savedView)) setMainView(savedView);
+    if (["shifts", "sales", "plan"].includes(savedView)) setMainView(savedView);
     scheduleAutoRefresh();
     updateAppLoader("Přehled je připravený");
     await waitForAppPaint();
@@ -2277,6 +2291,8 @@ function setMainView(view) {
   elements.teamViewSections.forEach(section => { section.hidden = view !== "team"; });
   elements.salesDashboard.hidden = view !== "sales";
   elements.shiftsDashboard.hidden = view !== "shifts";
+  elements.planDashboard.hidden = view !== "plan";
+  elements.planViewButton.classList.toggle("is-active", view === "plan");
   elements.teamViewButton.classList.toggle("is-active", view === "team");
   elements.salesViewButton.classList.toggle("is-active", view === "sales");
   elements.shiftsViewButton.classList.toggle("is-active", view === "shifts");
@@ -2286,6 +2302,7 @@ function setMainView(view) {
     if (!salesDaysTableAvailable) setMessage("Prodejní výkon vyžaduje spuštění migrace sales-performance-migration.sql v Supabase.", true);
   }
   if (view === "shifts") renderShiftsDashboard();
+  if (view === "plan") void openPlanView();
 }
 
 // Rychlé dohledání podle ID z databáze (volá se pro každý řádek směn i prodejů).
@@ -4390,6 +4407,7 @@ function initializeCustomSelects() {
     [elements.salesPersonFilter, false],
     [elements.salesStatusFilter, false],
     [elements.teamPeriodSelect, true],
+    [elements.planMonth, true],
     [elements.bulkSalesDate, false],
     [document.querySelector("#appFeedbackCategory"), false]
   ].forEach(([select, monthGrid]) => enhanceSelect(select, monthGrid));
@@ -4472,3 +4490,250 @@ function closeCustomSelect(wrapper) {
 
 initializeCustomSelects();
 void initializeApp();
+
+
+// ---------------------------------------------------------------------------
+// Zápis směn (test): žádosti z WhatsAppu → návrh obsazení volných slotů.
+// Nic se nezapisuje do databáze ani do Google tabulky.
+const PLAN_TEXT_KEY = "brigadnici-plan-text";
+let planMonthShifts = null;
+let planResult = null;
+
+function savePlanText() {
+  try { localStorage.setItem(PLAN_TEXT_KEY, elements.planInput.value); } catch { /* jen pohodlí */ }
+}
+
+function syncPlanMonthOptions() {
+  if (elements.planMonth.dataset.ready === "true") return;
+  const today = new Date();
+  const formatter = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" });
+  const months = [0, 1, 2].map(offset => new Date(today.getFullYear(), today.getMonth() + offset, 1));
+  // Od poloviny měsíce se už plánuje hlavně ten další.
+  elements.planMonth.replaceChildren(...months.map(date => {
+    const label = formatter.format(date);
+    return new Option(label.charAt(0).toLocaleUpperCase("cs") + label.slice(1), dateKey(date).slice(0, 7));
+  }));
+  elements.planMonth.value = dateKey(months[today.getDate() >= 15 ? 1 : 0]).slice(0, 7);
+  elements.planMonth.dataset.ready = "true";
+  elements.planMonth.syncCustomSelect?.();
+}
+
+async function openPlanView() {
+  syncPlanMonthOptions();
+  if (!elements.planInput.value) {
+    try { elements.planInput.value = localStorage.getItem(PLAN_TEXT_KEY) || ""; } catch { /* prázdné */ }
+  }
+  if (!planMonthShifts) await loadPlanMonth();
+  renderPlanKpis();
+  if (!planResult) renderPlanResult();
+}
+
+async function loadPlanMonth() {
+  const month = elements.planMonth.value;
+  const [year, monthNumber] = month.split("-").map(Number);
+  const from = `${month}-01`;
+  const to = dateKey(new Date(year, monthNumber, 0));
+  elements.planStatus.textContent = "Načítám rozpis měsíce…";
+  const { data, error } = await fetchAllRows(() => supabaseClient.from("shifts")
+    .select("shift_date, start_minutes, end_minutes, department, column_index, raw_name, worker_id, is_free")
+    .gte("shift_date", from).lte("shift_date", to)
+    .order("shift_date").order("start_minutes").order("id"));
+  planMonthShifts = error ? [] : data.map(mapShiftRow);
+  elements.planStatus.textContent = error ? `Rozpis se nepodařilo načíst: ${error.message}` : "";
+}
+
+function planWorkerLookup() {
+  const workers = Object.values(state.people).map(person => ({ full_name: person.name, aliases: person.aliases || [], id: person.remoteId || person.id, person }));
+  const lookup = buildWorkerLookup(workers);
+  return name => {
+    const value = String(name || "").trim();
+    if (value.length < 3) return null;
+    return lookup(value);
+  };
+}
+
+function planFreeSlots() {
+  return (planMonthShifts || []).filter(shift => shift.free)
+    .map(shift => ({ date: shift.date, start: shift.start, end: shift.end, column: shift.column, department: shift.department }));
+}
+
+async function runPlan() {
+  if (!planMonthShifts) await loadPlanMonth();
+  const month = elements.planMonth.value;
+  const [year, monthNumber] = month.split("-").map(Number);
+  const requests = parseShiftRequests(elements.planInput.value, { year, month: monthNumber, findWorker: planWorkerLookup() });
+  const shifts = planMonthShifts || [];
+  const people = requests.map((item, order) => {
+    const remoteId = item.worker?.person?.remoteId || null;
+    const personKey = remoteId || `jmeno:${item.sender || order}`;
+    const existingMinutes = remoteId ? shifts.filter(shift => !shift.free && shift.workerId === remoteId).reduce((sum, shift) => sum + (shift.end - shift.start), 0) : 0;
+    return { ...item, order, personKey, remoteId, profile: item.worker?.person || null, existingMinutes };
+  });
+  const busy = shifts.filter(shift => !shift.free && shift.workerId)
+    .map(shift => ({ personKey: shift.workerId, date: shift.date, start: shift.start, end: shift.end }));
+  planResult = { people, ...planAssignments(people, planFreeSlots(), busy) };
+  elements.planStatus.textContent = people.length
+    ? `Načteno ${people.length} ${people.length === 1 ? "člověk" : people.length < 5 ? "lidé" : "lidí"}, ${people.reduce((sum, person) => sum + person.requests.length, 0)} žádostí.`
+    : "Ve zprávách jsem nenašel žádné dny pro vybraný měsíc.";
+  renderPlanResult();
+}
+
+const planHours = minutes => `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(minutes / 60)} h`;
+const planRange = (start, end) => `${formatClock(start)}–${formatClock(end)}`;
+const planDayLabel = key => {
+  const label = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }).format(parseDateKey(key));
+  return label.charAt(0).toLocaleUpperCase("cs") + label.slice(1);
+};
+
+function renderPlanKpis() {
+  const freeMinutes = planFreeSlots().reduce((sum, slot) => sum + (slot.end - slot.start), 0);
+  const freeDays = new Set(planFreeSlots().map(slot => slot.date)).size;
+  const leftMinutes = planResult ? planResult.freeLeft.length * 60 : freeMinutes;
+  elements.planFreeKpi.textContent = planHours(planResult ? leftMinutes : freeMinutes);
+  elements.planFreeNote.textContent = planResult ? `zbývá z ${planHours(freeMinutes)}` : `ve ${freeDays} dnech`;
+  const requestCount = planResult ? planResult.people.reduce((sum, person) => sum + person.requests.length, 0) : 0;
+  elements.planRequestsKpi.textContent = String(requestCount);
+  elements.planRequestsNote.textContent = planResult ? `od ${planResult.people.length} lidí` : "dní od brigádníků";
+  const assigned = planResult ? planResult.assignments.reduce((sum, item) => sum + item.minutes, 0) : 0;
+  elements.planAssignedKpi.textContent = planHours(assigned);
+  elements.planAssignedNote.textContent = planResult ? `${planResult.assignments.length} směn` : "zatím nic";
+  elements.planUnmetKpi.textContent = String(planResult ? planResult.unmet.length : 0);
+}
+
+function planChip(text, tone = "") {
+  const chip = document.createElement("span");
+  chip.className = `plan-chip${tone ? ` is-${tone}` : ""}`;
+  chip.textContent = text;
+  return chip;
+}
+
+function planNotTrained(person, segments) {
+  const trained = (person.profile?.departments || []).map(normalize);
+  if (!person.profile || !trained.length) return [];
+  return [...new Set(segments.flatMap(segment => departmentsOfColumn(segment.department)))]
+    .filter(key => !trained.includes(normalize(key)));
+}
+
+function renderPlanResult() {
+  renderPlanKpis();
+  elements.planCopy.disabled = !planResult?.assignments.length;
+  if (!planResult) {
+    elements.planPeopleNote.textContent = "";
+    elements.planPeople.innerHTML = '<p class="plan-empty">Zatím nic – vložte zprávy a klikněte na „Navrhnout obsazení“.</p>';
+    elements.planDays.innerHTML = '<p class="plan-empty">Návrh se zobrazí tady, po dnech.</p>';
+    return;
+  }
+  const { people, assignments, unmet, totals } = planResult;
+  const byPersonDate = new Map(assignments.map(item => [`${item.person.personKey}|${item.date}`, item]));
+  const unmetByPersonDate = new Map(unmet.map(item => [`${item.person.personKey}|${item.request.date}`, item]));
+  const unknown = people.filter(person => !person.remoteId).length;
+  elements.planPeopleNote.textContent = unknown ? `${unknown} bez karty v týmu` : "";
+
+  elements.planPeople.replaceChildren(...(people.length ? people.map(person => {
+    const card = document.createElement("article");
+    card.className = "plan-person";
+    const head = document.createElement("div");
+    head.className = "plan-person-head";
+    const name = document.createElement("strong");
+    name.textContent = person.sender || "Neznámý odesílatel";
+    head.append(name);
+    if (!person.remoteId) head.append(planChip("není v týmu", "warning"));
+    person.preferences.forEach((key, index) => head.append(planChip(`${index + 1}. ${key}`, "pref")));
+    const total = totals.get(person.personKey) || 0;
+    const meter = document.createElement("div");
+    meter.className = "plan-meter";
+    meter.title = `Už v rozpisu ${planHours(person.existingMinutes)}, navrženo ${planHours(total - person.existingMinutes)}`;
+    const bar = document.createElement("span");
+    bar.style.setProperty("--existing", `${Math.min(100, person.existingMinutes / MONTHLY_LIMIT_MINUTES * 100)}%`);
+    bar.style.setProperty("--total", `${Math.min(100, total / MONTHLY_LIMIT_MINUTES * 100)}%`);
+    const meterText = document.createElement("small");
+    meterText.textContent = `${planHours(total)} / 85 h${person.existingMinutes ? ` · z toho ${planHours(person.existingMinutes)} už v rozpisu` : ""}`;
+    meter.append(bar, meterText);
+    const days = document.createElement("div");
+    days.className = "plan-person-days";
+    person.requests.forEach(request => {
+      const assignment = byPersonDate.get(`${person.personKey}|${request.date}`);
+      const miss = unmetByPersonDate.get(`${person.personKey}|${request.date}`);
+      const asked = request.unspecified ? "čas libovolný" : request.options.map(option => planRange(option.start, option.end)).join(" / ");
+      const chip = planChip(`${planDayLabel(request.date)} ${assignment ? planRange(assignment.start, assignment.end) : asked}`,
+        assignment ? (assignment.partial || assignment.limited ? "partial" : "ok") : "miss");
+      chip.title = assignment ? `Žádal(a): ${asked}${assignment.partial ? " · přiděleno jen částečně" : ""}${assignment.limited ? " · zkráceno kvůli limitu 85 h" : ""}` : `Žádal(a): ${asked} · ${miss?.reason || "nevyhověno"}`;
+      days.append(chip);
+    });
+    if (person.foreignDates.length) days.append(planChip(`${person.foreignDates.length}× jiný měsíc`, "muted"));
+    card.append(head, meter, days);
+    return card;
+  }) : [Object.assign(document.createElement("p"), { className: "plan-empty", textContent: "Ve zprávách nejsou žádné dny pro vybraný měsíc." })]));
+
+  const dates = [...new Set([...assignments.map(item => item.date), ...unmet.map(item => item.request.date)])].sort();
+  const freeByDate = new Map();
+  planResult.freeLeft.forEach(slot => {
+    if (!freeByDate.has(slot.date)) freeByDate.set(slot.date, []);
+    freeByDate.get(slot.date).push(slot);
+  });
+  elements.planDays.replaceChildren(...(dates.length ? dates.map(date => {
+    const day = document.createElement("section");
+    day.className = "plan-day";
+    const title = document.createElement("h4");
+    title.textContent = planDayLabel(date);
+    const left = mergeShiftBlocks((freeByDate.get(date) || []).map(slot => ({ ...slot, free: true })));
+    const leftNote = document.createElement("span");
+    leftNote.className = "plan-day-left";
+    leftNote.textContent = left.length ? `volné dál: ${left.map(block => `${block.department} ${planRange(block.start, block.end)}`).join(", ")}` : "vše obsazeno";
+    title.append(leftNote);
+    const list = document.createElement("ul");
+    assignments.filter(item => item.date === date).sort((a, b) => a.start - b.start).forEach(item => {
+      const row = document.createElement("li");
+      row.className = "plan-row";
+      const time = document.createElement("span");
+      time.className = "plan-row-time";
+      time.textContent = planRange(item.start, item.end);
+      const who = document.createElement("strong");
+      who.textContent = item.person.sender || "?";
+      const where = document.createElement("span");
+      where.className = "plan-row-where";
+      where.textContent = item.segments.map(segment => item.segments.length > 1 ? `${segment.department} ${planRange(segment.start, segment.end)}` : segment.department).join(" → ");
+      const flags = document.createElement("span");
+      flags.className = "plan-row-flags";
+      if (item.partial) flags.append(planChip(`chtěl(a) ${item.requested}`, "partial"));
+      if (item.limited) flags.append(planChip("zkráceno – limit 85 h", "partial"));
+      if (item.offPreference) flags.append(planChip("mimo preferenci", "muted"));
+      planNotTrained(item.person, item.segments).forEach(key => flags.append(planChip(`nezaškolen(a): ${key}`, "warning")));
+      row.append(time, who, where, flags);
+      list.append(row);
+    });
+    unmet.filter(item => item.request.date === date).forEach(item => {
+      const row = document.createElement("li");
+      row.className = "plan-row is-unmet";
+      const time = document.createElement("span");
+      time.className = "plan-row-time";
+      time.textContent = item.request.unspecified ? "—" : item.request.options.map(option => planRange(option.start, option.end)).join(" / ");
+      const who = document.createElement("strong");
+      who.textContent = item.person.sender || "?";
+      const why = document.createElement("span");
+      why.className = "plan-row-where";
+      why.textContent = item.reason;
+      row.append(time, who, why, document.createElement("span"));
+      list.append(row);
+    });
+    day.append(title, list);
+    return day;
+  }) : [Object.assign(document.createElement("p"), { className: "plan-empty", textContent: "Žádný den k obsazení." })]));
+}
+
+async function copyPlan() {
+  if (!planResult?.assignments.length) return;
+  const lines = [];
+  [...new Set(planResult.assignments.map(item => item.date))].sort().forEach(date => {
+    lines.push(planDayLabel(date));
+    planResult.assignments.filter(item => item.date === date).sort((a, b) => a.start - b.start).forEach(item => {
+      lines.push(`  ${planRange(item.start, item.end)}  ${item.person.sender}  (${item.segments.map(segment => segment.department).join(" → ")})`);
+    });
+  });
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setMessage("Návrh je zkopírovaný do schránky.");
+  } catch {
+    setMessage("Kopírování se nepodařilo – prohlížeč nepovolil schránku.", true);
+  }
+}

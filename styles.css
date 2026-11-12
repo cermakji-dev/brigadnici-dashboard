@@ -1744,3 +1744,52 @@ dialog .custom-select { position: relative; }
 .editor-name-action { cursor: default; }
 .editor-name-action.is-missing, .editor-name-action.is-readonly-user { color: var(--muted); border-color: transparent; }
 .editor-name-action:hover { background: transparent; border-color: transparent; color: inherit; }
+
+/* v110 – Zápis směn (test) */
+.plan-dashboard { display: grid; gap: 16px; }
+.plan-dashboard[hidden] { display: none; }
+.plan-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.plan-month-label { display: grid; gap: 4px; font-size: .72rem; color: var(--muted); min-width: 200px; }
+.plan-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.plan-kpis small { color: var(--muted); font-size: .74rem; }
+.plan-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+.plan-card { display: grid; gap: 12px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); min-width: 0; }
+.plan-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.plan-card-head h3 { margin: 0; font-size: 1rem; }
+.plan-hint { color: var(--muted); font-size: .76rem; }
+.plan-input-card textarea { width: 100%; min-height: 300px; resize: vertical; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text); font: .84rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; box-sizing: border-box; }
+.plan-input-card textarea:focus { outline: 2px solid var(--focus); border-color: var(--skills-color); }
+.plan-input-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.plan-status { margin: 0; min-height: 1.2em; color: var(--muted); font-size: .8rem; }
+.plan-empty { margin: 0; padding: 18px; color: var(--muted); font-size: .86rem; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+.plan-people { display: grid; gap: 10px; max-height: 520px; overflow: auto; padding-right: 2px; }
+.plan-person { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-elevated); }
+.plan-person-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.plan-person-head strong { margin-right: 4px; font-size: .92rem; }
+.plan-person-days { display: flex; flex-wrap: wrap; gap: 5px; }
+.plan-meter { display: grid; gap: 4px; }
+.plan-meter span { position: relative; height: 6px; border-radius: 999px; background: var(--brand-soft); overflow: hidden;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--muted) 55%, transparent) var(--existing), var(--skills-color) var(--existing) var(--total), transparent var(--total)); }
+.plan-meter small { color: var(--muted); font-size: .74rem; }
+.plan-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--brand-soft); color: var(--text); font-size: .72rem; font-weight: 600; white-space: nowrap; }
+.plan-chip.is-pref { background: transparent; color: var(--muted); }
+.plan-chip.is-ok { background: color-mix(in srgb, var(--positive) 14%, transparent); border-color: color-mix(in srgb, var(--positive) 35%, var(--border)); }
+.plan-chip.is-partial { background: color-mix(in srgb, #f5b400 18%, transparent); border-color: color-mix(in srgb, #f5b400 45%, var(--border)); }
+.plan-chip.is-miss { background: color-mix(in srgb, var(--negative) 12%, transparent); border-color: color-mix(in srgb, var(--negative) 35%, var(--border)); color: var(--negative); }
+.plan-chip.is-warning { background: transparent; border-color: color-mix(in srgb, var(--negative) 40%, var(--border)); color: var(--negative); }
+.plan-chip.is-muted { background: transparent; color: var(--muted); }
+.plan-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.plan-day { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-elevated); align-content: start; }
+.plan-day h4 { display: grid; gap: 2px; margin: 0; font-size: .9rem; white-space: nowrap; }
+.plan-day-left { color: var(--muted); font-size: .72rem; font-weight: 500; white-space: normal; }
+.plan-day ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.plan-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; padding: 7px 9px; border-radius: 8px; background: color-mix(in srgb, var(--positive) 8%, transparent); }
+.plan-row.is-unmet { background: color-mix(in srgb, var(--negative) 8%, transparent); }
+.plan-row-time { grid-row: span 2; font-variant-numeric: tabular-nums; font-weight: 700; font-size: .82rem; }
+.plan-row strong { font-size: .85rem; }
+.plan-row-where { grid-column: 2; color: var(--muted); font-size: .76rem; }
+.plan-row-flags { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px; }
+.plan-row-flags:empty { display: none; }
+@media (max-width: 1100px) { .plan-grid { grid-template-columns: 1fr; } .plan-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .plan-days { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .topbar > .app-view-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .app-view-tab { white-space: nowrap; } }
