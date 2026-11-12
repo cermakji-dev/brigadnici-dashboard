@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.22.0">
+  <meta name="app-build" content="5.23.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=112">
+    <link rel="stylesheet" href="styles.css?v=113">
 </head>
 <body>
 
@@ -287,47 +287,26 @@
         <div>
           <p class="eyebrow">Testovací režim · nic se nezapisuje</p>
           <h2 id="planTitle">Zápis směn</h2>
-          <p class="section-subtitle">Vložte odpovědi z WhatsAppu a bot je rozdělí do slotů „VOLNÁ SMĚNA“ podle času, preferencí a limitu 85 h.</p>
+          <p class="section-subtitle">Vložte zprávy z WhatsAppu nebo screenshoty a bot je zapíše do volných směn (max. 85 h měsíčně).</p>
         </div>
-        <label class="plan-month-label"><span>Měsíc rozpisu</span><select id="planMonth" aria-label="Měsíc rozpisu"></select></label>
+        <label class="plan-month-label"><span>Měsíc</span><select id="planMonth" aria-label="Měsíc rozpisu"></select></label>
       </div>
-      <div class="sales-kpis plan-kpis">
-        <article><span>Volné sloty</span><strong id="planFreeKpi">0 h</strong><small id="planFreeNote"></small></article>
-        <article><span>Žádosti</span><strong id="planRequestsKpi">0</strong><small id="planRequestsNote"></small></article>
-        <article><span>Navrženo</span><strong id="planAssignedKpi">0 h</strong><small id="planAssignedNote"></small></article>
-        <article class="attention"><span>Nevyhověno</span><strong id="planUnmetKpi">0</strong><small>dní bez směny</small></article>
-      </div>
-      <div class="plan-grid">
-        <div class="plan-card plan-input-card">
-          <div class="plan-card-head"><h3><span class="plan-step">1</span>Zprávy z WhatsAppu</h3></div>
-          <p class="plan-hint">Ve skupině označte odpovědi, zkopírujte je a vložte sem. Návrh se spočítá sám.</p>
-          <textarea id="planInput" rows="12" spellcheck="false" placeholder="Sem vložte zprávy, např.&#10;&#10;Eliška Kaštánková&#10;preferuji výdej&#10;3.11. 10-20&#10;11.11. 8-15"></textarea>
-          <label id="planDrop" class="plan-drop">
-            <input id="planImages" type="file" accept="image/*" multiple hidden>
-            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>
-            <span><strong>Přidat screenshot</strong> – klikněte, přetáhněte sem nebo vložte Ctrl+V</span>
-          </label>
-          <div id="planImageList" class="plan-image-list" hidden></div>
-          <div class="plan-input-actions">
-            <button id="planSample" class="toolbar-action" type="button">Vložit ukázku</button>
-            <span id="planStatus" class="plan-status" role="status"></span>
-            <button id="planClear" class="toolbar-action" type="button">Vymazat</button>
-          </div>
-        </div>
-        <div class="plan-card">
-          <div class="plan-card-head"><h3><span class="plan-step">2</span>Kdo o co žádá</h3><span id="planPeopleNote" class="plan-hint"></span></div>
-          <p class="plan-hint">Kliknutím na jméno zvýrazníte jeho směny v kalendáři. Kliknutím na den ho z návrhu vynecháte (a zase vrátíte).</p>
-          <div id="planPeople" class="plan-people"></div>
+      <div class="plan-card plan-input-card">
+        <textarea id="planInput" rows="9" spellcheck="false" placeholder="Sem vložte zprávy z WhatsAppu, např.&#10;&#10;Eliška Kaštánková&#10;preferuji výdej&#10;3.11. 10-20&#10;11.11. 8-15"></textarea>
+        <label id="planDrop" class="plan-drop">
+          <input id="planImages" type="file" accept="image/*" multiple hidden>
+          <span><strong>+ Screenshot</strong> – klikněte, přetáhněte sem nebo vložte Ctrl+V</span>
+        </label>
+        <div id="planImageList" class="plan-image-list" hidden></div>
+        <div class="plan-input-actions">
+          <button id="planSample" class="plan-link" type="button">Vložit ukázku</button>
+          <button id="planClear" class="plan-link" type="button">Vymazat</button>
+          <span id="planStatus" class="plan-status" role="status"></span>
+          <button id="planRun" class="button button-primary" type="button">Rozdělit směny</button>
         </div>
       </div>
-      <div class="plan-card plan-calendar-card">
-        <div class="plan-card-head">
-          <h3><span class="plan-step">3</span>Návrh obsazení</h3>
-          <div class="plan-legend"><span class="plan-legend-item is-partial">jen část / zkráceno</span><span class="plan-legend-item is-miss">nevyhověno</span><button id="planCopy" class="toolbar-action" type="button" disabled>Kopírovat návrh</button></div>
-        </div>
-        <div id="planCalendar" class="plan-calendar"></div>
-        <div id="planDayDetail" class="plan-day-detail" hidden></div>
-      </div>
+      <div id="planSummary" class="plan-summary" hidden></div>
+      <div id="planCalendar" class="plan-calendar"></div>
     </section>
 
     <section id="salesDashboard" class="sales-dashboard" hidden>
@@ -383,7 +362,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v111</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v112</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -705,6 +684,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=111"></script>
+  <script type="module" src="app.js?v=112"></script>
 </body>
 </html>
