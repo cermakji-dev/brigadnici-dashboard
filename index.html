@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.24.0">
+  <meta name="app-build" content="5.25.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=114">
+    <link rel="stylesheet" href="styles.css?v=115">
 </head>
 <body>
 
@@ -308,7 +308,10 @@
         </div>
       </div>
       <div id="planSummary" class="plan-summary" hidden></div>
-      <div id="planCalendar" class="plan-calendar"></div>
+      <div class="plan-workspace">
+        <div id="planCalendar" class="plan-calendar"></div>
+        <aside id="planTeamSummary" class="plan-team-summary" hidden aria-label="Souhrn hodin"></aside>
+      </div>
     </section>
 
     <section id="salesDashboard" class="sales-dashboard" hidden>
@@ -364,7 +367,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v113</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v114</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -686,6 +689,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=113"></script>
+  <script type="module" src="app.js?v=114"></script>
 </body>
 </html>

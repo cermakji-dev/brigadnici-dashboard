@@ -5,12 +5,12 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=113";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=113";
+} from "./logic.mjs?v=114";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=114";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, draftToTsv, isFreeValue
-} from "./roster.mjs?v=113";
+} from "./roster.mjs?v=114";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -147,7 +147,7 @@ const elements = {
   planViewButton: document.querySelector("#planViewButton"), planDashboard: document.querySelector("#planDashboard"),
   planMonth: document.querySelector("#planMonth"), planInput: document.querySelector("#planInput"), planSample: document.querySelector("#planSample"),
   planClear: document.querySelector("#planClear"), planStatus: document.querySelector("#planStatus"), planRun: document.querySelector("#planRun"),
-  planSummary: document.querySelector("#planSummary"), planCalendar: document.querySelector("#planCalendar"),
+  planSummary: document.querySelector("#planSummary"), planCalendar: document.querySelector("#planCalendar"), planTeamSummary: document.querySelector("#planTeamSummary"),
   planRosterBar: document.querySelector("#planRosterBar"), planRules: document.querySelector("#planRules"), planInputCard: document.querySelector("#planInputCard"),
   planDrop: document.querySelector("#planDrop"), planImages: document.querySelector("#planImages"), planImageList: document.querySelector("#planImageList"),
   teamViewButton: document.querySelector("#teamViewButton"), salesViewButton: document.querySelector("#salesViewButton"), salesPendingBadge: document.querySelector("#salesPendingBadge"),
@@ -4695,6 +4695,7 @@ function renderPlan() {
   renderPlanSummary();
   if (planSource === "draft" && planEditMode === "paint") elements.planSummary.hidden = true;
   renderPlanSheet();
+  renderPlanTeamSummary();
 }
 
 // Souhrn nad tabulkou: kdo kolik dostal, co se nevešlo.
@@ -4980,6 +4981,33 @@ async function exportRosterToClipboard() {
 }
 
 // Pravidla pro vypisování a našeptávač z minulého měsíce.
+const RULE_DAY_OPTIONS = [["all", "každý den"], ["weekdays", "Po–Pá"], ["weekend", "So–Ne"], ["0", "pondělí"], ["1", "úterý"], ["2", "středa"], ["3", "čtvrtek"], ["4", "pátek"], ["5", "sobota"], ["6", "neděle"]];
+function ruleParts(rule) {
+  const text = describeRule(rule);
+  const split = text.lastIndexOf(" · ");
+  return { when: text.slice(0, split), what: text.slice(split + 3) };
+}
+
+function ruleRow(rule, actionLabel, onAction, note = "") {
+  const item = document.createElement("li");
+  const { when, what } = ruleParts(rule);
+  const text = document.createElement("span");
+  text.className = "plan-rule-text";
+  const strong = document.createElement("strong");
+  strong.textContent = what;
+  const small = document.createElement("span");
+  const whenText = when.charAt(0).toLocaleLowerCase("cs") + when.slice(1);
+  small.textContent = note ? `${whenText} · ${note}` : whenText;
+  text.append(strong, small);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = actionLabel === "Přidat" ? "plan-rule-add-button" : "plan-rule-remove";
+  button.textContent = actionLabel;
+  button.addEventListener("click", onAction);
+  item.append(text, button);
+  return item;
+}
+
 function renderRosterRules() {
   const panel = elements.planRules;
   const visible = planSource === "none" || (planSource === "draft" && planEditMode === "paint");
@@ -4990,42 +5018,50 @@ function renderRosterRules() {
   panel.open = wasOpen;
   panel.dataset.ready = "true";
   const summary = document.createElement("summary");
-  summary.innerHTML = `<strong>Pravidla pro vypisování</strong> <span class="plan-hint">${planRules.length ? `${planRules.length} ${planRules.length === 1 ? "pravidlo" : planRules.length < 5 ? "pravidla" : "pravidel"}` : "zatím žádná"} · např. „každý den Výdej 10–20“</span>`;
+  summary.innerHTML = '<span class="plan-rules-title">Pravidla pro vypisování</span>';
+  const count = document.createElement("span");
+  count.className = "plan-rules-count";
+  count.textContent = planRules.length ? String(planRules.length) : "žádná";
+  summary.append(count);
+  const summaryHint = document.createElement("span");
+  summaryHint.className = "plan-hint";
+  summaryHint.textContent = "Volné směny, které se mají vypsat každý měsíc";
+  summary.append(summaryHint);
   panel.append(summary);
 
+  const body = document.createElement("div");
+  body.className = "plan-rules-body";
+  const mine = document.createElement("section");
+  mine.className = "plan-rules-col";
+  mine.append(Object.assign(document.createElement("h4"), { textContent: "Vaše pravidla" }));
   const list = document.createElement("ul");
   list.className = "plan-rule-list";
-  planRules.forEach((rule, index) => {
-    const item = document.createElement("li");
-    const text = document.createElement("span");
-    text.textContent = describeRule(rule);
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "plan-link";
-    remove.textContent = "Odebrat";
-    remove.addEventListener("click", () => { planRules.splice(index, 1); void saveRosterRules(); renderRosterRules(); });
-    item.append(text, remove);
-    list.append(item);
-  });
-  if (planRules.length) panel.append(list);
+  planRules.forEach((rule, index) => list.append(ruleRow(rule, "Odebrat", () => { planRules.splice(index, 1); void saveRosterRules(); renderRosterRules(); })));
+  if (!planRules.length) list.append(Object.assign(document.createElement("li"), { className: "plan-rule-empty", textContent: "Zatím žádná – přidejte níže nebo z našeptávače." }));
+  mine.append(list);
 
   const form = document.createElement("div");
-  form.className = "plan-rule-form";
-  const select = (options, value) => {
-    const element = document.createElement("select");
-    options.forEach(([key, label]) => element.append(new Option(label, key)));
-    element.value = value;
-    return element;
+  form.className = "plan-rule-add";
+  const field = (label, options, value) => {
+    const wrap = document.createElement("label");
+    wrap.className = "plan-rule-field";
+    wrap.append(Object.assign(document.createElement("span"), { textContent: label }));
+    const select = document.createElement("select");
+    options.forEach(([key, text]) => select.append(new Option(text, key)));
+    select.value = value;
+    wrap.append(select);
+    form.append(wrap);
+    return select;
   };
-  const when = select([["all", "Každý den"], ["weekdays", "Po–Pá"], ["weekend", "So–Ne"], ...[0, 1, 2, 3, 4, 5, 6].map(index => [String(index), dayName(index)])], "all");
-  const smena = select([["0", "obě směny"], ["1", "SMĚNA 1"], ["2", "SMĚNA 2"]], "0");
-  const department = select(DEPARTMENT_OPTIONS.map(name => [name, name]), "Výdej");
-  const from = select(rosterHours().map(minute => [String(minute), `od ${minute / 60}`]), "600");
-  const to = select(rosterHours().map(minute => [String(minute + 60), `do ${minute / 60 + 1}`]), "1200");
+  const department = field("Oddělení", DEPARTMENT_OPTIONS.map(name => [name, name]), "Výdej");
+  const from = field("Od", rosterHours().map(minute => [String(minute), `${minute / 60}:00`]), "600");
+  const to = field("Do", rosterHours().map(minute => [String(minute + 60), `${minute / 60 + 1}:00`]), "1200");
+  const when = field("Kdy", RULE_DAY_OPTIONS, "all");
+  const smena = field("Směna", [["0", "obě"], ["1", "SMĚNA 1"], ["2", "SMĚNA 2"]], "0");
   const add = document.createElement("button");
   add.type = "button";
-  add.className = "toolbar-action";
-  add.textContent = "Přidat pravidlo";
+  add.className = "button button-primary plan-rule-submit";
+  add.textContent = "Přidat";
   add.addEventListener("click", () => {
     const start = Number(from.value);
     const end = Number(to.value);
@@ -5034,40 +5070,111 @@ function renderRosterRules() {
     void saveRosterRules();
     renderRosterRules();
   });
-  form.append(when, smena, department, from, to, add);
-  panel.append(form);
+  form.append(add);
+  mine.append(form);
+  body.append(mine);
 
   const suggestions = planHistory ? suggestRules(planHistory.days, planRules) : [];
-  if (suggestions.length) {
-    const box = document.createElement("div");
-    box.className = "plan-suggestions";
-    const label = document.createElement("span");
-    label.className = "plan-hint";
-    label.textContent = `Našeptávač – v ${planMonthLabelOf(planHistory.month)} se opakovalo:`;
-    box.append(label);
-    suggestions.forEach(item => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "plan-suggestion";
-      button.textContent = `+ ${describeRule(item.rule)}`;
-      button.title = `${item.count}× z ${item.of} dní – kliknutím přidáte jako pravidlo`;
-      button.addEventListener("click", () => { planRules.push(item.rule); void saveRosterRules(); renderRosterRules(); });
-      box.append(button);
-    });
-    panel.append(box);
-  }
+  const hints = document.createElement("section");
+  hints.className = "plan-rules-col plan-rules-hints";
+  hints.append(Object.assign(document.createElement("h4"), { textContent: planHistory ? `Našeptávač – opakovalo se v ${planMonthLabelOf(planHistory.month)}` : "Našeptávač" }));
+  const hintList = document.createElement("ul");
+  hintList.className = "plan-rule-list";
+  suggestions.forEach(item => hintList.append(ruleRow(item.rule, "Přidat", () => { planRules.push(item.rule); void saveRosterRules(); renderRosterRules(); }, `${item.count} z ${item.of} dní`)));
+  if (!suggestions.length) hintList.append(Object.assign(document.createElement("li"), { className: "plan-rule-empty", textContent: planHistory ? "Nic dalšího se pravidelně neopakovalo." : "Načítám minulý měsíc…" }));
+  hints.append(hintList);
+  body.append(hints);
+  panel.append(body);
+
   if (planSource === "draft" && planRules.length) {
+    const footer = document.createElement("div");
+    footer.className = "plan-rules-footer";
     const apply = document.createElement("button");
     apply.type = "button";
-    apply.className = "button button-secondary";
-    apply.textContent = "Použít pravidla na celý měsíc";
+    apply.className = "toolbar-action";
+    apply.textContent = "Vypsat podle pravidel do celého měsíce";
     apply.addEventListener("click", () => {
       const added = applyRules(planDraft, planRules);
       setMessage(added ? `Vypsáno ${added} h volných směn podle pravidel.` : "Všechno podle pravidel už je vypsané.");
       if (added) draftChanged();
     });
-    panel.append(apply);
+    footer.append(apply);
+    panel.append(footer);
   }
+  form.querySelectorAll("select").forEach(select => enhanceSelect(select));
+}
+
+// Souhrn vedle rozpisu jako v Google tabulce: hodiny lidí a obsazenost měsíce.
+function renderPlanTeamSummary() {
+  const box = elements.planTeamSummary;
+  if (planSource === "none") { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = false;
+  const shifts = planMonthShifts || [];
+  const painting = planSource === "draft" && planEditMode === "paint";
+  const hours = new Map();
+  const proposedHours = new Map();
+  const key = (remoteId, name) => remoteId || `jmeno:${normalize(name)}`;
+  const names = new Map();
+  planActivePeople().forEach(person => names.set(person.remoteId, person.name));
+  shifts.filter(shift => !shift.free).forEach(shift => {
+    const k = key(shift.workerId, shift.name);
+    if (!names.has(k)) names.set(k, shift.name);
+    hours.set(k, (hours.get(k) || 0) + (shift.end - shift.start) / 60);
+  });
+  let proposedTotal = 0;
+  if (!painting) {
+    (planResult?.assignments || []).forEach(item => {
+      const k = item.person.remoteId || key(null, item.person.label);
+      if (!names.has(k)) names.set(k, item.person.label);
+      proposedHours.set(k, (proposedHours.get(k) || 0) + item.minutes / 60);
+      proposedTotal += item.minutes / 60;
+    });
+    planManual.forEach(entry => {
+      const k = entry.personKey.startsWith("jmeno:") ? key(null, entry.name) : entry.personKey;
+      if (!names.has(k)) names.set(k, entry.name);
+      proposedHours.set(k, (proposedHours.get(k) || 0) + (entry.end - entry.start) / 60);
+      proposedTotal += (entry.end - entry.start) / 60;
+    });
+  }
+  const table = document.createElement("table");
+  table.className = "plan-team-table";
+  table.createTHead().insertRow().append(
+    Object.assign(document.createElement("th"), { textContent: "Jméno" }),
+    Object.assign(document.createElement("th"), { textContent: "Počet zapsaných hodin" })
+  );
+  const body = table.createTBody();
+  [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], "cs")).forEach(([k, name]) => {
+    const total = (hours.get(k) || 0) + (proposedHours.get(k) || 0);
+    const row = body.insertRow();
+    if (total > 85) row.className = "is-over";
+    row.insertCell().textContent = name;
+    const cell = row.insertCell();
+    cell.textContent = String(Math.round(total * 10) / 10);
+    if (proposedHours.get(k)) cell.append(Object.assign(document.createElement("small"), { textContent: ` (+${Math.round(proposedHours.get(k) * 10) / 10})`, title: "Navrženo botem / zapsáno ručně, zatím neuloženo" }));
+  });
+  const free = shifts.filter(shift => shift.free).length - proposedTotal;
+  const taken = shifts.filter(shift => !shift.free).length + proposedTotal;
+  const planned = free + taken;
+  const log = shifts.filter(shift => !shift.free && /(^|[^a-z])log/i.test(normalize(shift.department))).length;
+  const stats = document.createElement("table");
+  stats.className = "plan-team-stats";
+  const statRow = (label, value, className = "") => {
+    const row = stats.insertRow();
+    if (className) row.className = className;
+    row.append(Object.assign(document.createElement("th"), { textContent: label }), Object.assign(document.createElement("td"), { textContent: value }));
+  };
+  statRow("Počet volných směn", String(Math.round(free)));
+  statRow("Počet obsazených směn", String(Math.round(taken)));
+  statRow("% obsazení", planned ? `${Math.round(taken / planned * 100)}%` : "–");
+  const totals = document.createElement("table");
+  totals.className = "plan-team-stats is-green";
+  const totalRow = (label, value) => {
+    const row = totals.insertRow();
+    row.append(Object.assign(document.createElement("th"), { textContent: label }), Object.assign(document.createElement("td"), { textContent: value }));
+  };
+  totalRow("Plánované hodiny", String(Math.round(planned)));
+  totalRow("Z toho LOG (obsazené)", String(log));
+  box.replaceChildren(table, stats, totals);
 }
 
 function planMonthLabelOf(month) {
