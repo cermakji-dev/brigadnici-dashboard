@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=122";
+} from "./logic.mjs?v=123";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -177,7 +177,6 @@ const elements = {
   personDepartments: [...document.querySelectorAll(".person-department")],
   cardTemplate: document.querySelector("#personCardTemplate"),
   dialog: document.querySelector("#personDialog"),
-  form: document.querySelector("#personForm"),
   dialogTitle: document.querySelector("#dialogTitle"),
   personId: document.querySelector("#personId"),
   skillsRange: document.querySelector("#skillsRange"),
