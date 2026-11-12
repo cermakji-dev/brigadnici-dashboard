@@ -5,12 +5,12 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=116";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=116";
+} from "./logic.mjs?v=117";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=117";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, draftToTsv, isFreeValue
-} from "./roster.mjs?v=116";
+} from "./roster.mjs?v=117";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -4515,6 +4515,7 @@ let planPaint = null;
 
 function initPlanView() {
   initRosterPainting();
+  initPlanSelection();
   elements.planInput.addEventListener("input", savePlanText);
   elements.planRun.addEventListener("click", () => void runPlan(true));
   elements.planSample.addEventListener("click", () => {
@@ -4544,7 +4545,9 @@ function initPlanView() {
     addPlanImages(images);
   });
   document.addEventListener("click", event => {
-    if (!event.target.closest(".plan-popover, .plan-cell-button, .plan-head-button")) closePlanPopover();
+    // Po tažení přes buňky přijde „click“ na společný řádek/tabulku – ten nabídku nezavírá.
+    if (Date.now() - planSelectEndedAt < 400) return;
+    if (!event.target.closest(".plan-popover, .plan-cell-button, .plan-head-button, td.plan-pick")) closePlanPopover();
   });
   document.addEventListener("keydown", event => { if (event.key === "Escape") closePlanPopover(); });
 }
@@ -5309,21 +5312,14 @@ function renderPlanSheet() {
             cell.append(remove);
           }
         } else if (shift?.free) {
-          cell.className = "is-free";
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "plan-cell-button";
-          button.textContent = FREE_LABEL;
-          button.title = "Kliknutím zapíšete brigádníka";
-          button.addEventListener("click", event => {
-            let from = minute;
-            let to = minute + 60;
-            const isFree = m => cells.get(planCellKey(date, column, m))?.free && !proposed.has(planCellKey(date, column, m));
-            while (isFree(from - 60)) from -= 60;
-            while (isFree(to)) to += 60;
-            openPlanPopover(event.currentTarget, { date, column, department, start: from, end: to });
-          });
-          cell.append(button);
+          // Výběr buněk tažením (i přes víc sloupců) → nabídka, koho zapsat.
+          cell.className = "is-free plan-pick";
+          cell.dataset.date = date;
+          cell.dataset.column = String(column);
+          cell.dataset.minute = String(minute);
+          cell.dataset.department = department || "";
+          cell.textContent = FREE_LABEL;
+          cell.title = "Přejeďte myší přes buňky, které chcete zapsat";
         } else if (shift) {
           cell.className = "is-taken";
           cell.append(Object.assign(document.createElement("span"), { textContent: shift.name }));
@@ -5472,63 +5468,167 @@ function openDepartmentPopover(anchor, date, index) {
 }
 
 let planPopover = null;
-function closePlanPopover() {
+function closePlanPopover(clearSelection = true) {
   planPopover?.remove();
   planPopover = null;
+  if (clearSelection && !planSelect?.active) clearPlanSelection();
 }
 
 // Přidání do volné směny: nabídne ty, kdo o den žádali, a pak kohokoli z týmu.
-function openPlanPopover(anchor, target) {
-  closePlanPopover();
+// Výběr volných buněk tažením: jedna hodina, část směny nebo víc sloupců najednou.
+let planSelect = null;
+let planSelectEndedAt = 0;
+function initPlanSelection() {
+  const tableOf = cell => cell.closest("table");
+  const paint = () => {
+    if (!planSelect) return;
+    const { table, anchor, current } = planSelect;
+    const [c1, c2] = [anchor.column, current.column].sort((a, b) => a - b);
+    const [m1, m2] = [anchor.minute, current.minute].sort((a, b) => a - b);
+    table.querySelectorAll("td.plan-pick").forEach(cell => {
+      const column = Number(cell.dataset.column);
+      const minute = Number(cell.dataset.minute);
+      cell.classList.toggle("is-selected", column >= c1 && column <= c2 && minute >= m1 && minute <= m2);
+    });
+  };
+  const point = cell => ({ column: Number(cell.dataset.column), minute: Number(cell.dataset.minute) });
+  elements.planCalendar.addEventListener("pointerdown", event => {
+    const cell = event.target.closest("td.plan-pick");
+    if (!cell || event.button !== 0) return;
+    event.preventDefault();
+    cell.releasePointerCapture?.(event.pointerId);
+    closePlanPopover();
+    planSelect = { table: tableOf(cell), date: cell.dataset.date, anchor: point(cell), current: point(cell), last: cell, active: true };
+    paint();
+  });
+  document.addEventListener("pointermove", event => {
+    if (!planSelect?.active) return;
+    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest("td.plan-pick");
+    if (!cell || tableOf(cell) !== planSelect.table) return;
+    planSelect.current = point(cell);
+    planSelect.last = cell;
+    paint();
+  });
+  ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => {
+    if (!planSelect?.active) return;
+    planSelect.active = false;
+    planSelectEndedAt = Date.now();
+    const picked = [...planSelect.table.querySelectorAll("td.plan-pick.is-selected")];
+    if (picked.length) openSelectionPopover(planSelect.last, planSelect.date, picked);
+  }));
+}
+
+function clearPlanSelection() {
+  planSelect?.table?.querySelectorAll("td.is-selected").forEach(cell => cell.classList.remove("is-selected"));
+  planSelect = null;
+}
+
+// Vybrané buňky → souvislé úseky po sloupcích („Výdej 10–14“).
+function selectionSegments(cells) {
+  const byColumn = new Map();
+  cells.forEach(cell => {
+    const column = Number(cell.dataset.column);
+    if (!byColumn.has(column)) byColumn.set(column, { department: cell.dataset.department, minutes: [] });
+    byColumn.get(column).minutes.push(Number(cell.dataset.minute));
+  });
+  const segments = [];
+  [...byColumn.entries()].sort((a, b) => a[0] - b[0]).forEach(([column, { department, minutes }]) => {
+    minutes.sort((a, b) => a - b).forEach(minute => {
+      const last = segments[segments.length - 1];
+      if (last && last.column === column && last.end === minute) last.end = minute + 60;
+      else segments.push({ column, department, start: minute, end: minute + 60 });
+    });
+  });
+  return segments;
+}
+
+function openSelectionPopover(anchor, date, cells) {
+  closePlanPopover(false);
+  const segments = selectionSegments(cells);
+  const minutes = segments.reduce((sum, segment) => sum + segment.end - segment.start, 0);
   const pop = document.createElement("div");
   pop.className = "plan-popover";
   pop.setAttribute("role", "dialog");
   const title = document.createElement("p");
   title.className = "plan-popover-title";
-  title.textContent = `${planDayLabel(target.date)} · ${target.department || "—"} · volno ${planRange(target.start, target.end)}`;
-  pop.append(title);
-  const addEntry = (personKey, name, start, end) => {
-    planManual.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, date: target.date, column: target.column, department: target.department, start, end, personKey, name });
+  title.textContent = `${planDayLabel(date)} · vybráno ${planHours(minutes)}`;
+  const where = document.createElement("p");
+  where.className = "plan-popover-hint";
+  where.textContent = segments.map(segment => `${segment.department || "—"} ${planRange(segment.start, segment.end)}`).join(", ");
+  pop.append(title, where);
+
+  // Jedna buňka nebo kus sloupce → nabídnout celý souvislý volný úsek.
+  if (segments.length === 1) {
+    const table = anchor.closest("table");
+    const free = new Set([...table.querySelectorAll(`td.plan-pick[data-column="${segments[0].column}"]`)].map(cell => Number(cell.dataset.minute)));
+    let start = segments[0].start;
+    let end = segments[0].end;
+    while (free.has(start - 60)) start -= 60;
+    while (free.has(end)) end += 60;
+    if (start !== segments[0].start || end !== segments[0].end) {
+      const expand = document.createElement("button");
+      expand.type = "button";
+      expand.className = "plan-link";
+      expand.textContent = `Vybrat celý volný úsek ${planRange(start, end)}`;
+      expand.addEventListener("click", () => {
+        table.querySelectorAll(`td.plan-pick[data-column="${segments[0].column}"]`).forEach(cell => {
+          const minute = Number(cell.dataset.minute);
+          cell.classList.toggle("is-selected", minute >= start && minute < end);
+        });
+        openSelectionPopover(anchor, date, [...table.querySelectorAll("td.plan-pick.is-selected")]);
+      });
+      pop.append(expand);
+    }
+  }
+
+  const addEntries = (personKey, name) => {
+    segments.forEach(segment => planManual.push({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, date, column: segment.column, department: segment.department,
+      start: segment.start, end: segment.end, personKey, name
+    }));
     closePlanPopover();
     void runPlan();
   };
-  const list = document.createElement("div");
-  list.className = "plan-popover-list";
-  (planResult?.people || []).forEach(person => {
-    const request = person.allRequests.find(item => item.date === target.date);
-    if (!request) return;
-    const windows = request.options.map(option => ({ start: Math.max(option.start, target.start), end: Math.min(option.end, target.end) })).filter(item => item.end > item.start);
-    if (!windows.length) return;
-    const best = windows.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
+  const option = (personKey, label, note) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "plan-popover-option";
+    const total = (planResult?.totals.get(personKey) || 0) + minutes;
+    if (total > MONTHLY_LIMIT_MINUTES) button.classList.add("is-over");
     const name = document.createElement("strong");
-    name.textContent = person.label;
+    name.textContent = label;
     const meta = document.createElement("small");
-    meta.textContent = `${planRange(best.start, best.end)} · má ${planHours(planResult.totals.get(person.personKey) || 0)}`;
+    meta.textContent = `${note ? `${note} · ` : ""}po zápisu ${planHours(total)}`;
     button.append(name, meta);
-    button.addEventListener("click", () => addEntry(person.personKey, person.label, best.start, best.end));
-    list.append(button);
-  });
-  if (list.children.length) {
+    button.addEventListener("click", () => addEntries(personKey, label));
+    return button;
+  };
+  const askers = (planResult?.people || []).filter(person => person.allRequests.some(item => item.date === date));
+  if (askers.length) {
     const hint = document.createElement("p");
     hint.className = "plan-popover-hint";
     hint.textContent = "Žádali o tento den:";
+    const list = document.createElement("div");
+    list.className = "plan-popover-list";
+    askers.forEach(person => {
+      const request = person.allRequests.find(item => item.date === date);
+      const asked = request.unspecified ? "kdykoli" : request.options.map(item => planRange(item.start, item.end)).join(" / ");
+      list.append(option(person.personKey, person.label, `chtěl(a) ${asked}`));
+    });
     pop.append(hint, list);
   }
   const other = document.createElement("select");
   other.className = "plan-popover-select";
-  other.append(new Option(`Někdo jiný z týmu (${planRange(target.start, target.end)})…`, ""));
+  other.append(new Option(askers.length ? "Někdo jiný z týmu…" : "Vyberte brigádníka…", ""));
   planActivePeople().forEach(person => other.append(new Option(person.name, person.remoteId)));
   other.addEventListener("change", () => {
     const person = planActivePeople().find(item => item.remoteId === other.value);
-    if (person) addEntry(person.remoteId, person.name, target.start, target.end);
+    if (person) addEntries(person.remoteId, person.name);
   });
   pop.append(other);
   document.body.append(pop);
   const rect = anchor.getBoundingClientRect();
-  const width = Math.min(280, window.innerWidth - 24);
+  const width = Math.min(300, window.innerWidth - 24);
   pop.style.width = `${width}px`;
   pop.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2)) + window.scrollX}px`;
   const below = rect.bottom + 6 + pop.offsetHeight < window.innerHeight;
