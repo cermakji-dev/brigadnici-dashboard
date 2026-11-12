@@ -5,12 +5,12 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=114";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=114";
+} from "./logic.mjs?v=115";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=115";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, draftToTsv, isFreeValue
-} from "./roster.mjs?v=114";
+} from "./roster.mjs?v=115";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -5221,7 +5221,8 @@ function renderPlanSheet() {
     const cells = new Map(dayShifts.map(shift => [planCellKey(date, shift.column, shift.start), shift]));
 
     const table = document.createElement("table");
-    table.className = `plan-sheet${painting ? " is-painting" : ""}`;
+    // Barvy jako v Google tabulce: SMĚNA 1 žlutá, SMĚNA 2 zelená.
+    table.className = `plan-sheet is-smena-${shiftNumber(date)}${painting ? " is-painting" : ""}`;
     const caption = table.createCaption();
     const captionText = document.createElement("span");
     captionText.textContent = planDayLabel(date, "long");
