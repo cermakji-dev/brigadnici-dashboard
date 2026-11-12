@@ -5,13 +5,13 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=118";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=118";
+} from "./logic.mjs?v=119";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=119";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, isFreeValue
-} from "./roster.mjs?v=118";
-import { buildXlsx, buildHtml, buildTsv } from "./export.mjs?v=118";
+} from "./roster.mjs?v=119";
+import { buildXlsx, buildHtml, buildTsv } from "./export.mjs?v=119";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -5241,7 +5241,7 @@ function renderPlanTeamSummary() {
   table.className = "plan-team-table";
   table.createTHead().insertRow().append(
     Object.assign(document.createElement("th"), { textContent: "Jméno" }),
-    Object.assign(document.createElement("th"), { textContent: "Počet zapsaných hodin" })
+    Object.assign(document.createElement("th"), { textContent: "Hodiny", title: "Počet zapsaných hodin" })
   );
   const body = table.createTBody();
   data.people.forEach(person => {
@@ -5286,12 +5286,12 @@ function renderPlanSheet() {
   if (!painting) {
     (planResult?.assignments || []).forEach(item => item.segments.forEach(segment => {
       for (let m = segment.start; m < segment.end; m += 60) {
-        proposed.set(planCellKey(item.date, segment.column, m), { kind: "auto", item, name: item.person.label, first: m === segment.start, start: segment.start, end: segment.end });
+        proposed.set(planCellKey(item.date, segment.column, m), { kind: "auto", item, name: item.person.label, start: segment.start, end: segment.end });
       }
     }));
     planManual.forEach(entry => {
       for (let m = entry.start; m < entry.end; m += 60) {
-        proposed.set(planCellKey(entry.date, entry.column, m), { kind: "manual", entry, name: entry.name, first: m === entry.start, start: entry.start, end: entry.end });
+        proposed.set(planCellKey(entry.date, entry.column, m), { kind: "manual", entry, name: entry.name, start: entry.start, end: entry.end });
       }
     });
   }
@@ -5309,17 +5309,29 @@ function renderPlanSheet() {
       return Array.from({ length: (end - start) / 60 }, (_, index) => start + index * 60);
     })();
     const cells = new Map(dayShifts.map(shift => [planCellKey(date, shift.column, shift.start), shift]));
-
-    const table = document.createElement("table");
-    // Barvy jako v Google tabulce: SMĚNA 1 žlutá, SMĚNA 2 zelená.
-    table.className = `plan-sheet is-smena-${shiftNumber(date)}${painting ? " is-painting" : ""}`;
-    const caption = table.createCaption();
-    const captionText = document.createElement("span");
-    captionText.textContent = planDayLabel(date, "long");
-    const smena = document.createElement("span");
-    smena.className = "plan-smena";
-    smena.textContent = `SMĚNA ${shiftNumber(date)}`;
-    caption.append(captionText, smena);
+    // Co je v buňce – souvislé stejné buňky se kreslí jako jeden blok (jako v kalendáři).
+    const describe = (column, minute) => {
+      const key = planCellKey(date, column, minute);
+      const prop = proposed.get(key);
+      if (prop) return { type: "new", id: `new:${prop.kind}:${prop.name}:${prop.start}`, prop };
+      const shift = cells.get(key);
+      if (!shift) return { type: "none", id: "none" };
+      if (shift.free) return { type: "free", id: "free", shift };
+      return { type: "taken", id: `taken:${shift.workerId || shift.name}`, shift };
+    };
+    const smenaNumber = shiftNumber(date);
+    const card = document.createElement("section");
+    card.className = `plan-day-card is-smena-${smenaNumber}`;
+    const header = document.createElement("header");
+    header.className = "plan-day-head";
+    const title = document.createElement("h4");
+    title.textContent = planDayLabel(date, "long");
+    const pill = document.createElement("span");
+    pill.className = "plan-smena-pill";
+    pill.textContent = `Směna ${smenaNumber}`;
+    const totalNode = document.createElement("span");
+    totalNode.className = "plan-day-total";
+    header.append(title, pill, totalNode);
     if (painting) {
       const tools = document.createElement("span");
       tools.className = "plan-day-tools";
@@ -5336,117 +5348,122 @@ function renderPlanSheet() {
         draftChanged();
       });
       tools.append(copy, clear);
-      caption.append(tools);
+      header.append(tools);
     }
+    card.append(header);
+
+    const table = document.createElement("table");
+    table.className = `plan-lanes${painting ? " is-painting" : ""}`;
+    const colgroup = document.createElement("colgroup");
+    colgroup.append(Object.assign(document.createElement("col"), { className: "plan-col-time" }));
+    columns.forEach(() => colgroup.append(document.createElement("col")));
+    colgroup.append(Object.assign(document.createElement("col"), { className: "plan-col-count" }));
+    table.append(colgroup);
     const head = table.createTHead().insertRow();
-    head.append(Object.assign(document.createElement("th"), { textContent: "Určení:" }));
+    head.append(document.createElement("th"));
     columns.forEach(([column, department]) => {
       const th = document.createElement("th");
       if (painting) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "plan-head-button";
-        button.textContent = department ? `↓ ${department} ↓` : "+ oddělení";
+        button.textContent = department || "+ oddělení";
         button.title = "Změnit oddělení sloupce";
         button.addEventListener("click", event => openDepartmentPopover(event.currentTarget, date, column - 1));
         th.append(button);
-      } else th.textContent = department ? `↓ ${department} ↓` : "";
+      } else th.textContent = department || "";
       head.append(th);
     });
-    head.append(Object.assign(document.createElement("th"), { textContent: "", className: "plan-count-head" }));
+    head.append(Object.assign(document.createElement("th"), { textContent: "lidí", className: "plan-count", title: "Počet lidí v hodině" }));
     const body = table.createTBody();
     let total = 0;
     hours.forEach(minute => {
       const row = body.insertRow();
-      row.append(Object.assign(document.createElement("th"), { textContent: `${minute / 60}–${minute / 60 + 1} h` }));
+      row.append(Object.assign(document.createElement("th"), { textContent: `${minute / 60}:00`, className: "plan-time" }));
       let count = 0;
       columns.forEach(([column, department]) => {
-        const key = planCellKey(date, column, minute);
-        const shift = cells.get(key);
-        const prop = proposed.get(key);
+        const info = describe(column, minute);
+        const startsBlock = describe(column, minute - 60).id !== info.id || !hours.includes(minute - 60);
+        const endsBlock = describe(column, minute + 60).id !== info.id || !hours.includes(minute + 60);
+        let blockEnd = minute + 60;
+        if (startsBlock) while (hours.includes(blockEnd) && describe(column, blockEnd).id === info.id) blockEnd += 60;
         const cell = row.insertCell();
-        if (shift || prop) count += 1;
+        if (info.type !== "none") count += 1;
+        cell.className = `plan-slot is-${info.type}${startsBlock ? " is-start" : ""}${endsBlock ? " is-end" : ""}`;
+        const label = text => {
+          const node = document.createElement("span");
+          node.className = "plan-slot-label";
+          node.textContent = text;
+          cell.append(node);
+        };
+        const removeButton = (title, onClick) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "plan-remove";
+          button.textContent = "✕";
+          button.title = title;
+          button.setAttribute("aria-label", title);
+          button.addEventListener("click", onClick);
+          cell.append(button);
+        };
         if (painting) {
           cell.dataset.date = date;
           cell.dataset.column = String(column - 1);
           cell.dataset.minute = String(minute);
-          if (shift && !shift.free) {
-            cell.className = "is-taken";
-            cell.textContent = shift.name;
+          if (info.type === "taken") {
+            if (startsBlock) label(info.shift.name);
             cell.title = "Obsazeno – v režimu „Zapsat lidi“ jde odebrat";
           } else {
-            cell.className = `plan-paint ${shift?.free ? "is-free" : "is-none"}`;
-            cell.textContent = shift?.free ? FREE_LABEL : "";
+            cell.classList.add("plan-paint");
+            if (info.type === "free" && startsBlock) label(`Volno ${planRange(minute, blockEnd)}`);
           }
           return;
         }
-        if (prop) {
-          cell.className = "is-new";
-          const name = document.createElement("span");
-          name.textContent = prop.name;
-          cell.append(name);
-          if (prop.first) {
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className = "plan-remove";
-            remove.textContent = "✕";
-            remove.title = `Odebrat ${prop.name} (${planRange(prop.start, prop.end)})`;
-            remove.setAttribute("aria-label", remove.title);
-            remove.addEventListener("click", () => {
+        if (info.type === "new") {
+          const prop = info.prop;
+          if (startsBlock) {
+            label(prop.name);
+            removeButton(`Odebrat ${prop.name} (${planRange(prop.start, prop.end)})`, () => {
               if (prop.kind === "auto") planExcluded.add(`${prop.item.person.senderKey}|${date}`);
               else planManual = planManual.filter(entry => entry.id !== prop.entry.id);
               void runPlan();
             });
-            cell.append(remove);
           }
-        } else if (shift?.free) {
+        } else if (info.type === "free") {
           // Výběr buněk tažením (i přes víc sloupců) → nabídka, koho zapsat.
-          cell.className = "is-free plan-pick";
+          cell.classList.add("plan-pick");
           cell.dataset.date = date;
           cell.dataset.column = String(column);
           cell.dataset.minute = String(minute);
           cell.dataset.department = department || "";
-          cell.textContent = FREE_LABEL;
-          cell.title = "Přejeďte myší přes buňky, které chcete zapsat";
-        } else if (shift) {
-          cell.className = "is-taken";
-          cell.append(Object.assign(document.createElement("span"), { textContent: shift.name }));
-          const previous = cells.get(planCellKey(date, column, minute - 60));
-          if (planSource === "draft" && !(previous && !previous.free && previous.name === shift.name)) {
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className = "plan-remove";
-            remove.textContent = "✕";
-            remove.title = `Vrátit na volnou směnu (${shift.name})`;
-            remove.setAttribute("aria-label", remove.title);
-            remove.addEventListener("click", () => {
-              const day = planDraft.days[date];
-              for (let m = minute; m < ROSTER_END_MINUTE; m += 60) {
-                const key2 = rosterCellKey(column - 1, m);
-                if (day.cells[key2] !== shift.name) break;
-                day.cells[key2] = FREE_LABEL;
-              }
-              draftChanged();
-            });
-            cell.append(remove);
+          cell.title = "Přejeďte myší přes hodiny, které chcete zapsat";
+          if (startsBlock) label(`Volno ${planRange(minute, blockEnd)}`);
+        } else if (info.type === "taken") {
+          if (startsBlock) {
+            label(info.shift.name);
+            if (planSource === "draft") {
+              removeButton(`Vrátit na volnou směnu (${info.shift.name})`, () => {
+                const day = planDraft.days[date];
+                for (let m = minute; m < ROSTER_END_MINUTE; m += 60) {
+                  const key2 = rosterCellKey(column - 1, m);
+                  if (day.cells[key2] !== info.shift.name) break;
+                  day.cells[key2] = FREE_LABEL;
+                }
+                draftChanged();
+              });
+            }
           }
-        } else {
-          cell.className = "is-none";
         }
       });
       total += count;
-      row.append(Object.assign(document.createElement("td"), { textContent: String(count), className: "plan-count" }));
+      row.append(Object.assign(document.createElement("td"), { textContent: count ? String(count) : "", className: "plan-count" }));
     });
-    const foot = table.createTFoot().insertRow();
-    const label = document.createElement("td");
-    label.colSpan = columns.length + 1;
-    label.className = "plan-total-label";
-    label.textContent = "Celkem hod.:";
-    foot.append(label, Object.assign(document.createElement("td"), { textContent: String(total), className: "plan-count" }));
+    totalNode.textContent = `${total} h celkem`;
     const wrap = document.createElement("div");
-    wrap.className = "plan-sheet-wrap";
+    wrap.className = "plan-lanes-wrap";
     wrap.append(table);
-    return wrap;
+    card.append(wrap);
+    return card;
   }));
 }
 
@@ -5462,7 +5479,8 @@ function initRosterPainting() {
     if (planPaint.value) day.cells[key] = planPaint.value; else delete day.cells[key];
     cell.classList.toggle("is-free", Boolean(planPaint.value));
     cell.classList.toggle("is-none", !planPaint.value);
-    cell.textContent = planPaint.value || "";
+    cell.classList.add("is-start", "is-end");
+    cell.textContent = "";
     planPaint.changed = true;
   };
   elements.planCalendar.addEventListener("pointerdown", event => {
