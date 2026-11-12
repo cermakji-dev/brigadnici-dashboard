@@ -4,7 +4,7 @@ import {
   addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours,
   excelCellDate, forEachShiftCell, formatShiftDepartment, incompleteOnboardingTasks, isIgnoredShiftName,
   isLikelyWorkerName, matchesSearch, median, normalizeText, parseCsv, parseHours, parseShiftSlot,
-  periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales, toCsv
+  periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales
 } from "../logic.mjs";
 
 test("normalizace zachová porovnatelnost českých jmen", () => assert.equal(normalizeText("  Čermák Jiří "), "cermak jiri"));
@@ -76,12 +76,6 @@ test("CSV: středník, uvozovky, BOM a prázdné řádky", () => {
   assert.deepEqual(parseCsv("Jen hlavička"), []);
 });
 
-test("export CSV je bezpečný pro Excel", () => {
-  const csv = toCsv(["Jméno", "Poznámka", "Hodiny"], [["Novák Petr", '=HYPERLINK("x")', -5], ["A;B", 'řekl "ahoj"', 1.5]]);
-  assert.ok(csv.startsWith("﻿Jméno;Poznámka;Hodiny\r\n"));
-  assert.ok(csv.includes(`Novák Petr;"'=HYPERLINK(""x"")";-5`));
-  assert.ok(csv.includes('"A;B";"řekl ""ahoj""";1,5'));
-});
 
 test("název měsíčního listu se převede na období", () => {
   assert.equal(periodFromSheetName("Říjen26"), "2026-10-01");

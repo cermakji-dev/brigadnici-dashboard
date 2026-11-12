@@ -146,17 +146,6 @@ export const parseCsv = text => {
 };
 
 // Bezpečný CSV výstup pro český Excel: středník, BOM a ochrana proti vzorcům.
-export const toCsv = (headers, rows) => {
-  const escape = value => {
-    // Číslo s desetinnou čárkou, aby ho český Excel rozpoznal jako číslo.
-    if (typeof value === "number") return Number.isFinite(value) ? String(value).replace(".", ",") : "";
-    let text = value === null || value === undefined ? "" : String(value);
-    if (/^[=+\-@\t\r]/.test(text) && !/^-?\d+(?:[.,]\d+)?$/.test(text)) text = `'${text}`;
-    return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  return "\uFEFF" + [headers, ...rows].map(row => row.map(escape).join(";")).join("\r\n");
-};
-
 export const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 export const firstDayOfMonth = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
 export const startOfDay = date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
