@@ -56,6 +56,7 @@ test("verze souborů pro obejití mezipaměti GitHub Pages sedí", () => {
   assert.match(app, new RegExp(`logic\\.mjs\\?v=${appVersion}"`));
   assert.match(app, new RegExp(`planner\\.mjs\\?v=${appVersion}"`));
   assert.match(app, new RegExp(`roster\\.mjs\\?v=${appVersion}"`));
+  assert.match(app, new RegExp(`export\\.mjs\\?v=${appVersion}"`));
   assert.match(html, new RegExp(`<span>v${appVersion}</span>`));
 });
 
