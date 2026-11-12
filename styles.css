@@ -1901,3 +1901,9 @@ dialog .custom-select { position: relative; }
 :root[data-theme="dark"] .plan-team-table tr.is-over td { background: #5a2c2c; }
 :root[data-theme="dark"] .plan-team-stats.is-green th, :root[data-theme="dark"] .plan-team-stats.is-green td { background: #3f5a2f; color: #eef6e8; }
 @media (max-width: 1100px) { .plan-workspace { grid-template-columns: 1fr; } .plan-team-summary { position: static; max-height: none; } }
+
+/* v115 – barva dne podle SMĚNY jako v Google tabulce: 1 = žlutá, 2 = zelená */
+.plan-sheet.is-smena-1 caption, .plan-sheet.is-smena-1 thead th:not(.plan-count-head) { background: #ffe599; border-color: #e6c95f; }
+.plan-sheet.is-smena-2 caption, .plan-sheet.is-smena-2 thead th:not(.plan-count-head) { background: #a9d18e; border-color: #8fbf72; }
+:root[data-theme="dark"] .plan-sheet.is-smena-1 caption, :root[data-theme="dark"] .plan-sheet.is-smena-1 thead th:not(.plan-count-head) { background: #6b5a1e; color: #fff6d6; border-color: #85712a; }
+:root[data-theme="dark"] .plan-sheet.is-smena-2 caption, :root[data-theme="dark"] .plan-sheet.is-smena-2 thead th:not(.plan-count-head) { background: #3f5a2f; color: #eef6e8; border-color: #4e6e3b; }
