@@ -5,12 +5,12 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup
-} from "./logic.mjs?v=115";
-import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=115";
+} from "./logic.mjs?v=116";
+import { parseShiftRequests, planAssignments, departmentsOfColumn, MONTHLY_LIMIT_MINUTES } from "./planner.mjs?v=116";
 import {
   FREE_LABEL, DEPARTMENT_OPTIONS, cellKey as rosterCellKey, rosterHours, weekdayIndex, shiftNumber,
   daysFromShiftRows, draftFromHistory, applyRules, describeRule, dayName, suggestRules, draftToTsv, isFreeValue
-} from "./roster.mjs?v=115";
+} from "./roster.mjs?v=116";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -4612,7 +4612,7 @@ async function loadPlanMonth() {
     planDraftMeta = meta;
     planSource = draft ? "draft" : "none";
     planMonthShifts = draft ? draftShifts() : [];
-    if (planSource === "none") void loadPlanHistory();
+    if (planSource !== "google") void loadPlanHistory();
   }
   elements.planStatus.textContent = error ? `Rozpis se nepodařilo načíst: ${error.message}` : "";
 }
@@ -5204,9 +5204,8 @@ function renderPlanSheet() {
       }
     });
   }
-  const requestedDates = new Set((planResult?.people || []).flatMap(person => person.requests.map(request => request.date)));
   const dates = planSource === "draft" ? Object.keys(planDraft.days).sort()
-    : [...new Set(shifts.map(shift => shift.date))].sort().filter(date => requestedDates.has(date) || shifts.some(shift => shift.date === date && shift.free));
+    : [...new Set(shifts.map(shift => shift.date))].sort();
 
   elements.planCalendar.replaceChildren(...dates.map(date => {
     const dayShifts = shifts.filter(shift => shift.date === date);
@@ -5386,16 +5385,21 @@ function initRosterPainting() {
     const cell = event.target.closest("td.plan-paint");
     if (!cell || event.button !== 0) return;
     event.preventDefault();
+    cell.releasePointerCapture?.(event.pointerId);
     planPaint = { value: cell.classList.contains("is-free") ? "" : FREE_LABEL, changed: false };
     apply(cell);
   });
-  elements.planCalendar.addEventListener("pointerover", event => apply(event.target.closest("td.plan-paint")));
-  document.addEventListener("pointerup", () => {
+  // Myš i dotyk: buňka pod prstem se dohledá podle souřadnic.
+  document.addEventListener("pointermove", event => {
+    if (!planPaint) return;
+    apply(document.elementFromPoint(event.clientX, event.clientY)?.closest("td.plan-paint"));
+  });
+  ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => {
     if (!planPaint) return;
     const changed = planPaint.changed;
     planPaint = null;
     if (changed) draftChanged();
-  });
+  }));
 }
 
 function copyDayToWeekdays(date) {
