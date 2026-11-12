@@ -1828,18 +1828,6 @@ dialog .custom-select { position: relative; }
 .plan-bar-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .plan-danger { color: var(--negative); }
 .plan-check { display: flex; align-items: center; gap: 8px; font-size: .84rem; cursor: pointer; }
-.plan-rules { gap: 12px; }
-.plan-rules[hidden] { display: none; }
-.plan-rules summary { cursor: pointer; font-size: .92rem; }
-.plan-rules summary .plan-hint { display: inline; margin-left: 6px; }
-.plan-rule-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.plan-rule-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: .84rem; }
-.plan-rule-form { display: flex; flex-wrap: wrap; gap: 6px; }
-.plan-rule-form select { min-height: 36px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); font: inherit; font-size: .82rem; }
-.plan-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.plan-suggestions .plan-hint { width: 100%; }
-.plan-suggestion { padding: 5px 10px; border: 1px dashed color-mix(in srgb, var(--skills-color) 55%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--skills-color) 7%, transparent); color: var(--text); font: inherit; font-size: .78rem; cursor: pointer; }
-.plan-suggestion:hover { border-style: solid; }
 .plan-sheet caption { position: relative; }
 .plan-smena { margin-left: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.55); font-size: .72rem; letter-spacing: .03em; }
 .plan-day-tools { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; }
@@ -1862,3 +1850,54 @@ dialog .custom-select { position: relative; }
 :root[data-theme="dark"] .plan-day-tools button { color: #eef6e8; }
 :root[data-theme="dark"] .plan-sheet tfoot td { border-color: #3a4560; }
 :root[data-theme="dark"] .plan-sheet.is-painting td.plan-paint.is-none:hover { background: #5a5520; }
+
+/* v114 – pravidla (čistší) a souhrn hodin vedle rozpisu */
+.plan-rules { display: grid; gap: 14px; }
+.plan-rules[hidden] { display: none; }
+.plan-rules summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.plan-rules summary::-webkit-details-marker { display: none; }
+.plan-rules summary::before { content: "›"; display: inline-block; width: 14px; color: var(--muted); font-size: 1.1rem; transition: transform .15s; }
+.plan-rules[open] summary::before { transform: rotate(90deg); }
+.plan-rules-title { font-weight: 700; font-size: .95rem; }
+.plan-rules-count { padding: 1px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--muted); font-size: .74rem; font-weight: 700; }
+.plan-rules summary .plan-hint { margin-left: auto; }
+.plan-rules-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; }
+.plan-rules-col { display: grid; gap: 10px; align-content: start; }
+.plan-rules-col h4 { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.plan-rule-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.plan-rule-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 6px 12px; }
+.plan-rule-list li + li { border-top: 1px solid var(--border); }
+.plan-rule-text { display: grid; gap: 1px; min-width: 0; }
+.plan-rule-text strong { font-size: .88rem; }
+.plan-rule-text span { color: var(--muted); font-size: .76rem; }
+.plan-rule-empty { color: var(--muted); font-size: .82rem; }
+.plan-rule-remove { padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: .78rem; cursor: pointer; }
+.plan-rule-remove:hover { background: color-mix(in srgb, var(--negative) 10%, transparent); color: var(--negative); }
+.plan-rule-add-button { padding: 5px 12px; border: 1px solid color-mix(in srgb, var(--skills-color) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--skills-color) 8%, transparent); color: var(--skills-color); font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.plan-rule-add-button:hover { background: var(--skills-color); color: #fff; }
+.plan-rule-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; padding: 10px; border-radius: 10px; background: var(--brand-soft); }
+.plan-rule-field .custom-select { width: 100%; min-width: 0; }
+.plan-rule-field .custom-select-button { width: 100%; min-width: 0; }
+.plan-hint { margin: 0; color: var(--muted); font-size: .78rem; font-weight: 400; }
+.plan-rule-field { display: grid; gap: 4px; min-width: 0; font-size: .7rem; color: var(--muted); font-weight: 600; }
+.plan-rule-field .custom-select-button { min-height: 36px; font-size: .82rem; }
+.plan-rule-submit { min-height: 36px; padding: 0 16px; }
+.plan-rules-footer { display: flex; justify-content: flex-end; padding-top: 4px; border-top: 1px solid var(--border); }
+@media (max-width: 1000px) { .plan-rules-body { grid-template-columns: 1fr; } }
+.plan-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.plan-team-summary { position: sticky; top: 92px; display: grid; gap: 12px; max-height: calc(100vh - 110px); overflow: auto; }
+.plan-team-summary[hidden] { display: none; }
+.plan-team-table, .plan-team-stats { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .8rem; }
+.plan-team-table th, .plan-team-table td, .plan-team-stats th, .plan-team-stats td { padding: 3px 8px; border: 1px solid #bfc4cc; }
+.plan-team-table thead th { position: sticky; top: 0; background: var(--surface); font-weight: 700; text-align: center; }
+.plan-team-table td:last-child { width: 46%; text-align: center; font-variant-numeric: tabular-nums; }
+.plan-team-table td small { color: var(--skills-color); font-weight: 700; }
+.plan-team-table tr.is-over td { background: #f4c7c3; }
+.plan-team-stats th { text-align: left; font-weight: 700; }
+.plan-team-stats td { width: 46%; text-align: center; font-variant-numeric: tabular-nums; }
+.plan-team-stats.is-green th, .plan-team-stats.is-green td { background: #a9d18e; color: #1b1d21; }
+.plan-team-stats.is-green tr:first-child th { text-align: center; }
+:root[data-theme="dark"] .plan-team-table th, :root[data-theme="dark"] .plan-team-table td, :root[data-theme="dark"] .plan-team-stats th, :root[data-theme="dark"] .plan-team-stats td { border-color: #3a4560; }
+:root[data-theme="dark"] .plan-team-table tr.is-over td { background: #5a2c2c; }
+:root[data-theme="dark"] .plan-team-stats.is-green th, :root[data-theme="dark"] .plan-team-stats.is-green td { background: #3f5a2f; color: #eef6e8; }
+@media (max-width: 1100px) { .plan-workspace { grid-template-columns: 1fr; } .plan-team-summary { position: static; max-height: none; } }
