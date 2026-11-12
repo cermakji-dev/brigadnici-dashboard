@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.23.0">
+  <meta name="app-build" content="5.24.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=113">
+    <link rel="stylesheet" href="styles.css?v=114">
 </head>
 <body>
 
@@ -285,13 +285,15 @@
     <section id="planDashboard" class="plan-dashboard" hidden aria-labelledby="planTitle">
       <div class="sales-dashboard-heading plan-heading">
         <div>
-          <p class="eyebrow">Testovací režim · nic se nezapisuje</p>
+          <p class="eyebrow">Rozpis a zápis směn</p>
           <h2 id="planTitle">Zápis směn</h2>
-          <p class="section-subtitle">Vložte zprávy z WhatsAppu nebo screenshoty a bot je zapíše do volných směn (max. 85 h měsíčně).</p>
+          <p class="section-subtitle">Připravte rozpis měsíce, vypište volné směny a nechte bota zapsat lidi podle zpráv z WhatsAppu (max. 85 h měsíčně).</p>
         </div>
         <label class="plan-month-label"><span>Měsíc</span><select id="planMonth" aria-label="Měsíc rozpisu"></select></label>
       </div>
-      <div class="plan-card plan-input-card">
+      <div id="planRosterBar" class="plan-roster-bar"></div>
+      <details id="planRules" class="plan-card plan-rules" hidden></details>
+      <div id="planInputCard" class="plan-card plan-input-card">
         <textarea id="planInput" rows="9" spellcheck="false" placeholder="Sem vložte zprávy z WhatsAppu, např.&#10;&#10;Eliška Kaštánková&#10;preferuji výdej&#10;3.11. 10-20&#10;11.11. 8-15"></textarea>
         <label id="planDrop" class="plan-drop">
           <input id="planImages" type="file" accept="image/*" multiple hidden>
@@ -362,7 +364,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v112</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v113</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -684,6 +686,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=112"></script>
+  <script type="module" src="app.js?v=113"></script>
 </body>
 </html>
