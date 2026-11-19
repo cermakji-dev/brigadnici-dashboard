@@ -156,3 +156,11 @@ test("výchozí karty mají stejné rozestupy i bez oddělení a poznámky", () 
   assert.match(styles, /\.person-card \.card-note\[hidden\] \{ display: block; visibility: hidden; pointer-events: none; \}/);
   assert.match(styles, /\.person-card \.card-note \.inline-note \{[\s\S]*?height: 54px;/);
 });
+
+
+test("neproškolený brigádník má viditelný stav a školení má na všech kartách stejný prostor", () => {
+  assert.match(app, /canonicalDepartments\(departments\)/);
+  assert.match(app, /placeholder\.textContent = "Bez proškolení"/);
+  assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?height: 52px;/);
+  assert.match(styles, /\.person-card \.department-badge\.empty/);
+});
