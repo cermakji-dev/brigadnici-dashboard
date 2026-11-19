@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours,
+  addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours, canonicalDepartments,
   excelCellDate, fetchAllRows, forEachShiftCell, formatShiftDepartment, incompleteOnboardingTasks, isIgnoredShiftName,
   isLikelyWorkerName, matchesSearch, median, normalizeText, parseCsv, parseHours, parseShiftSlot,
   periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales, summaryNames
@@ -247,4 +247,12 @@ test("měsíční seznam deduplikuje stejná jména bez ohledu na diakritiku", (
     ["Počet volných směn", 4]
   ];
   assert.deepEqual(summaryNames(matrix), ["Novák Petr", "Dvořák Jan"]);
+});
+
+
+test("oddělení se zobrazují i při jiné diakritice, mezerách a velikosti písmen", () => {
+  assert.deepEqual(canonicalDepartments(["vydej", " PRODEJ ", "lego", "Výdej", "Neznámé"]), ["Výdej", "Prodej", "Lego"]);
+  assert.deepEqual(canonicalDepartments([]), []);
+  assert.deepEqual(canonicalDepartments(null), []);
+  assert.equal(calculateAutomaticMetrics([], ["vydej", " PRODEJ "]).skills, 25);
 });
