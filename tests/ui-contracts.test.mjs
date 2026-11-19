@@ -204,7 +204,7 @@ test("porovnání měsíců je kompletně odebrané z rozhraní", () => {
   assert.doesNotMatch(app, /renderMonthComparison|fetchComparisonAttendance|monthCompareYear|monthComparisonLength/);
   assert.doesNotMatch(app, /month-comparison-slot|month-comparison-results/);
   assert.doesNotMatch(styles, /\.month-comparison \{/);
-  assert.match(app, /elements\.shiftsMonth\.replaceChildren\(toolbar, guide, calendar, filterEmpty, peopleCard\)/);
+  assert.match(app, /elements\.shiftsMonth\.replaceChildren\(toolbar, calendar, filterEmpty, peopleCard\)/);
 })
 
 test("historie docházky pochází z listů Google tabulky a neztrácí starší brigádníky", async () => {
@@ -239,4 +239,12 @@ test("smooth panel týmu zobrazuje vyhledávání, aktivní filtry a oddělení 
   assert.match(app, /elements\.departmentFilterCount\.hidden = departmentCount === 0/);
   assert.match(styles, /\.team-controls \.quick-filter\[aria-pressed="true"\]/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+
+test("měsíční kalendář nemá nadpis ani informační pruh o průměru lidí", () => {
+  assert.doesNotMatch(app, /Měsíční kalendář|Obsazení směn přehledně po dnech/);
+  assert.doesNotMatch(app, /month-overview-guide|Průměrně .* lidí na den/);
+  assert.match(app, /toolbar\.append\(filters\)/);
+  assert.match(app, /elements\.shiftsMonth\.replaceChildren\(toolbar, calendar, filterEmpty, peopleCard\)/);
 });
