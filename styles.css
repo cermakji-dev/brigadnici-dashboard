@@ -1329,7 +1329,7 @@ button.timeline-block:hover { border-color: var(--skills-color); background: col
 .month-legend .legend-free { margin-left: 10px; background: repeating-linear-gradient(135deg, #d97706 0 2px, transparent 2px 5px); border: 1px solid color-mix(in srgb, #d97706 60%, var(--border)); }
 
 .month-timeline { --day-w: 64px; --stat-w: 64px; display: grid; padding: 4px 16px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
-.month-row { display: grid; grid-template-columns: var(--day-w) minmax(0, 1fr) var(--stat-w) var(--stat-w) var(--stat-w); align-items: center; gap: 12px; }
+.month-row { display: grid; grid-template-columns: var(--day-w) minmax(0, 1fr) var(--stat-w) var(--stat-w) var(--stat-w) 76px; align-items: center; gap: 10px; }
 .month-head { position: sticky; top: 0; z-index: 1; padding: 8px 0 6px; background: var(--surface); color: var(--muted); font-size: .7rem; font-weight: 700; }
 .month-head > span:not(:first-child) { text-align: right; }
 .month-head .month-cells span { text-align: left; font-variant-numeric: tabular-nums; }
@@ -1365,7 +1365,7 @@ button.timeline-block:hover { border-color: var(--skills-color); background: col
 .month-person-bar::after { position: absolute; inset: 0 auto 0 0; width: calc(var(--share) * 100%); background: var(--skills-color); border-radius: inherit; content: ""; }
 .month-people-list strong { text-align: right; font-size: .84rem; font-variant-numeric: tabular-nums; }
 body.detail-open .month-row { --stat-w: 52px; gap: 8px; }
-body.detail-open .month-row > span:nth-child(4) { display: none; }
+body.detail-open .month-row > span:nth-child(4), body.detail-open .month-row > span:nth-child(6) { display: none; }
 body.detail-open .month-row { grid-template-columns: var(--day-w) minmax(0, 1fr) var(--stat-w) var(--stat-w); }
 
 /* Patička karty: akce se při nedostatku místa zalomí pod palce místo ořezu */
@@ -1719,3 +1719,26 @@ dialog .custom-select { position: relative; }
 .trend-detail-stats .profile-stat > span { color: var(--muted); font-size: .72rem; font-weight: 650; }
 .trend-detail-stats .profile-stat .sales-result { font-size: .8rem; }
 @media (max-width: 760px) { .sales-trend header { flex-wrap: wrap; gap: 4px 10px; } }
+
+
+/* v130 – čitelnější měsíční přehled docházky */
+.month-overview-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+.month-overview-title h3 { margin: 0 0 3px; font-size: 1rem; }
+.month-overview-title p { margin: 0; font-size: .8rem; color: var(--muted); }
+.month-overview-filters { display: flex; gap: 5px; flex-wrap: wrap; padding: 4px; border-radius: 11px; background: var(--surface); border: 1px solid var(--border); }
+.month-overview-filters button { padding: 7px 10px; font: inherit; font-size: .78rem; font-weight: 700; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.month-overview-filters button:hover { color: var(--text); background: color-mix(in srgb, var(--skills-color) 8%, transparent); }
+.month-overview-filters button.is-active { color: var(--text); background: color-mix(in srgb, var(--skills-color) 17%, var(--surface)); }
+.month-coverage { font-weight: 750; color: var(--muted); }
+.month-coverage.is-complete { color: var(--skills-color); }
+.month-coverage.has-gaps { color: var(--warning); }
+.month-day[data-month-day-status="free"] { background: color-mix(in srgb, var(--warning) 5%, transparent); }
+.month-day[hidden] { display: none; }
+.month-filter-empty { padding: 15px; margin: 0; color: var(--muted); text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; }
+.month-filter-empty[hidden] { display: none; }
+@media (max-width: 760px) {
+  .month-timeline { overflow-x: auto; padding: 4px 10px 10px; }
+  .month-row { min-width: 610px; gap: 7px; }
+  .month-overview-toolbar { align-items: flex-start; }
+  .month-overview-filters { width: 100%; }
+}
