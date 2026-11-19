@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=140";
+} from "./logic.mjs?v=141";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -2979,13 +2979,6 @@ function renderShiftsMonth() {
 
   const toolbar = document.createElement("div");
   toolbar.className = "month-overview-toolbar";
-  const heading = document.createElement("div");
-  heading.className = "month-overview-title";
-  const h = document.createElement("h3");
-  h.textContent = "Měsíční kalendář";
-  const help = document.createElement("p");
-  help.textContent = "Obsazení směn přehledně po dnech. Kliknutím otevřeš detail dne.";
-  heading.append(h, help);
   const filters = document.createElement("div");
   filters.className = "month-overview-filters";
   filters.setAttribute("role", "group");
@@ -3020,8 +3013,6 @@ function renderShiftsMonth() {
     grid.append(blank);
   }
   const allDayCards = [];
-  let daysWithWork = 0;
-  let sumDailyPeople = 0;
   for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
     const date = new Date(year, month.getMonth(), dayNumber);
     const key = dateKey(date);
@@ -3034,7 +3025,6 @@ function renderShiftsMonth() {
     const capacity = occupied + unfilled;
     const coverage = capacity ? Math.round(occupied / capacity * 100) : null;
     const weekdayIndex = (date.getDay() + 6) % 7;
-    if (working.length) { daysWithWork += 1; sumDailyPeople += personCount; }
 
     const card = document.createElement("button");
     card.type = "button";
@@ -3120,13 +3110,8 @@ function renderShiftsMonth() {
     button.addEventListener("click", () => { monthShiftFilter = option.id; applyFilter(); });
     filters.append(button);
   });
-  toolbar.append(heading, filters);
+  toolbar.append(filters);
   applyFilter();
-  const guide = document.createElement("p");
-  guide.className = "month-overview-guide";
-  guide.textContent = daysWithWork
-    ? "Průměrně " + new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(sumDailyPeople / daysWithWork) + " lidí na den se směnou"
-    : "Pro tento měsíc zatím není detailní rozpis směn.";
   const peopleCard = document.createElement("section");
   peopleCard.className = "month-people";
   const header = document.createElement("header");
@@ -3138,7 +3123,7 @@ function renderShiftsMonth() {
   const list = document.createElement("ol");
   list.className = "month-people-list";
   peopleCard.append(header, list);
-  elements.shiftsMonth.replaceChildren(toolbar, guide, calendar, filterEmpty, peopleCard);
+  elements.shiftsMonth.replaceChildren(toolbar, calendar, filterEmpty, peopleCard);
 
   const rosterHours = new Map();
   work.forEach(block => { if (block.workerId) rosterHours.set(block.workerId, (rosterHours.get(block.workerId) || 0) + block.hours); });
