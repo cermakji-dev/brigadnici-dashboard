@@ -1831,3 +1831,41 @@ dialog .custom-select { position: relative; }
 .quick-filter[aria-pressed="true"]::before { content: "✓"; margin-right: 5px; color: var(--skills-color); }
 .quick-filter:focus-visible, .quick-filter-combine button:focus-visible { outline: 2px solid var(--skills-color); outline-offset: 2px; }
 @media (max-width: 700px) { .quick-filter-summary { margin-left: 0; width: 100%; } }
+
+
+/* v135 – scroll dlouhých záznamů uvnitř profilových záložek a reportů.
+   Každá záložka má vlastní scrollovatelný panel, bez ořezu posledních záznamů. */
+#personDialog form { min-height: 0; }
+#personDialog .profile-tab-panel:not([hidden]) {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+#personDialog .profile-tab-panel:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+#personDialog .feedback-history,
+#personDialog .worker-notes,
+#personDialog .audit-history,
+#personDialog .profile-sales {
+  min-width: 0;
+  min-height: 0;
+}
+#bulkSalesDialog .bulk-sales-wrap {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.sales-report-dialog form {
+  min-height: 0;
+  max-height: min(88vh, 820px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
