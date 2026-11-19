@@ -14,6 +14,19 @@ export const normalizeText = value => String(value ?? "")
 
 export const slugFromName = value => normalizeText(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+// Názvy školení mohou být v databázi uložené s odlišnou diakritikou,
+// velikostí písmen nebo mezerami. Uznáváme jen známá oddělení.
+export const canonicalDepartments = departments => {
+  if (!Array.isArray(departments)) return [];
+  const known = new Map(DEPARTMENTS.map(name => [normalizeText(name), name]));
+  const result = new Set();
+  departments.forEach(value => {
+    const matched = known.get(normalizeText(value));
+    if (matched) result.add(matched);
+  });
+  return DEPARTMENTS.filter(name => result.has(name));
+};
+
 export const addRosterOnlyWorkers = (totals, rosterNames, findWorker) => {
   rosterNames.forEach(rosterName => {
     const worker = findWorker(rosterName);
@@ -102,7 +115,7 @@ export const calculateAutomaticMetrics = (feedback = [], departments = []) => {
     if ((item.category || "general") !== "attendance") return total;
     return total + (item.type === "positive" ? 1 : -1);
   }, 0);
-  const trainedDepartments = new Set((departments || []).filter(department => DEPARTMENTS.includes(department))).size;
+  const trainedDepartments = canonicalDepartments(departments).length;
   return {
     skills: Math.round((trainedDepartments / DEPARTMENTS.length) * 100),
     reliability: clampMetric(100 + attendanceNet * 5)

@@ -1,11 +1,11 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=131";
+} from "./logic.mjs?v=135";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -61,6 +61,7 @@ let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards"
 let currentSort = loadSavedSort();
 let currentSalesSort = { key: "date", direction: "desc" };
 const activeQuickFilters = new Set();
+let quickFilterMode = "all";
 let teamRenderFrame = 0;
 let monthRosterKnown = false;
 const monthRosterPersonIds = new Set();
@@ -154,6 +155,8 @@ const elements = {
   departmentMatchMode: document.querySelector("#departmentMatchMode"),
   clearDepartmentFilters: document.querySelector("#clearDepartmentFilters"),
   quickFilters: [...document.querySelectorAll(".quick-filter")],
+  quickFilterModes: [...document.querySelectorAll("[data-quick-mode]")],
+  quickFilterSummary: document.querySelector("#quickFilterSummary"),
   clearQuickFilters: document.querySelector("#clearQuickFilters"),
   personDepartments: [...document.querySelectorAll(".person-department")],
   cardTemplate: document.querySelector("#personCardTemplate"),
@@ -377,6 +380,10 @@ elements.closeAppFeedback.addEventListener("click", () => elements.appFeedbackDi
 elements.cancelAppFeedback.addEventListener("click", () => elements.appFeedbackDialog.close());
 elements.appFeedbackForm.addEventListener("submit", submitAppFeedback);
 elements.quickFilters.forEach(button => button.addEventListener("click", () => toggleQuickFilter(button)));
+elements.quickFilterModes.forEach(button => button.addEventListener("click", () => {
+  quickFilterMode = button.dataset.quickMode;
+  renderTeam();
+}));
 elements.clearQuickFilters.addEventListener("click", clearQuickFilters);
 elements.addWorkerButton.addEventListener("click", () => {
   elements.addWorkerButton.closest("details").open = false;
@@ -925,16 +932,46 @@ function toggleQuickFilter(button) {
   const filter = button.dataset.quickFilter;
   if (activeQuickFilters.has(filter)) activeQuickFilters.delete(filter);
   else activeQuickFilters.add(filter);
-  button.classList.toggle("is-active", activeQuickFilters.has(filter));
-  elements.clearQuickFilters.hidden = activeQuickFilters.size === 0;
-  render();
+  renderTeam();
 }
 
 function clearQuickFilters() {
   activeQuickFilters.clear();
-  elements.quickFilters.forEach(button => button.classList.remove("is-active"));
-  elements.clearQuickFilters.hidden = true;
-  render();
+  renderTeam();
+}
+
+function matchesQuickFilter(person, filter) {
+  switch (filter) {
+    case "newcomer": return isNewcomer(person);
+    case "onboarding": return incompleteOnboardingTasks(person.onboarding).length > 0;
+    case "no-training": return canonicalDepartments(person.departments).length === 0;
+    case "no-note": return !String(person.notes || "").trim();
+    case "negative": return feedbackCount(person, "negative") > 0;
+    case "zero-hours": return Number(person.hours || 0) === 0;
+    default: return false;
+  }
+}
+
+function matchesActiveQuickFilters(person) {
+  if (!activeQuickFilters.size) return true;
+  const checks = [...activeQuickFilters].map(filter => matchesQuickFilter(person, filter));
+  return quickFilterMode === "any" ? checks.some(Boolean) : checks.every(Boolean);
+}
+
+function renderQuickFilterState(people) {
+  elements.quickFilters.forEach(button => {
+    const active = activeQuickFilters.has(button.dataset.quickFilter);
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.quickFilterModes.forEach(button => {
+    const active = button.dataset.quickMode === quickFilterMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const count = activeQuickFilters.size;
+  elements.clearQuickFilters.hidden = count === 0;
+  elements.quickFilterSummary.textContent = count ? `${count} aktivní · ${people.length} výsledků` : "Vyberte filtr";
 }
 
 function setTableSort(key) {
@@ -1728,14 +1765,9 @@ function renderTeam() {
   const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
   const people = allPeople.filter(person => {
     if (!matchesSearch(person, query)) return false;
-    if (activeQuickFilters.has("newcomer") && !isNewcomer(person)) return false;
-    if (activeQuickFilters.has("onboarding") && !incompleteOnboardingTasks(person.onboarding).length) return false;
-    if (activeQuickFilters.has("no-training") && (person.departments || []).length > 0) return false;
-    if (activeQuickFilters.has("no-note") && String(person.notes || "").trim()) return false;
-    if (activeQuickFilters.has("negative") && feedbackCount(person, "negative") === 0) return false;
-    if (activeQuickFilters.has("zero-hours") && Number(person.hours || 0) !== 0) return false;
+    if (!matchesActiveQuickFilters(person)) return false;
     if (!selectedDepartments.length) return true;
-    const trained = Array.isArray(person.departments) ? person.departments : [];
+    const trained = canonicalDepartments(person.departments);
     return elements.departmentMatchMode.value === "all"
       ? selectedDepartments.every(department => trained.includes(department))
       : selectedDepartments.some(department => trained.includes(department));
@@ -1781,6 +1813,7 @@ function renderTeam() {
     elements.freeHoursShareKpi.textContent = "jen pro aktuální měsíc";
   }
   updateQuickFilterCounts(allPeople);
+  renderQuickFilterState(people);
   elements.emptyState.hidden = people.length > 0;
   if (!people.length) {
     elements.emptyStateText.textContent = query.trim()
@@ -1796,12 +1829,12 @@ function averageMetric(people, key) {
 
 function updateQuickFilterCounts(people) {
   const counts = {
-    newcomer: people.filter(isNewcomer).length,
-    onboarding: people.filter(person => incompleteOnboardingTasks(person.onboarding).length).length,
-    "no-training": people.filter(person => !(person.departments || []).length).length,
-    "no-note": people.filter(person => !String(person.notes || "").trim()).length,
-    negative: people.filter(person => feedbackCount(person, "negative") > 0).length,
-    "zero-hours": people.filter(person => Number(person.hours || 0) === 0).length
+    newcomer: people.filter(person => matchesQuickFilter(person, "newcomer")).length,
+    onboarding: people.filter(person => matchesQuickFilter(person, "onboarding")).length,
+    "no-training": people.filter(person => matchesQuickFilter(person, "no-training")).length,
+    "no-note": people.filter(person => matchesQuickFilter(person, "no-note")).length,
+    negative: people.filter(person => matchesQuickFilter(person, "negative")).length,
+    "zero-hours": people.filter(person => matchesQuickFilter(person, "zero-hours")).length
   };
   elements.quickFilters.forEach(button => {
     const badge = button.querySelector("span");
@@ -1817,8 +1850,7 @@ function resetAllFilters() {
   elements.searchInput.value = "";
   elements.clearSearchButton.hidden = true;
   activeQuickFilters.clear();
-  elements.quickFilters.forEach(button => button.classList.remove("is-active"));
-  elements.clearQuickFilters.hidden = true;
+  quickFilterMode = "all";
   elements.departmentFilters.forEach(input => { input.checked = false; });
   elements.departmentMatchMode.value = "all";
   elements.departmentMatchMode.syncCustomSelect?.();
@@ -3521,8 +3553,15 @@ function reliabilityColor(value) {
 }
 
 function renderDepartmentBadges(container, departments) {
-  const trained = Array.isArray(departments) ? departments.filter(item => DEPARTMENTS.includes(item)) : [];
-  if (!trained.length) return;
+  const trained = canonicalDepartments(departments);
+  container.replaceChildren();
+  if (!trained.length) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "department-badge empty";
+    placeholder.textContent = "Bez proškolení";
+    container.append(placeholder);
+    return;
+  }
   trained.forEach(department => {
     const badge = document.createElement("span");
     badge.className = "department-badge";

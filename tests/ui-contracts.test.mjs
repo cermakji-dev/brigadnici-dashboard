@@ -147,3 +147,40 @@ test("tmavé týmové karty a hlavička při scrollování neprosvítají", () =
   assert.match(styles, /:root\[data-theme="dark"\] \.topbar\s*\{\s*background: var\(--surface-elevated\);\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
   assert.match(styles, /\.person-card:hover \{ transform: none; \}/);
 });
+
+
+test("výchozí karty mají stejné rozestupy i bez oddělení a poznámky", () => {
+  assert.match(styles, /\.person-card \.card-meta \{[\s\S]*?min-height: 54px;/);
+  assert.match(styles, /\.person-card \.department-badges:empty \{ display: flex; \}/);
+  assert.match(styles, /\.person-card \.card-flags\[hidden\] \{ display: flex; visibility: hidden; \}/);
+  assert.match(styles, /\.person-card \.card-note\[hidden\] \{ display: block; visibility: hidden; pointer-events: none; \}/);
+  assert.match(styles, /\.person-card \.card-note \.inline-note \{[\s\S]*?height: 54px;/);
+});
+
+
+test("neproškolený brigádník má viditelný stav a školení má na všech kartách stejný prostor", () => {
+  assert.match(app, /canonicalDepartments\(departments\)/);
+  assert.match(app, /placeholder\.textContent = "Bez proškolení"/);
+  assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?height: 52px;/);
+  assert.match(styles, /\.person-card \.department-badge\.empty/);
+});
+
+
+test("rychlé filtry umožňují kombinovat všechny nebo alespoň jednu podmínku", () => {
+  assert.match(html, /data-quick-mode="all" aria-pressed="true"/);
+  assert.match(html, /data-quick-mode="any" aria-pressed="false"/);
+  assert.match(html, /id="quickFilterSummary"/);
+  assert.match(app, /quickFilterMode === "any" \? checks\.some\(Boolean\) : checks\.every\(Boolean\)/);
+  assert.match(app, /button\.setAttribute\("aria-pressed", String\(active\)\)/);
+  assert.match(app, /case "no-training": return canonicalDepartments\(person\.departments\)\.length === 0/);
+});
+
+
+test("záznamy hodnocení, poznámek, historie a reportů se dají scrollovat", () => {
+  for (const panel of ["overview", "attendance", "sales", "feedback", "history"]) {
+    assert.match(html, new RegExp(`data-profile-panel="${panel}" tabindex="0"`));
+  }
+  assert.match(styles, /#personDialog \.profile-tab-panel:not\(\[hidden\]\) \{[\s\S]*?overflow-y: auto;/);
+  assert.match(styles, /#bulkSalesDialog \.bulk-sales-wrap \{[\s\S]*?overscroll-behavior: contain;/);
+  assert.match(styles, /\.sales-report-dialog form \{[\s\S]*?overflow-y: auto;/);
+});

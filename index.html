@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.37.0">
+  <meta name="app-build" content="5.41.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=131">
+    <link rel="stylesheet" href="styles.css?v=135">
 </head>
 <body>
 
@@ -157,14 +157,22 @@
         </div>
       </div>
 
-      <div class="quick-filters" aria-label="Rychlé filtry">
-        <button class="quick-filter" type="button" data-quick-filter="newcomer">Nováčci <span>0</span></button>
-        <button class="quick-filter" type="button" data-quick-filter="onboarding">Nedokončený nástup <span>0</span></button>
-        <button class="quick-filter" type="button" data-quick-filter="no-training">Bez zaškolení <span>0</span></button>
-        <button class="quick-filter" type="button" data-quick-filter="no-note">Bez poznámky <span>0</span></button>
-        <button class="quick-filter" type="button" data-quick-filter="negative">Má palec dolů <span>0</span></button>
-        <button class="quick-filter" type="button" data-quick-filter="zero-hours">Nulové hodiny <span>0</span></button>
-        <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Zrušit rychlé filtry</button>
+      <div class="quick-filters-toolbar">
+        <span class="quick-filters-heading">Rychlé filtry</span>
+        <div class="quick-filter-combine" role="group" aria-label="Kombinace rychlých filtrů">
+          <button type="button" data-quick-mode="all" aria-pressed="true">Všechny podmínky</button>
+          <button type="button" data-quick-mode="any" aria-pressed="false">Stačí jedna</button>
+        </div>
+        <span id="quickFilterSummary" class="quick-filter-summary" aria-live="polite">Vyberte filtr</span>
+      </div>
+      <div class="quick-filters" role="group" aria-label="Rychlé filtry">
+        <button class="quick-filter" type="button" data-quick-filter="newcomer" aria-pressed="false">Nováčci <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="onboarding" aria-pressed="false">Nedokončený nástup <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="no-training" aria-pressed="false">Bez zaškolení <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="no-note" aria-pressed="false">Bez poznámky <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="negative" aria-pressed="false">Má palec dolů <span>0</span></button>
+        <button class="quick-filter" type="button" data-quick-filter="zero-hours" aria-pressed="false">Nulové hodiny <span>0</span></button>
+        <button id="clearQuickFilters" class="quick-filter-clear" type="button" hidden>Vymazat výběr</button>
       </div>
 
       <details class="advanced-filters">
@@ -311,7 +319,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v131</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v135</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -350,7 +358,7 @@
         <button class="profile-tab" type="button" role="tab" data-profile-tab="feedback">Hodnocení <span id="profileTabFeedback" class="profile-tab-count" hidden></span></button>
         <button class="profile-tab" type="button" role="tab" data-profile-tab="history">Historie</button>
       </nav>
-      <div class="profile-editor-grid profile-tab-panel is-active" data-profile-panel="overview">
+      <div class="profile-editor-grid profile-tab-panel is-active" data-profile-panel="overview" tabindex="0" aria-label="Přehled profilu">
         <div class="range-group skills-range-group profile-block">
           <label for="skillsRange"><span>Schopnosti <small>automaticky podle zaškolených oddělení</small></span><output id="skillsOutput">0 %</output></label>
           <progress id="skillsRange" class="metric-meter" max="100" value="50">50 %</progress>
@@ -388,7 +396,7 @@
           <small id="detailNoteAttribution" class="onboarding-attribution" aria-live="polite">Autor poslední změny je v historii profilu.</small>
         </label>
       </div>
-      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="attendance" hidden>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="attendance" tabindex="0" aria-label="Směny brigádníka" hidden>
         <section class="profile-upcoming" aria-labelledby="profileUpcomingHeading">
           <h3 id="profileUpcomingHeading">Nadcházející směny</h3>
           <ul id="profileUpcomingShifts" class="profile-upcoming-list"></ul>
@@ -403,7 +411,7 @@
           <div id="attendanceHistoryChart" class="attendance-history-chart" role="img" aria-label="Graf odpracovaných hodin po měsících"></div>
         </section>
       </div>
-      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="sales" hidden>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="sales" tabindex="0" aria-label="Prodejní reporty brigádníka" hidden>
         <section class="profile-sales">
           <h3 class="profile-section-title">Prodejní výkon</h3>
           <div id="profileSalesSummary" class="profile-sales-summary profile-stats"></div>
@@ -411,7 +419,7 @@
           <div id="profileSalesHistory" class="profile-sales-history"></div>
         </section>
       </div>
-      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" hidden>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="feedback" tabindex="0" aria-label="Hodnocení a poznámky brigádníka" hidden>
         <section class="feedback-history" aria-labelledby="feedbackHistoryHeading">
           <h3 id="feedbackHistoryHeading">Palce</h3>
           <div id="feedbackBreakdown" class="feedback-breakdown profile-stats"></div>
@@ -429,7 +437,7 @@
           <div id="workerNotesList" class="worker-notes-list"></div>
         </section>
       </div>
-      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="history" hidden>
+      <div class="profile-editor-grid profile-tab-panel" data-profile-panel="history" tabindex="0" aria-label="Historie změn brigádníka" hidden>
         <section class="audit-history" aria-labelledby="auditHistoryHeading">
           <h3 id="auditHistoryHeading">Historie změn profilu</h3>
           <p class="profile-section-copy">Kdo a kdy upravil zaškolení, poznámku nebo stav.</p>
@@ -633,6 +641,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=131"></script>
+  <script type="module" src="app.js?v=135"></script>
 </body>
 </html>
