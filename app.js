@@ -4115,12 +4115,12 @@ function formatAuditValue(value) {
 }
 
 async function refreshWorkerAudit(person) {
-  const { data, error } = await supabaseClient
+  const { data, error } = await fetchAllRows(() => supabaseClient
     .from("worker_audit")
     .select("*")
     .eq("worker_id", person.remoteId)
     .order("changed_at", { ascending: false })
-    .limit(20);
+    .order("id"));
   if (error) return;
   person.audit = data.map(item => ({
     id: item.id,
