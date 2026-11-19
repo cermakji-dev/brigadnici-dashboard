@@ -36,9 +36,16 @@ test("aplikace je zatím bez přihlášení a bez napojení na Insight", () => {
   assert.match(app, /persistSession: false/);
 });
 
-test("nepovinný podpis se posílá jako URL-kódovaná hlavička", () => {
-  assert.match(app, /"x-editor-name": encodeURIComponent\(name\)/);
-  assert.doesNotMatch(app, /openEditorDialog\(\);\s*\n\s*\} catch/);
+test("ruční podpis je odstraněn z rozhraní a nových zápisů", () => {
+  assert.doesNotMatch(html, /editorNameButton|editorDialog|Podepsat se|Podepisovat jako/);
+  assert.doesNotMatch(app, /openEditorDialog|saveEditorName|x-editor-name|EDITOR_KEY/);
+  assert.match(app, /return "Neuvedeno";/);
+});
+
+test("běžná zelená potvrzení se nezobrazují, chyby a undo zůstávají", () => {
+  assert.match(app, /if \(text && !error && !undoAction\) text = "";/);
+  assert.match(app, /elements\.toastUndo\.onclick = undoAction/);
+  assert.match(html, /id="toastUndo"/);
 });
 
 test("profil má záložku docházky a přehledy už nemají export", () => {
