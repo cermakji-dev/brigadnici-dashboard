@@ -1873,3 +1873,54 @@ dialog .custom-select { position: relative; }
 /* v136 – žádné proškolení se nesmí schovat ve 52px scrollovacím boxu. */
 .person-card .department-badges .department-badge { max-width: 100%; overflow-wrap: anywhere; }
 .person-card .department-badge.unrecognized { border-style: dashed; }
+
+
+/* v137 – docházka: týdenní karty místo husté hodinové mřížky */
+.month-comparison { display: grid; gap: 14px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.month-comparison-header { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 14px; }
+.month-comparison-header h3 { margin: 0 0 5px; font-size: 1.08rem; }
+.month-comparison-header p { margin: 0; max-width: 660px; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+.month-comparison-controls { display: flex; gap: 5px; flex-wrap: wrap; }
+.month-comparison-controls button { border: 1px solid var(--border); background: var(--brand-soft); color: var(--muted); border-radius: 8px; padding: 8px 11px; font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; }
+.month-comparison-controls button.is-active { background: color-mix(in srgb, var(--skills-color) 15%, var(--surface)); border-color: var(--skills-color); color: var(--text); }
+.month-comparison-controls button:focus-visible { outline: 2px solid var(--skills-color); outline-offset: 2px; }
+.month-comparison-status { margin: 0; font-size: .74rem; color: var(--muted); }
+.month-comparison-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.month-comparison-row { display: grid; grid-template-columns: minmax(96px, .9fr) minmax(150px, 2.2fr) minmax(80px, .85fr) minmax(110px, 1fr); gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); font-size: .84rem; font-variant-numeric: tabular-nums; }
+.month-comparison-row:first-child { border-top: 0; }
+.month-comparison:not(:has(.month-comparison-delta)) .month-comparison-row { grid-template-columns: minmax(96px, .9fr) minmax(150px, 2.2fr) minmax(80px, .85fr); }
+.month-comparison-row.is-heading { font-size: .71rem; text-transform: uppercase; letter-spacing: .035em; font-weight: 700; color: var(--muted); background: var(--brand-soft); }
+.month-comparison-hours { display: grid; gap: 5px; }
+.month-comparison-meter { display: block; height: 6px; background: var(--brand-soft); border-radius: 999px; overflow: hidden; }
+.month-comparison-meter > span { display: block; height: 100%; border-radius: inherit; background: var(--skills-color); }
+.month-comparison-delta { font-weight: 700; }
+.month-comparison-delta.is-up { color: var(--positive); }
+.month-comparison-delta.is-down { color: var(--negative); }
+.month-overview-guide { margin: 0; padding: 8px 13px; border-left: 3px solid var(--skills-color); color: var(--muted); font-size: .83rem; background: color-mix(in srgb, var(--skills-color) 5%, var(--surface)); border-radius: 0 9px 9px 0; }
+.month-week-groups { display: grid; gap: 16px; }
+.month-week { display: grid; gap: 9px; }
+.month-week[hidden] { display: none; }
+.month-week h4 { margin: 0; padding: 0 2px; font-size: .82rem; font-weight: 750; color: var(--muted); }
+.month-week-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 9px; }
+.month-day-card { display: flex; flex-direction: column; min-width: 0; gap: 7px; min-height: 173px; padding: 13px; text-align: left; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); color: var(--text); cursor: pointer; font: inherit; transition: border-color 130ms ease, box-shadow 130ms ease; }
+.month-day-card:hover { border-color: var(--skills-color); box-shadow: 0 6px 16px rgba(0,0,0,.06); }
+.month-day-card:focus-visible { outline: 2px solid var(--skills-color); outline-offset: 2px; }
+.month-day-card[hidden] { display: none; }
+.month-day-card.is-today { border-color: var(--skills-color); box-shadow: inset 0 0 0 1px var(--skills-color); }
+.month-day-card.is-weekend { background: color-mix(in srgb, var(--brand-soft) 48%, var(--surface)); }
+.month-day-card[data-month-day-status="free"] { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+.month-day-card.is-past:not(.is-today) { opacity: .88; }
+.month-day-card-date { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: .72rem; font-weight: 650; color: var(--muted); }
+.month-day-card-date strong { color: var(--text); font-size: .89rem; }
+.month-day-card-primary { display: flex; align-items: baseline; gap: 5px; margin-top: 3px; font-size: .78rem; color: var(--muted); }
+.month-day-card-primary strong { font-size: 1.55rem; color: var(--text); line-height: 1; }
+.month-day-card-hours { font-size: .75rem; color: var(--text); }
+.month-day-card-free { font-size: .72rem; color: var(--muted); }
+.month-day-card[data-month-day-status="free"] .month-day-card-free { font-weight: 750; color: var(--warning); }
+.month-day-card-meter { display: block; margin-top: auto; height: 5px; background: var(--brand-soft); border-radius: 50px; overflow: hidden; }
+.month-day-card-meter > span { display: block; height: 100%; background: var(--positive); border-radius: inherit; }
+.month-day-card[data-month-day-status="free"] .month-day-card-meter > span { background: var(--warning); }
+.month-day-card-percent { font-size: .7rem; color: var(--muted); }
+@media (max-width: 1260px) { .month-week-days { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 740px) { .month-week-days { grid-template-columns: repeat(2, minmax(0, 1fr)); } .month-comparison-row { gap: 7px; padding: 10px 8px; grid-template-columns: 70px minmax(85px, 1fr) 44px 65px; font-size: .7rem; } .month-comparison-row.is-heading { font-size: .61rem; } .month-comparison:not(:has(.month-comparison-delta)) .month-comparison-row { grid-template-columns: 70px minmax(85px, 1fr) 44px; } }
+@media (max-width: 420px) { .month-week-days { gap: 7px; } .month-day-card { padding: 10px; } }
