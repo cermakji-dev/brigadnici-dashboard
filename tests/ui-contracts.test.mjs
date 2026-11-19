@@ -174,3 +174,13 @@ test("rychlé filtry umožňují kombinovat všechny nebo alespoň jednu podmín
   assert.match(app, /button\.setAttribute\("aria-pressed", String\(active\)\)/);
   assert.match(app, /case "no-training": return canonicalDepartments\(person\.departments\)\.length === 0/);
 });
+
+
+test("záznamy hodnocení, poznámek, historie a reportů se dají scrollovat", () => {
+  for (const panel of ["overview", "attendance", "sales", "feedback", "history"]) {
+    assert.match(html, new RegExp(`data-profile-panel="${panel}" tabindex="0"`));
+  }
+  assert.match(styles, /#personDialog \.profile-tab-panel:not\(\[hidden\]\) \{[\s\S]*?overflow-y: auto;/);
+  assert.match(styles, /#bulkSalesDialog \.bulk-sales-wrap \{[\s\S]*?overscroll-behavior: contain;/);
+  assert.match(styles, /\.sales-report-dialog form \{[\s\S]*?overflow-y: auto;/);
+});
