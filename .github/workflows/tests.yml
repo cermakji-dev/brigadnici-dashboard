@@ -1,0 +1,26 @@
+name: Node.js tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - fix/roster-history-pagination-20261119
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Unit and UI contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run tests
+        run: npm test

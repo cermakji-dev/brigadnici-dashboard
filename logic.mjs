@@ -109,6 +109,19 @@ export const calculateAutomaticMetrics = (feedback = [], departments = []) => {
   };
 };
 
+// Paginate PostgREST results so metrics/history remain complete past the 1000-row limit.
+// buildQuery must return a fresh query each page (including its filters and ordering).
+export const fetchAllRows = async (buildQuery, pageSize = 1000) => {
+  if (!Number.isInteger(pageSize) || pageSize < 1) throw new RangeError("pageSize must be a positive integer");
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
+    if (error) return { data: rows, error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) return { data: rows, error: null };
+  }
+};
+
 export const parseHours = value => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const normalized = String(value ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.-]/g, "");
@@ -556,11 +569,16 @@ export const summaryNames = matrix => {
     const hoursColumn = cells.findIndex(cell => ["pocet zapsanych hodin", "pocet hodin", "hodiny", "hours"].includes(cell));
     if (nameColumn < 0 || hoursColumn < 0) continue;
     const names = [];
+    const seenNames = new Set();
     for (let index = headerRow + 1; index < matrix.length; index += 1) {
       const name = String(matrix[index]?.[nameColumn] ?? "").trim();
       if (!name) continue;
       if (SUMMARY_STOP.includes(normalizeText(name))) break;
-      if (isLikelyWorkerName(name)) names.push(name);
+      const key = slugFromName(name);
+      if (isLikelyWorkerName(name) && !seenNames.has(key)) {
+        seenNames.add(key);
+        names.push(name);
+      }
     }
     return names;
   }

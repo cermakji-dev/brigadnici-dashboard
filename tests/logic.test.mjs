@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours,
-  excelCellDate, forEachShiftCell, formatShiftDepartment, incompleteOnboardingTasks, isIgnoredShiftName,
+  excelCellDate, fetchAllRows, forEachShiftCell, formatShiftDepartment, incompleteOnboardingTasks, isIgnoredShiftName,
   isLikelyWorkerName, matchesSearch, median, normalizeText, parseCsv, parseHours, parseShiftSlot,
-  periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales
+  periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales, summaryNames
 } from "../logic.mjs";
 
 test("normalizace zachová porovnatelnost českých jmen", () => assert.equal(normalizeText("  Čermák Jiří "), "cermak jiri"));
@@ -212,4 +212,39 @@ test("značky z rozpisu psané velkými písmeny nejsou brigádníci", () => {
   assert.equal(isLikelyWorkerName("Státní svátek"), false);
   assert.equal(isLikelyWorkerName("Ho Vít"), true);
   assert.equal(isLikelyWorkerName("Patejdl Štěpán Václav"), true);
+});
+
+
+test("stránkování načte všechna hodnocení i přes limit 1000 záznamů", async () => {
+  const records = Array.from({ length: 2050 }, (_, id) => ({ id }));
+  const ranges = [];
+  const result = await fetchAllRows(() => ({ range: async (from, to) => {
+    ranges.push([from, to]);
+    return { data: records.slice(from, to + 1), error: null };
+  }}));
+  assert.equal(result.error, null);
+  assert.deepEqual(result.data, records);
+  assert.deepEqual(ranges, [[0, 999], [1000, 1999], [2000, 2999]]);
+});
+
+test("stránkování předá chybu místo tichého zkrácení historie", async () => {
+  let page = 0;
+  const result = await fetchAllRows(() => ({ range: async () => {
+    page += 1;
+    return page === 1 ? { data: [1, 2], error: null } : { data: [], error: new Error("network") };
+  }}), 2);
+  assert.deepEqual(result.data, [1, 2]);
+  assert.match(result.error.message, /network/);
+  await assert.rejects(() => fetchAllRows(() => {}, 0), RangeError);
+});
+
+test("měsíční seznam deduplikuje stejná jména bez ohledu na diakritiku", () => {
+  const matrix = [
+    ["Jméno", "Počet zapsaných hodin"],
+    ["Novák Petr", 10],
+    ["Novak Petr", 8],
+    ["Dvořák Jan", 0],
+    ["Počet volných směn", 4]
+  ];
+  assert.deepEqual(summaryNames(matrix), ["Novák Petr", "Dvořák Jan"]);
 });
