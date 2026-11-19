@@ -1742,3 +1742,30 @@ dialog .custom-select { position: relative; }
   .month-overview-toolbar { align-items: flex-start; }
   .month-overview-filters { width: 100%; }
 }
+
+
+/* v131 – zabránění „duchování“ karet při rychlém scrollování.
+   Mnoho jednotlivých backdrop-filter vrstev nad gradientem při pohybu
+   zbytečně zatěžovalo kompozitor. Zachováme kontrast i v dark mode. */
+:root[data-theme="dark"] .person-card {
+  background: var(--surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-theme="dark"] .topbar {
+  background: var(--surface-elevated);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-theme="dark"] .team-controls,
+:root[data-theme="dark"] .import-panel,
+:root[data-theme="dark"] .advanced-filters {
+  background: var(--surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.person-card {
+  /* Box-shadow a barva rámečku se mění bez pohybu celé karty. */
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+.person-card:hover { transform: none; }
