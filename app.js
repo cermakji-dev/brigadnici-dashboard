@@ -1,11 +1,11 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=135";
+} from "./logic.mjs?v=136";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -3553,8 +3553,9 @@ function reliabilityColor(value) {
 }
 
 function renderDepartmentBadges(container, departments) {
-  const trained = canonicalDepartments(departments);
+  const trained = displayedDepartments(departments);
   container.replaceChildren();
+  container.title = trained.length ? trained.map(item => item.label).join(", ") : "Bez evidovaného proškolení";
   if (!trained.length) {
     const placeholder = document.createElement("span");
     placeholder.className = "department-badge empty";
@@ -3565,7 +3566,11 @@ function renderDepartmentBadges(container, departments) {
   trained.forEach(department => {
     const badge = document.createElement("span");
     badge.className = "department-badge";
-    badge.textContent = department;
+    badge.textContent = department.label;
+    if (!department.recognized) {
+      badge.classList.add("unrecognized");
+      badge.title = "Název proškolení převzatý z databáze; není v aktuálním seznamu oddělení";
+    }
     container.append(badge);
   });
 }
