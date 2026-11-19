@@ -195,3 +195,16 @@ test("kartám se neodřezávají proškolená oddělení", () => {
   assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?overflow: visible;/);
   assert.match(styles, /\.person-card \.department-badges \.department-badge \{ max-width: 100%; overflow-wrap: anywhere; \}/);
 });
+
+
+test("měsíční docházka má přehledné týdenní karty a historická srovnání", () => {
+  assert.match(app, /month-week-groups/);
+  assert.match(app, /month-day-card-primary/);
+  assert.match(app, /month-day-card-free/);
+  assert.match(app, /renderMonthComparison\(comparison, month\)/);
+  assert.match(app, /for \(const length of \[3, 6, 12\]\)/);
+  assert.match(app, /"Meziročně"/);
+  assert.match(app, /"Bez dat"/);
+  assert.match(styles, /\.month-week-days \{ display: grid; grid-template-columns: repeat\(7,/);
+  assert.match(app, /selectedShiftDay = date; setShiftsMode\("day"\)/);
+});
