@@ -129,3 +129,13 @@ test("zvoneček s upozorněními je odstraněný", () => {
   assert.doesNotMatch(html, /alertsToggle|alertsPanel/);
   assert.doesNotMatch(app, /renderAlerts|setAlertsOpen/);
 });
+
+
+test("měsíční docházka má filtry, obsazenost po dnech a přechod do dne", () => {
+  assert.match(app, /month-overview-filters/);
+  assert.match(app, /row\.dataset\.monthDayStatus = !dayBlocks\.length/);
+  assert.match(app, /dayHours \/ planned \* 100/);
+  assert.match(app, /monthShiftFilter === "all"/);
+  assert.match(app, /setShiftsMode\("day"\)/);
+  assert.match(app, /filteredEmpty\.hidden = visible > 0/);
+});
