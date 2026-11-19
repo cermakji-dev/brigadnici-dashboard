@@ -147,3 +147,12 @@ test("tmavé týmové karty a hlavička při scrollování neprosvítají", () =
   assert.match(styles, /:root\[data-theme="dark"\] \.topbar\s*\{\s*background: var\(--surface-elevated\);\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
   assert.match(styles, /\.person-card:hover \{ transform: none; \}/);
 });
+
+
+test("výchozí karty mají stejné rozestupy i bez oddělení a poznámky", () => {
+  assert.match(styles, /\.person-card \.card-meta \{[\s\S]*?min-height: 54px;/);
+  assert.match(styles, /\.person-card \.department-badges:empty \{ display: flex; \}/);
+  assert.match(styles, /\.person-card \.card-flags\[hidden\] \{ display: flex; visibility: hidden; \}/);
+  assert.match(styles, /\.person-card \.card-note\[hidden\] \{ display: block; visibility: hidden; pointer-events: none; \}/);
+  assert.match(styles, /\.person-card \.card-note \.inline-note \{[\s\S]*?height: 54px;/);
+});
