@@ -1786,10 +1786,14 @@ dialog .custom-select { position: relative; }
 .person-card .card-meta-item + .card-meta-item::before { display: none; }
 .person-card .card-next-shift { line-height: 1.4; }
 .person-card .department-badges {
-  min-height: 31px;
+  min-height: 52px;
+  height: 52px;
   align-content: flex-start;
+  align-items: flex-start;
+  overflow-y: auto;
   margin-top: 9px;
   margin-bottom: 0;
+  scrollbar-width: thin;
 }
 .person-card .department-badges:empty { display: flex; }
 .person-card .card-metrics { margin-top: 12px; }
@@ -1807,3 +1811,10 @@ dialog .custom-select { position: relative; }
   overflow-y: auto;
 }
 .person-card .card-note .inline-note:focus { height: 76px; min-height: 76px; max-height: 76px; }
+
+/* Označení chybějícího proškolení musí být stejně viditelné jako ostatní štítky. */
+.person-card .department-badge.empty {
+  color: var(--muted);
+  font-style: italic;
+  border-style: dashed;
+}
