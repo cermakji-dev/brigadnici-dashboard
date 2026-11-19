@@ -1066,15 +1066,17 @@ async function loadRemoteState() {
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
   const today = startOfDay(new Date());
   const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult, shiftsResult, syncRunResult] = await Promise.all([
-    fetchAllRows(() => supabaseClient.from("attendance_totals")
-      .select("worker_id, period, hours, in_list").order("period").order("worker_id"))
-      .then(data => ({ data, error: null }))
-      .catch(async () => {
-        // Kompatibilita se starší tabulkou bez sloupce in_list.
-        const data = await fetchAllRows(() => supabaseClient.from("attendance_totals")
-          .select("worker_id, period, hours").order("period").order("worker_id"));
-        return { data, error: null };
-      }),
+    // fetchAllRows vrací { data, error }, nikoliv samotné pole.
+    // Fallback používáme pouze při chybějícím sloupci in_list;
+    // jiné chyby musí zůstat viditelné.
+    (async () => {
+      const result = await fetchAllRows(() => supabaseClient.from("attendance_totals")
+        .select("worker_id, period, hours, in_list").order("period").order("worker_id"));
+      if (!result.error) return result;
+      if (!/in_list|42703|PGRST204/i.test(result.error.message || "")) return result;
+      return fetchAllRows(() => supabaseClient.from("attendance_totals")
+        .select("worker_id, period, hours").order("period").order("worker_id"));
+    })(),
     fetchAllRows(() => scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at").order("id")),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
@@ -2933,8 +2935,9 @@ function comparisonPeriodLabel(period) {
 async function fetchComparisonAttendance(periods) {
   const missing = periods.filter(period => !comparisonAttendanceCache.has(period));
   if (missing.length) {
-    const rows = await fetchAllRows(() => supabaseClient.from("attendance_totals")
+    const { data: rows, error } = await fetchAllRows(() => supabaseClient.from("attendance_totals")
       .select("period, worker_id, hours").in("period", missing).order("period").order("worker_id"));
+    if (error) throw error;
     const grouped = new Map(missing.map(period => [period, []]));
     rows.forEach(row => grouped.get(row.period)?.push(row));
     grouped.forEach((items, period) => comparisonAttendanceCache.set(period, items));

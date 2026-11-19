@@ -218,9 +218,10 @@ Deno.serve(async request => {
     let changed: typeof attendanceRows = [];
     if (attendanceRows.length) {
       const periods = [...new Set(attendanceRows.map(row => row.period))];
-      const existing = await fetchAllRows(() => supabase.from("attendance_totals")
+      const { data: existing, error: existingError } = await fetchAllRows(() => supabase.from("attendance_totals")
         .select("worker_id, period, hours, in_list").in("period", periods)
         .order("period").order("worker_id"));
+      if (existingError) throw existingError;
       const old = new Map(existing.map(row => [`${row.worker_id}|${row.period}`, `${Number(row.hours)}|${Boolean(row.in_list)}`]));
       // Kdo v rozpisu daného měsíce už není, má za ten měsíc 0 h.
       const fresh = new Set(attendanceRows.map(row => `${row.worker_id}|${row.period}`));
