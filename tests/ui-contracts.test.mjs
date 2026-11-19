@@ -132,15 +132,18 @@ test("zvoneček s upozorněními je odstraněný", () => {
 });
 
 
-test("měsíční docházka má filtry, obsazenost po dnech a přechod do dne", () => {
-  assert.match(app, /month-overview-filters/);
-  assert.match(app, /card\.dataset\.monthDayStatus = !dayBlocks\.length/);
-  assert.match(app, /occupied \/ capacity \* 100/);
+test("měsíční docházka je sedmidenní kalendář s přechodem do dne", () => {
+  assert.match(app, /month-calendar-weekdays/);
+  assert.match(app, /month-calendar-grid/);
+  assert.match(app, /startOffset = \(new Date\(year, month\.getMonth\(\), 1\)\.getDay\(\) \+ 6\) % 7/);
+  assert.match(app, /month-day-card-primary/);
+  assert.match(app, /month-day-card-free/);
   assert.match(app, /monthShiftFilter === "all"/);
-  assert.match(app, /setShiftsMode\("day"\)/);
-  assert.match(app, /filterEmpty\.hidden = visible > 0/);
-});
-
+  assert.match(app, /card\.classList\.toggle\("is-filter-muted", !selected\)/);
+  assert.match(app, /filterEmpty\.hidden = matching > 0/);
+  assert.match(app, /selectedShiftDay = date; setShiftsMode\("day"\)/);
+  assert.match(styles, /\.month-calendar-grid \{[\s\S]*?grid-template-columns: repeat\(7,/);
+})
 
 test("tmavé týmové karty a hlavička při scrollování neprosvítají", () => {
   assert.match(styles, /:root\[data-theme="dark"\] \.person-card\s*\{\s*background: var\(--surface\);\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
@@ -197,18 +200,12 @@ test("kartám se neodřezávají proškolená oddělení", () => {
 });
 
 
-test("měsíční docházka má přehledné týdenní karty a historická srovnání", () => {
-  assert.match(app, /month-week-groups/);
-  assert.match(app, /month-day-card-primary/);
-  assert.match(app, /month-day-card-free/);
-  assert.match(app, /renderMonthComparison\(comparison, month\)/);
-  assert.match(app, /for \(const length of \[3, 6, 12\]\)/);
-  assert.match(app, /"Meziročně"/);
-  assert.match(app, /"Bez dat"/);
-  assert.match(styles, /\.month-week-days \{ display: grid; grid-template-columns: repeat\(7,/);
-  assert.match(app, /selectedShiftDay = date; setShiftsMode\("day"\)/);
-});
-
+test("porovnání měsíců je kompletně odebrané z rozhraní", () => {
+  assert.doesNotMatch(app, /renderMonthComparison|fetchComparisonAttendance|monthCompareYear|monthComparisonLength/);
+  assert.doesNotMatch(app, /month-comparison-slot|month-comparison-results/);
+  assert.doesNotMatch(styles, /\.month-comparison \{/);
+  assert.match(app, /elements\.shiftsMonth\.replaceChildren\(toolbar, guide, calendar, filterEmpty, peopleCard\)/);
+})
 
 test("historie docházky pochází z listů Google tabulky a neztrácí starší brigádníky", async () => {
   const sync = await readFile(new URL("../supabase/functions/sync-google-sheets/index.ts", import.meta.url), "utf8");
@@ -219,14 +216,14 @@ test("historie docházky pochází z listů Google tabulky a neztrácí starší
   assert.match(sync, /const roster = monthlyRosterHours\(matrix, sheetPeriod!, lookup\)/);
   assert.match(sync, /fetchAllRows\(\(\) => supabase\.from\("attendance_totals"\)/);
   assert.match(app, /fetchAllRows\(\(\) => supabaseClient\.from\("attendance_totals"\)/);
-  assert.match(app, /fetchComparisonAttendance\(all\)/);
+  assert.match(app, /loadMonthAttendance\(period\)/);
 });
 
 
 test("měsíční historie používá správný tvar výsledku stránkování", async () => {
   assert.doesNotMatch(app, /fetchAllRows\([\s\S]{0,220}\)\s*\.then\(data => \(\{ data, error: null \}\)\)/);
-  assert.match(app, /const \{ data: rows, error \} = await fetchAllRows\(\(\) => supabaseClient\.from\("attendance_totals"\)/);
-  assert.match(app, /if \(error\) throw error;\s*const grouped = new Map/);
+  assert.match(app, /if \(!result\.error\) return result;/);
+  assert.doesNotMatch(app, /\.then\(data => \(\{ data, error: null \}\)\)/);
   assert.match(app, /if \(!result\.error\) return result;/);
   const sync = await readFile(new URL("../supabase/functions/sync-google-sheets/index.ts", import.meta.url), "utf8");
   assert.match(sync, /const \{ data: existing, error: existingError \} = await fetchAllRows/);
