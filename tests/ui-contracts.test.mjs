@@ -164,3 +164,13 @@ test("neproškolený brigádník má viditelný stav a školení má na všech k
   assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?height: 52px;/);
   assert.match(styles, /\.person-card \.department-badge\.empty/);
 });
+
+
+test("rychlé filtry umožňují kombinovat všechny nebo alespoň jednu podmínku", () => {
+  assert.match(html, /data-quick-mode="all" aria-pressed="true"/);
+  assert.match(html, /data-quick-mode="any" aria-pressed="false"/);
+  assert.match(html, /id="quickFilterSummary"/);
+  assert.match(app, /quickFilterMode === "any" \? checks\.some\(Boolean\) : checks\.every\(Boolean\)/);
+  assert.match(app, /button\.setAttribute\("aria-pressed", String\(active\)\)/);
+  assert.match(app, /case "no-training": return canonicalDepartments\(person\.departments\)\.length === 0/);
+});
