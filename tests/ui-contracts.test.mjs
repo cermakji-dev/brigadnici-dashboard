@@ -221,3 +221,14 @@ test("historie docházky pochází z listů Google tabulky a neztrácí starší
   assert.match(app, /fetchAllRows\(\(\) => supabaseClient\.from\("attendance_totals"\)/);
   assert.match(app, /fetchComparisonAttendance\(all\)/);
 });
+
+
+test("měsíční historie používá správný tvar výsledku stránkování", async () => {
+  assert.doesNotMatch(app, /fetchAllRows\([\s\S]{0,220}\)\s*\.then\(data => \(\{ data, error: null \}\)\)/);
+  assert.match(app, /const \{ data: rows, error \} = await fetchAllRows\(\(\) => supabaseClient\.from\("attendance_totals"\)/);
+  assert.match(app, /if \(error\) throw error;\s*const grouped = new Map/);
+  assert.match(app, /if \(!result\.error\) return result;/);
+  const sync = await readFile(new URL("../supabase/functions/sync-google-sheets/index.ts", import.meta.url), "utf8");
+  assert.match(sync, /const \{ data: existing, error: existingError \} = await fetchAllRows/);
+  assert.match(sync, /if \(existingError\) throw existingError;/);
+});
