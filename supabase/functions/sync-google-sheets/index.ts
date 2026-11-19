@@ -158,13 +158,48 @@ Deno.serve(async request => {
       lookup = buildWorkerLookup(workers);
     }
 
+    // Historické listy Google tabulky mohou obsahovat brigádníky, kteří už
+    // nejsou v aktuálním seznamu. Bez jejich identit se starší hodiny dříve
+    // zahazovaly jako nespárované. Archivní identity jsou vždy neaktivní.
+    const monthSheets = workbook.SheetNames.map(name => ({ name, sheetPeriod: periodFromSheetName(name) }))
+      .filter(item => item.sheetPeriod && item.sheetPeriod <= period);
+    const historicalNames = new Map<string, string>();
+    for (const { name, sheetPeriod } of monthSheets) {
+      if (sheetPeriod === period) continue;
+      const matrix = matrices.get(name)!;
+      for (const personName of summaryNames(matrix) ?? []) {
+        if (isLikelyWorkerName(personName) && !lookup(personName)) historicalNames.set(normalizeText(personName), personName);
+      }
+      forEachShiftCell(matrix, ({ text }) => {
+        resolveShiftCell(text, lookup).forEach(entry => {
+          if (!entry.free && !entry.worker && isLikelyWorkerName(entry.name))
+            historicalNames.set(normalizeText(entry.name), entry.name);
+        });
+      }, sheetPeriod!);
+    }
+    const historicalCreated: string[] = [];
+    if (!dryRun && historicalNames.size) {
+      for (const name of historicalNames.values()) {
+        if (lookup(name)) continue;
+        const { data, error } = await supabase.from("workers").upsert({
+          external_user_id: automaticWorkerId(name), full_name: name,
+          role: "Sales Support", status: "Nováček", active: false,
+          skills: 0, reliability: 100, departments: [], aliases: [], notes: ""
+        }, { onConflict: "external_user_id" })
+          .select("id, external_user_id, full_name, aliases, active").single();
+        if (error) throw error;
+        workers.push(data as Worker);
+        historicalCreated.push(name);
+        lookup = buildWorkerLookup(workers);
+      }
+    }
+
     // Hodiny za každý měsíc až po aktuální, spočítané z rozpisu daného listu
     // (zapisují se jen změněné hodnoty).
     const attendanceRows: { worker_id: string; period: string; hours: number; in_list: boolean; source_name: string; imported_at: string }[] = [];
     const attendance = new Map<string, number>();
     let plannedHours: number | null = null;
-    const monthSheets = workbook.SheetNames.map(name => ({ name, sheetPeriod: periodFromSheetName(name) }))
-      .filter(item => item.sheetPeriod && item.sheetPeriod <= period);
+
     for (const { name, sheetPeriod } of monthSheets) {
       const matrix = matrices.get(name)!;
       const roster = monthlyRosterHours(matrix, sheetPeriod!, lookup);
@@ -245,7 +280,7 @@ Deno.serve(async request => {
     }
 
     const totalHours = [...attendance.values()].reduce((sum, hours) => sum + hours, 0);
-    const details = { team_list: listNames.length, team_list_applied: listApplied, team_created: listCreated, team_activated: activated, team_deactivated: deactivated, shifts_hash: shiftsHash, shifts_written: !shiftsUnchanged, months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
+    const details = { historical_workers_created: historicalCreated.length, historical_worker_names_unmatched: dryRun ? [...historicalNames.values()] : [], team_list: listNames.length, team_list_applied: listApplied, team_created: listCreated, team_activated: activated, team_deactivated: deactivated, shifts_hash: shiftsHash, shifts_written: !shiftsUnchanged, months: monthsSynced, attendance_changed: changed.length, unknown_names: created, unmatched_shift_names: unmatched, shifts: shifts.length, free_hours: freeHours, sales_expected: expected.length, sales_stale_removed: staleRemoved };
     const result = { status: dryRun ? "dry_run" : "success", period, sheet: sheetName, seen: summary.length, changed: changed.filter(row => row.period === period).length, created: dryRun ? [...candidates.values()] : created, totalHours, plannedHours, ...details,
       sample: dryRun ? shifts.filter(row => row.date >= todayKey).slice(0, 15) : undefined };
     if (runId) {
