@@ -2946,7 +2946,7 @@ function renderMonthComparison(container, month) {
   const title = document.createElement("h3");
   title.textContent = "Srovnání měsíců";
   const subtitle = document.createElement("p");
-  subtitle.textContent = "Odpracované hodiny a počet různých lidí za měsíc. Nejde o počet lidí na jedné směně.";
+  subtitle.textContent = "Hodiny podle měsíčního souhrnu a počet různých lidí s hodinami. Nejde o počet lidí na jedné směně ani o potvrzenou skutečnou docházku.";
   heading.append(title, subtitle);
   const controls = document.createElement("div");
   controls.className = "month-comparison-controls";
@@ -2981,13 +2981,13 @@ function renderMonthComparison(container, month) {
   fetchComparisonAttendance(all).then(data => {
     if (request !== monthComparisonRequest || !section.isConnected) return;
     const byPeriod = new Map(data.map(item => [item.period, item]));
-    status.textContent = "Srovnání vychází z měsíčních souhrnů docházky. Prázdná období nejsou započítána jako nula.";
+    status.textContent = "Srovnání vychází z hodin v Google tabulce (rozpisu). Chybějící období není nula.";
     const max = Math.max(1, ...periods.map(period => byPeriod.get(period)?.hours || 0), ...previousPeriods.map(period => byPeriod.get(period)?.hours || 0));
     const table = document.createElement("div");
     table.className = "month-comparison-table";
     const head = document.createElement("div");
     head.className = "month-comparison-row is-heading";
-    for (const label of ["Měsíc", "Odpracované hodiny", "Lidí v měsíci", ...(monthCompareYear ? ["Proti minulému roku"] : [])]) {
+    for (const label of ["Měsíc", "Hodiny z tabulky", "Lidí s hodinami", ...(monthCompareYear ? ["Proti minulému roku"] : [])]) {
       const span = document.createElement("span"); span.textContent = label; head.append(span);
     }
     table.append(head);
