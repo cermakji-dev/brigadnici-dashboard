@@ -1,11 +1,11 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=132";
+} from "./logic.mjs?v=133";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -3521,8 +3521,15 @@ function reliabilityColor(value) {
 }
 
 function renderDepartmentBadges(container, departments) {
-  const trained = Array.isArray(departments) ? departments.filter(item => DEPARTMENTS.includes(item)) : [];
-  if (!trained.length) return;
+  const trained = canonicalDepartments(departments);
+  container.replaceChildren();
+  if (!trained.length) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "department-badge empty";
+    placeholder.textContent = "Bez proškolení";
+    container.append(placeholder);
+    return;
+  }
   trained.forEach(department => {
     const badge = document.createElement("span");
     badge.className = "department-badge";
