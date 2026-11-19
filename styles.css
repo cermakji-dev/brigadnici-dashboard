@@ -1787,13 +1787,12 @@ dialog .custom-select { position: relative; }
 .person-card .card-next-shift { line-height: 1.4; }
 .person-card .department-badges {
   min-height: 52px;
-  height: 52px;
+  height: auto;
   align-content: flex-start;
   align-items: flex-start;
-  overflow-y: auto;
+  overflow: visible;
   margin-top: 9px;
   margin-bottom: 0;
-  scrollbar-width: thin;
 }
 .person-card .department-badges:empty { display: flex; }
 .person-card .card-metrics { margin-top: 12px; }
@@ -1869,3 +1868,8 @@ dialog .custom-select { position: relative; }
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+
+/* v136 – žádné proškolení se nesmí schovat ve 52px scrollovacím boxu. */
+.person-card .department-badges .department-badge { max-width: 100%; overflow-wrap: anywhere; }
+.person-card .department-badge.unrecognized { border-style: dashed; }

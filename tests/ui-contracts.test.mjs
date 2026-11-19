@@ -159,9 +159,9 @@ test("výchozí karty mají stejné rozestupy i bez oddělení a poznámky", () 
 
 
 test("neproškolený brigádník má viditelný stav a školení má na všech kartách stejný prostor", () => {
-  assert.match(app, /canonicalDepartments\(departments\)/);
+  assert.match(app, /displayedDepartments\(departments\)/);
   assert.match(app, /placeholder\.textContent = "Bez proškolení"/);
-  assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?height: 52px;/);
+  assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?min-height: 52px;[\s\S]*?height: auto;/);
   assert.match(styles, /\.person-card \.department-badge\.empty/);
 });
 
@@ -171,6 +171,10 @@ test("rychlé filtry umožňují kombinovat všechny nebo alespoň jednu podmín
   assert.match(html, /data-quick-mode="any" aria-pressed="false"/);
   assert.match(html, /id="quickFilterSummary"/);
   assert.match(app, /quickFilterMode === "any" \? checks\.some\(Boolean\) : checks\.every\(Boolean\)/);
+  assert.match(app, /selectedDepartments\.forEach\(department => checks\.push\(trained\.includes\(department\)\)\)/);
+  assert.match(app, /return matchesSelectedFilters\(person, selectedDepartments\)/);
+  assert.doesNotMatch(html, /departmentMatchMode|Umí všechna vybraná|Umí alespoň jedno/);
+  assert.doesNotMatch(app, /departmentMatchMode/);
   assert.match(app, /button\.setAttribute\("aria-pressed", String\(active\)\)/);
   assert.match(app, /case "no-training": return canonicalDepartments\(person\.departments\)\.length === 0/);
 });
@@ -183,4 +187,11 @@ test("záznamy hodnocení, poznámek, historie a reportů se dají scrollovat", 
   assert.match(styles, /#personDialog \.profile-tab-panel:not\(\[hidden\]\) \{[\s\S]*?overflow-y: auto;/);
   assert.match(styles, /#bulkSalesDialog \.bulk-sales-wrap \{[\s\S]*?overscroll-behavior: contain;/);
   assert.match(styles, /\.sales-report-dialog form \{[\s\S]*?overflow-y: auto;/);
+});
+
+
+test("kartám se neodřezávají proškolená oddělení", () => {
+  assert.match(app, /const trained = displayedDepartments\(departments\)/);
+  assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?overflow: visible;/);
+  assert.match(styles, /\.person-card \.department-badges \.department-badge \{ max-width: 100%; overflow-wrap: anywhere; \}/);
 });

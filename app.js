@@ -1,11 +1,11 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=135";
+} from "./logic.mjs?v=136";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -152,7 +152,6 @@ const elements = {
   salesRevenueKpi: document.querySelector("#salesRevenueKpi"), salesHoursKpi: document.querySelector("#salesHoursKpi"), salesAsrKpi: document.querySelector("#salesAsrKpi"), salesArosKpi: document.querySelector("#salesArosKpi"), salesTargetKpi: document.querySelector("#salesTargetKpi"), salesMissingKpi: document.querySelector("#salesMissingKpi"),
   salesPeriodFilter: document.querySelector("#salesPeriodFilter"), salesStatusFilter: document.querySelector("#salesStatusFilter"), salesTableBody: document.querySelector("#salesTableBody"), salesEmpty: document.querySelector("#salesEmpty"),
   departmentFilters: [...document.querySelectorAll(".department-filter")],
-  departmentMatchMode: document.querySelector("#departmentMatchMode"),
   clearDepartmentFilters: document.querySelector("#clearDepartmentFilters"),
   quickFilters: [...document.querySelectorAll(".quick-filter")],
   quickFilterModes: [...document.querySelectorAll("[data-quick-mode]")],
@@ -306,7 +305,6 @@ elements.salesNoDataFill.addEventListener("click", () => openBulkSales());
 elements.salesInlineSave.addEventListener("click", () => saveInlineSales());
 elements.salesInlineDiscard.addEventListener("click", () => { salesDrafts.clear(); renderSalesDashboard(); });
 elements.departmentFilters.forEach(input => input.addEventListener("change", renderTeam));
-elements.departmentMatchMode.addEventListener("change", renderTeam);
 elements.clearDepartmentFilters.addEventListener("click", () => {
   elements.departmentFilters.forEach(input => { input.checked = false; });
   render();
@@ -952,9 +950,12 @@ function matchesQuickFilter(person, filter) {
   }
 }
 
-function matchesActiveQuickFilters(person) {
-  if (!activeQuickFilters.size) return true;
+// Jeden přepínač AND/OR platí pro rychlé filtry i vybraná oddělení.
+function matchesSelectedFilters(person, selectedDepartments) {
   const checks = [...activeQuickFilters].map(filter => matchesQuickFilter(person, filter));
+  const trained = canonicalDepartments(person.departments);
+  selectedDepartments.forEach(department => checks.push(trained.includes(department)));
+  if (!checks.length) return true;
   return quickFilterMode === "any" ? checks.some(Boolean) : checks.every(Boolean);
 }
 
@@ -1765,12 +1766,7 @@ function renderTeam() {
   const allPeople = Object.values(state.people).filter(isPersonInSelectedMonth);
   const people = allPeople.filter(person => {
     if (!matchesSearch(person, query)) return false;
-    if (!matchesActiveQuickFilters(person)) return false;
-    if (!selectedDepartments.length) return true;
-    const trained = canonicalDepartments(person.departments);
-    return elements.departmentMatchMode.value === "all"
-      ? selectedDepartments.every(department => trained.includes(department))
-      : selectedDepartments.some(department => trained.includes(department));
+    return matchesSelectedFilters(person, selectedDepartments);
   });
   people.sort((a, b) => {
     const comparison = comparePeople(a, b, currentSort.key);
@@ -1852,8 +1848,6 @@ function resetAllFilters() {
   activeQuickFilters.clear();
   quickFilterMode = "all";
   elements.departmentFilters.forEach(input => { input.checked = false; });
-  elements.departmentMatchMode.value = "all";
-  elements.departmentMatchMode.syncCustomSelect?.();
   render();
 }
 
@@ -3553,8 +3547,9 @@ function reliabilityColor(value) {
 }
 
 function renderDepartmentBadges(container, departments) {
-  const trained = canonicalDepartments(departments);
+  const trained = displayedDepartments(departments);
   container.replaceChildren();
+  container.title = trained.length ? trained.map(item => item.label).join(", ") : "Bez evidovaného proškolení";
   if (!trained.length) {
     const placeholder = document.createElement("span");
     placeholder.className = "department-badge empty";
@@ -3565,7 +3560,11 @@ function renderDepartmentBadges(container, departments) {
   trained.forEach(department => {
     const badge = document.createElement("span");
     badge.className = "department-badge";
-    badge.textContent = department;
+    badge.textContent = department.label;
+    if (!department.recognized) {
+      badge.classList.add("unrecognized");
+      badge.title = "Název proškolení převzatý z databáze; není v aktuálním seznamu oddělení";
+    }
     container.append(badge);
   });
 }
@@ -4267,7 +4266,6 @@ function safeCssUrl(value) { return String(value).replace(/["\\\n\r]/g, ""); }
 function initializeCustomSelects() {
   [
     [elements.sortSelect, false],
-    [elements.departmentMatchMode, false],
     [elements.salesPeriodFilter, true],
     [elements.salesPersonFilter, false],
     [elements.salesStatusFilter, false],

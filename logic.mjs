@@ -27,6 +27,25 @@ export const canonicalDepartments = departments => {
   return DEPARTMENTS.filter(name => result.has(name));
 };
 
+// Keep all non-empty department names visible, including legacy labels not in
+// DEPARTMENTS. The known names use consistent spelling; unknown values stay
+// explicitly marked as recorded rather than silently disappearing from cards.
+export const displayedDepartments = departments => {
+  const known = canonicalDepartments(departments);
+  const knownKeys = new Set(DEPARTMENTS.map(normalizeText));
+  const extraKeys = new Set();
+  const extras = [];
+  if (Array.isArray(departments)) departments.forEach(value => {
+    if (typeof value !== "string") return;
+    const label = value.trim();
+    const key = normalizeText(label);
+    if (!key || knownKeys.has(key) || extraKeys.has(key)) return;
+    extraKeys.add(key);
+    extras.push(label);
+  });
+  return [...known.map(label => ({ label, recognized: true })), ...extras.map(label => ({ label, recognized: false }))];
+};
+
 export const addRosterOnlyWorkers = (totals, rosterNames, findWorker) => {
   rosterNames.forEach(rosterName => {
     const worker = findWorker(rosterName);

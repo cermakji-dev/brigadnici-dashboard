@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Přehled hodin, schopností a docházkové morálky brigádníků.">
-  <meta name="app-build" content="5.41.0">
+  <meta name="app-build" content="5.42.0">
   <title>Brigádníci</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("brigadnici-theme") ||
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-    <link rel="stylesheet" href="styles.css?v=135">
+    <link rel="stylesheet" href="styles.css?v=136">
 </head>
 <body>
 
@@ -159,7 +159,7 @@
 
       <div class="quick-filters-toolbar">
         <span class="quick-filters-heading">Rychlé filtry</span>
-        <div class="quick-filter-combine" role="group" aria-label="Kombinace rychlých filtrů">
+        <div class="quick-filter-combine" role="group" aria-label="Kombinace rychlých filtrů a oddělení">
           <button type="button" data-quick-mode="all" aria-pressed="true">Všechny podmínky</button>
           <button type="button" data-quick-mode="any" aria-pressed="false">Stačí jedna</button>
         </div>
@@ -189,12 +189,6 @@
             <label><input class="department-filter" type="checkbox" value="PS"> PS</label>
           </div>
           <div class="filter-actions">
-            <label>Podmínka
-              <select id="departmentMatchMode">
-                <option value="all">Umí všechna vybraná</option>
-                <option value="any">Umí alespoň jedno</option>
-              </select>
-            </label>
             <button id="clearDepartmentFilters" class="button button-secondary" type="button">Zrušit filtry</button>
           </div>
         </div>
@@ -319,7 +313,7 @@
   <div id="importMessage" class="toast" role="status" aria-live="polite" popover="manual" hidden><span id="toastText"></span><button id="toastUndo" type="button" hidden>Vrátit zpět</button></div>
 
   <div class="app-signature" aria-label="Verze aplikace a autor">
-    <span>v135</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
+    <span>v136</span><span aria-hidden="true">·</span><span>By: Jiří Čermák</span>
   </div>
 
   <dialog id="personDialog">
@@ -641,6 +635,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.53.0"></script>
   <script src="config.js"></script>
-  <script type="module" src="app.js?v=135"></script>
+  <script type="module" src="app.js?v=136"></script>
 </body>
 </html>
