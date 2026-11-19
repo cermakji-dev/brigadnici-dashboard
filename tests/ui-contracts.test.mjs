@@ -171,6 +171,10 @@ test("rychlé filtry umožňují kombinovat všechny nebo alespoň jednu podmín
   assert.match(html, /data-quick-mode="any" aria-pressed="false"/);
   assert.match(html, /id="quickFilterSummary"/);
   assert.match(app, /quickFilterMode === "any" \? checks\.some\(Boolean\) : checks\.every\(Boolean\)/);
+  assert.match(app, /selectedDepartments\.forEach\(department => checks\.push\(trained\.includes\(department\)\)\)/);
+  assert.match(app, /return matchesSelectedFilters\(person, selectedDepartments\)/);
+  assert.doesNotMatch(html, /departmentMatchMode|Umí všechna vybraná|Umí alespoň jedno/);
+  assert.doesNotMatch(app, /departmentMatchMode/);
   assert.match(app, /button\.setAttribute\("aria-pressed", String\(active\)\)/);
   assert.match(app, /case "no-training": return canonicalDepartments\(person\.departments\)\.length === 0/);
 });
