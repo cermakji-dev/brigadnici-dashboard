@@ -5,12 +5,11 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=128";
+} from "./logic.mjs?v=129";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
 const SORT_KEY = "brigadnici-dashboard-sort";
-const EDITOR_KEY = "brigadnici-editor-name";
 const SORT_OPTIONS = {
   name: { key: "name", direction: "asc" },
   "hours-desc": { key: "hours", direction: "desc" },
@@ -68,17 +67,10 @@ const monthRosterRemoteIds = new Set();
 
 const state = loadState();
 const elements = {
-  editorDialog: document.querySelector("#editorDialog"),
-  editorForm: document.querySelector("#editorForm"),
-  editorNameInput: document.querySelector("#editorNameInput"),
-  closeEditorDialog: document.querySelector("#closeEditorDialog"),
-  skipEditorName: document.querySelector("#skipEditorName"),
   themeToggles: [...document.querySelectorAll("[data-theme-toggle]")],
   appLoader: document.querySelector("#appLoader"),
   appLoaderStatus: document.querySelector("#appLoaderStatus"),
   appContent: [...document.querySelectorAll(".app-content")],
-  editorNameButton: document.querySelector("#editorNameButton"),
-  editorNameLabel: document.querySelector("#editorNameLabel"),
   googleSheetsButton: document.querySelector("#googleSheetsButton"),
   syncRefreshButton: document.querySelector("#syncRefreshButton"),
   attendanceInput: document.querySelector("#attendanceInput"),
@@ -246,13 +238,6 @@ const elements = {
 
 elements.themeToggles.forEach(button => button.addEventListener("click", toggleTheme));
 updateThemeControls();
-elements.editorNameButton.addEventListener("click", () => openEditorDialog());
-elements.editorForm.addEventListener("submit", saveEditorName);
-elements.closeEditorDialog.addEventListener("click", () => elements.editorDialog.close());
-elements.skipEditorName.addEventListener("click", () => elements.editorDialog.close());
-elements.editorDialog.addEventListener("click", closeDialogFromBackdrop);
-renderEditorName();
-renderEditorName();
 elements.googleSheetsButton.addEventListener("click", () => syncGoogleSheets());
 elements.syncRefreshButton.addEventListener("click", () => syncGoogleSheets());
 elements.importPanelToggle.addEventListener("click", () => setImportCollapsed(!elements.importPanel.classList.contains("is-collapsed")));
@@ -700,16 +685,12 @@ async function initializeApp() {
   }
 }
 
-// Aplikace běží bez přihlášení (veřejný přístup, viz supabase/2026-10-28-public-access.sql).
-// Případné staré přihlášení z prohlížeče se nepoužije, aby všechny požadavky
-// šly pod stejnou veřejnou rolí. Jméno editora jde v hlavičce kvůli historii změn;
-// hlavičky nesmí obsahovat diakritiku, proto je URL-kódované.
+// Aplikace zůstává bez přihlášení. Historické podpisy u starších záznamů zachováváme,
+// nové záznamy se ale nepodepisují jménem zadávaným v prohlížeči.
 function createSupabaseClient() {
   const config = window.APP_CONFIG;
-  const name = editorName();
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "brigadnici-public" },
-    global: { headers: name ? { "x-editor-name": encodeURIComponent(name) } : {} }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "brigadnici-public" }
   });
 }
 
@@ -719,40 +700,9 @@ function showLoadError(text) {
   updateAppLoader(text);
 }
 
-function editorName() {
-  try {
-    return (localStorage.getItem(EDITOR_KEY) || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-// Text ukládaný do sloupců *_by_email u palců, poznámek, reportů a nástupu.
+// Bez ručního podepisování: u nových záznamů se použije neutrální označení.
 function editorLabel() {
-  return editorName() || "Neuvedeno";
-}
-
-function renderEditorName() {
-  const name = editorName();
-  elements.editorNameLabel.textContent = name || "Podepsat se";
-  elements.editorNameButton.classList.toggle("is-missing", !name);
-}
-
-function openEditorDialog() {
-  elements.editorNameInput.value = editorName();
-  elements.editorDialog.showModal();
-  elements.editorNameInput.focus();
-}
-
-function saveEditorName(event) {
-  event.preventDefault();
-  const name = elements.editorNameInput.value.trim().slice(0, 80);
-  if (!name) return;
-  localStorage.setItem(EDITOR_KEY, name);
-  createSupabaseClient();
-  renderEditorName();
-  elements.editorDialog.close();
-  setMessage(`Změny se budou ukládat pod jménem ${name}.`);
+  return "Neuvedeno";
 }
 
 function toggleTheme() {
@@ -4160,6 +4110,8 @@ async function submitAppFeedback(event) {
 
 function setMessage(text, error = false, undoAction = null) {
   clearTimeout(messageTimer);
+  // Nerušit práci zelenými potvrzeními. Chyby a akce s možností vrácení zůstávají viditelné.
+  if (text && !error && !undoAction) text = "";
   elements.toastText.textContent = text;
   elements.importMessage.classList.toggle("error", error);
   elements.importMessage.hidden = !text;
