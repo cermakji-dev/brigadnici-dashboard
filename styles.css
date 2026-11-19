@@ -1818,3 +1818,16 @@ dialog .custom-select { position: relative; }
   font-style: italic;
   border-style: dashed;
 }
+
+
+/* v134 – rychlé filtry: jasné kombinování, stav a přístupné ovládání. */
+.quick-filters-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 14px; padding: 5px 12px 10px; }
+.quick-filters-heading { font-size: .83rem; font-weight: 750; color: var(--text); }
+.quick-filter-combine { display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: var(--brand-soft); border: 1px solid var(--border); border-radius: 9px; }
+.quick-filter-combine button { padding: 6px 10px; background: transparent; border: 0; border-radius: 6px; font: inherit; font-size: .73rem; font-weight: 650; color: var(--muted); cursor: pointer; }
+.quick-filter-combine button.is-active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.quick-filter-summary { font-size: .75rem; color: var(--muted); margin-left: auto; }
+.quick-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--skills-color) 15%, var(--surface)); border-color: var(--skills-color); color: var(--text); }
+.quick-filter[aria-pressed="true"]::before { content: "✓"; margin-right: 5px; color: var(--skills-color); }
+.quick-filter:focus-visible, .quick-filter-combine button:focus-visible { outline: 2px solid var(--skills-color); outline-offset: 2px; }
+@media (max-width: 700px) { .quick-filter-summary { margin-left: 0; width: 100%; } }
