@@ -133,7 +133,7 @@ test("zvoneček s upozorněními je odstraněný", () => {
 
 test("měsíční docházka má filtry, obsazenost po dnech a přechod do dne", () => {
   assert.match(app, /month-overview-filters/);
-  assert.match(app, /data\.monthDayStatus = !dayBlocks\.length/);
+  assert.match(app, /row\.dataset\.monthDayStatus = !dayBlocks\.length/);
   assert.match(app, /dayHours \/ planned \* 100/);
   assert.match(app, /monthShiftFilter === "all"/);
   assert.match(app, /setShiftsMode\("day"\)/);
