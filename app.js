@@ -1,5 +1,5 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments, summarizeAttendancePeriods,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
@@ -49,6 +49,9 @@ let selectedShiftDay = startOfDay(new Date());
 const SHIFTS_MODE_KEY = "brigadnici-shifts-mode";
 let shiftsMode = (() => { try { return localStorage.getItem(SHIFTS_MODE_KEY) === "month" ? "month" : "day"; } catch { return "day"; } })();
 let monthShiftFilter = "all";
+let monthComparisonLength = 6;
+let monthCompareYear = true;
+let monthComparisonRequest = 0;
 let selectedShiftMonth = new Date(selectedShiftDay.getFullYear(), selectedShiftDay.getMonth(), 1);
 // Hodiny za měsíc ze souhrnu měsíčního listu Google tabulky (attendance_totals).
 const monthAttendanceCache = new Map();
@@ -1080,6 +1083,7 @@ async function loadRemoteState() {
       .eq("status", "success").order("finished_at", { ascending: false }).limit(1).maybeSingle()
   ]);
   monthAttendanceCache.clear();
+  comparisonAttendanceCache.clear();
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
   workerNotesTableAvailable = !workerNotesResult.error;
@@ -2908,6 +2912,120 @@ function setShiftsSummaryLabels(month) {
 }
 
 const MONTH_NAMES_CS = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+const comparisonAttendanceCache = new Map();
+
+function comparisonPeriod(date, monthOffset) {
+  const other = new Date(date.getFullYear(), date.getMonth() + monthOffset, 1);
+  return String(other.getFullYear()) + "-" + String(other.getMonth() + 1).padStart(2, "0") + "-01";
+}
+
+function comparisonPeriodLabel(period) {
+  const [year, month] = period.split("-").map(Number);
+  return MONTH_NAMES_CS[month - 1].slice(0, 3) + " " + year;
+}
+
+async function fetchComparisonAttendance(periods) {
+  const missing = periods.filter(period => !comparisonAttendanceCache.has(period));
+  if (missing.length) {
+    const rows = await fetchAllRows(() => supabaseClient.from("attendance_totals")
+      .select("period, worker_id, hours").in("period", missing).order("period").order("worker_id"));
+    const grouped = new Map(missing.map(period => [period, []]));
+    rows.forEach(row => grouped.get(row.period)?.push(row));
+    grouped.forEach((items, period) => comparisonAttendanceCache.set(period, items));
+  }
+  return summarizeAttendancePeriods(periods.flatMap(period => comparisonAttendanceCache.get(period) || []), periods);
+}
+
+function renderMonthComparison(container, month) {
+  const request = ++monthComparisonRequest;
+  const section = document.createElement("section");
+  section.className = "month-comparison";
+  const header = document.createElement("div");
+  header.className = "month-comparison-header";
+  const heading = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = "Srovnání měsíců";
+  const subtitle = document.createElement("p");
+  subtitle.textContent = "Odpracované hodiny a počet různých lidí za měsíc. Nejde o počet lidí na jedné směně.";
+  heading.append(title, subtitle);
+  const controls = document.createElement("div");
+  controls.className = "month-comparison-controls";
+  for (const length of [3, 6, 12]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = length + " měs.";
+    button.classList.toggle("is-active", length === monthComparisonLength);
+    button.setAttribute("aria-pressed", String(length === monthComparisonLength));
+    button.addEventListener("click", () => { monthComparisonLength = length; renderShiftsMonth(); });
+    controls.append(button);
+  }
+  const yearButton = document.createElement("button");
+  yearButton.type = "button";
+  yearButton.textContent = "Meziročně";
+  yearButton.classList.toggle("is-active", monthCompareYear);
+  yearButton.setAttribute("aria-pressed", String(monthCompareYear));
+  yearButton.addEventListener("click", () => { monthCompareYear = !monthCompareYear; renderShiftsMonth(); });
+  controls.append(yearButton);
+  header.append(heading, controls);
+  const status = document.createElement("p");
+  status.className = "month-comparison-status";
+  status.textContent = "Načítám historická data…";
+  status.setAttribute("role", "status");
+  const results = document.createElement("div");
+  results.className = "month-comparison-results";
+  section.append(header, status, results);
+  container.append(section);
+  const periods = Array.from({ length: monthComparisonLength }, (_, index) => comparisonPeriod(month, index - monthComparisonLength + 1));
+  const previousPeriods = monthCompareYear ? periods.map(period => comparisonPeriod(new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)) - 1, 1), -12)) : [];
+  const all = [...new Set([...periods, ...previousPeriods])];
+  fetchComparisonAttendance(all).then(data => {
+    if (request !== monthComparisonRequest || !section.isConnected) return;
+    const byPeriod = new Map(data.map(item => [item.period, item]));
+    status.textContent = "Srovnání vychází z měsíčních souhrnů docházky. Prázdná období nejsou započítána jako nula.";
+    const max = Math.max(1, ...periods.map(period => byPeriod.get(period)?.hours || 0), ...previousPeriods.map(period => byPeriod.get(period)?.hours || 0));
+    const table = document.createElement("div");
+    table.className = "month-comparison-table";
+    const head = document.createElement("div");
+    head.className = "month-comparison-row is-heading";
+    for (const label of ["Měsíc", "Odpracované hodiny", "Lidí v měsíci", ...(monthCompareYear ? ["Proti minulému roku"] : [])]) {
+      const span = document.createElement("span"); span.textContent = label; head.append(span);
+    }
+    table.append(head);
+    periods.forEach((period, index) => {
+      const item = byPeriod.get(period);
+      const previous = monthCompareYear ? byPeriod.get(previousPeriods[index]) : null;
+      const row = document.createElement("div"); row.className = "month-comparison-row";
+      const label = document.createElement("strong"); label.textContent = comparisonPeriodLabel(period);
+      const hoursCell = document.createElement("div"); hoursCell.className = "month-comparison-hours";
+      const value = document.createElement("strong");
+      value.textContent = item?.dataAvailable ? formatNumber(item.hours) + " h" : "Bez dat";
+      const meter = document.createElement("div"); meter.className = "month-comparison-meter";
+      const fill = document.createElement("span");
+      fill.style.width = (item?.dataAvailable ? item.hours / max * 100 : 0).toFixed(1) + "%";
+      meter.append(fill); hoursCell.append(value, meter);
+      const people = document.createElement("span");
+      people.textContent = item?.dataAvailable ? String(item.people) : "—";
+      row.append(label, hoursCell, people);
+      if (monthCompareYear) {
+        const delta = document.createElement("span"); delta.className = "month-comparison-delta";
+        if (item?.dataAvailable && previous?.dataAvailable && previous.hours > 0) {
+          const difference = (item.hours / previous.hours - 1) * 100;
+          delta.textContent = (difference > 0 ? "+" : "") + difference.toFixed(1).replace(".", ",") + " %";
+          delta.classList.toggle("is-up", difference > 0);
+          delta.classList.toggle("is-down", difference < 0);
+          delta.title = comparisonPeriodLabel(previous.period) + ": " + formatNumber(previous.hours) + " h";
+        } else delta.textContent = "—";
+        row.append(delta);
+      }
+      table.append(row);
+    });
+    results.replaceChildren(table);
+  }).catch(() => {
+    if (request !== monthComparisonRequest || !section.isConnected) return;
+    status.textContent = "Historické souhrny se nepodařilo načíst. Denní rozpis zůstává dostupný.";
+  });
+}
+
 
 async function loadMonthAttendance(period) {
   if (monthAttendanceCache.has(period)) return monthAttendanceCache.get(period);
