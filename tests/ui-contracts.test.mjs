@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app] = await Promise.all([
+const [html, app, styles] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
-  readFile(new URL("../app.js", import.meta.url), "utf8")
+  readFile(new URL("../app.js", import.meta.url), "utf8"),
+  readFile(new URL("../styles.css", import.meta.url), "utf8")
 ]);
 
 test("profil zobrazuje schopnosti a docházku jako automatické ukazatele", () => {
@@ -138,4 +139,11 @@ test("měsíční docházka má filtry, obsazenost po dnech a přechod do dne", 
   assert.match(app, /monthShiftFilter === "all"/);
   assert.match(app, /setShiftsMode\("day"\)/);
   assert.match(app, /filteredEmpty\.hidden = visible > 0/);
+});
+
+
+test("tmavé týmové karty a hlavička při scrollování neprosvítají", () => {
+  assert.match(styles, /:root\[data-theme="dark"\] \.person-card\s*\{\s*background: var\(--surface\);\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
+  assert.match(styles, /:root\[data-theme="dark"\] \.topbar\s*\{\s*background: var\(--surface-elevated\);\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
+  assert.match(styles, /\.person-card:hover \{ transform: none; \}/);
 });
