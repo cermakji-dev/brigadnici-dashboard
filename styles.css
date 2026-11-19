@@ -2077,3 +2077,270 @@ dialog .custom-select { position: relative; }
   .month-day-card,
   .month-overview-filters button { transition: none; }
 }
+
+
+/* v140 – elegantní a kompaktní ovládání týmu, bez těžkého společného rámečku */
+.team-controls {
+  display: grid;
+  gap: 13px;
+  margin-bottom: 22px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--border) 67%, transparent);
+  border-radius: 19px;
+  background: var(--surface);
+  box-shadow: 0 4px 24px rgba(7, 15, 35, .055);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.team-controls .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+.team-controls .search-field {
+  min-width: 180px;
+  flex: 1;
+}
+.team-controls .search-field-icon {
+  position: absolute;
+  width: 19px;
+  height: 19px;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.team-controls .search-field input {
+  min-height: 44px;
+  padding: 10px 61px 10px 44px;
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--border) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 82%, var(--surface));
+  transition: border-color 170ms ease, background-color 170ms ease, box-shadow 170ms ease;
+}
+.team-controls .search-field input:focus {
+  border-color: color-mix(in srgb, var(--skills-color) 60%, var(--border));
+  background: var(--surface-elevated);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--skills-color) 12%, transparent);
+}
+.team-controls .search-field kbd {
+  border-color: transparent;
+  background: var(--brand-soft);
+  font-size: .69rem;
+  opacity: .75;
+}
+.team-controls .custom-select { min-width: 200px; max-width: 270px; }
+.team-controls .custom-select-button {
+  min-height: 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-elevated) 82%, var(--surface));
+  border-color: color-mix(in srgb, var(--border) 74%, transparent);
+  transition: border-color 170ms ease, box-shadow 170ms ease, background-color 170ms ease;
+}
+.team-controls .view-switch {
+  padding: 4px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-soft) 60%, var(--surface));
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+.team-controls .view-button {
+  width: 37px;
+  height: 35px;
+  border-radius: 9px;
+  transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+.team-controls .view-button.is-active {
+  background: color-mix(in srgb, var(--brand-purple) 78%, var(--brand));
+  box-shadow: 0 2px 9px color-mix(in srgb, var(--brand-purple) 21%, transparent);
+}
+.team-controls .quick-filters-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 0;
+}
+.team-controls .quick-filters-heading {
+  color: var(--text);
+  font-size: .81rem;
+  font-weight: 750;
+}
+.team-controls .quick-filter-combine {
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--brand-soft) 58%, var(--surface));
+}
+.team-controls .quick-filter-combine button {
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-weight: 650;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.team-controls .quick-filter-combine button.is-active {
+  color: var(--text);
+  background: var(--surface-elevated);
+  box-shadow: 0 2px 7px rgba(0,0,0,.07);
+}
+.team-controls .quick-filter-summary {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: .74rem;
+}
+.team-controls .quick-filter-summary[hidden] { display: none; }
+.team-controls .quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 1px;
+  margin: 0;
+}
+.team-controls .quick-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 11px 7px 13px;
+  border-radius: 11px;
+  border-color: color-mix(in srgb, var(--border) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 80%, var(--surface));
+  color: var(--muted);
+  font-size: .76rem;
+  line-height: 1.25;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.team-controls .quick-filter span {
+  display: inline-grid;
+  min-width: 22px;
+  height: 21px;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.team-controls .quick-filter:hover {
+  border-color: color-mix(in srgb, var(--skills-color) 38%, var(--border));
+  background: color-mix(in srgb, var(--skills-color) 6%, var(--surface-elevated));
+  color: var(--text);
+}
+.team-controls .quick-filter.is-active,
+.team-controls .quick-filter[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--brand-purple) 13%, var(--surface-elevated));
+  border-color: color-mix(in srgb, var(--brand-purple) 48%, var(--border));
+  color: var(--text);
+  box-shadow: none;
+}
+.team-controls .quick-filter[aria-pressed="true"]::before {
+  margin-right: 0;
+  font-size: .77rem;
+  color: var(--brand-purple);
+}
+.team-controls .quick-filter-clear {
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: .75rem;
+  transition: color 160ms ease;
+}
+.team-controls .quick-filter-clear:hover { color: var(--text); }
+.team-controls .advanced-filters {
+  margin: 1px -15px -15px;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 0 0 19px 19px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.team-controls .advanced-filters summary {
+  display: flex;
+  min-height: 43px;
+  gap: 9px;
+  padding: 11px 16px;
+  align-items: center;
+  color: var(--muted);
+  font-size: .79rem;
+  font-weight: 660;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.team-controls .advanced-filters summary:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--skills-color) 3%, transparent);
+}
+.team-controls .advanced-filters summary::before {
+  width: 13px;
+  height: 13px;
+  clip-path: none;
+  background: none;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  opacity: .75;
+  transform: rotate(-45deg) scale(.62);
+  transition: transform 160ms ease;
+}
+.team-controls .advanced-filters[open] summary::before {
+  transform: rotate(45deg) scale(.62);
+}
+.team-controls .advanced-filters summary:focus-visible {
+  outline: 2px solid var(--skills-color);
+  outline-offset: -2px;
+}
+.team-controls .department-filter-count {
+  padding: 3px 7px;
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--brand-soft);
+  font-size: .69rem;
+}
+.team-controls .department-filter-count[hidden] { display: none; }
+.team-controls .filter-content {
+  padding: 6px 16px 16px;
+  gap: 14px;
+}
+.team-controls .department-options label {
+  background: color-mix(in srgb, var(--brand-soft) 50%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 10px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.team-controls .department-options label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--brand-purple) 46%, var(--border));
+  background: color-mix(in srgb, var(--brand-purple) 10%, var(--surface));
+}
+.team-controls .filter-actions { justify-content: flex-end; }
+.team-controls .filter-actions #clearDepartmentFilters {
+  padding: 8px 11px;
+  min-height: 34px;
+  font-size: .75rem;
+}
+@media (max-width: 720px) {
+  .team-controls { padding: 11px; gap: 12px; }
+  .team-controls .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+  .team-controls .search-field { grid-column: 1 / -1; min-width: 0; }
+  .team-controls .custom-select { width: 100%; min-width: 0; max-width: none; }
+  .team-controls .view-switch { justify-self: end; }
+  .team-controls .quick-filters { overflow-x: visible; flex-wrap: wrap; padding: 0; }
+  .team-controls .quick-filter { flex: none; }
+  .team-controls .quick-filter-summary { margin-left: 0; flex-basis: 100%; }
+  .team-controls .advanced-filters { margin: 0 -11px -11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-controls .quick-filter,
+  .team-controls .quick-filter-combine button,
+  .team-controls .view-button,
+  .team-controls .advanced-filters summary,
+  .team-controls .department-options label { transition: none; }
+}

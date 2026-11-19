@@ -229,3 +229,14 @@ test("měsíční historie používá správný tvar výsledku stránkování", 
   assert.match(sync, /const \{ data: existing, error: existingError \} = await fetchAllRows/);
   assert.match(sync, /if \(existingError\) throw existingError;/);
 });
+
+
+test("smooth panel týmu zobrazuje vyhledávání, aktivní filtry a oddělení přístupně", () => {
+  assert.match(html, /class="search-field-icon ui-icon"/);
+  assert.match(html, /id="quickFilterSummary" class="quick-filter-summary" aria-live="polite" hidden/);
+  assert.match(html, /id="departmentFilterCount" class="department-filter-count" hidden/);
+  assert.match(app, /elements\.quickFilterSummary\.hidden = count === 0 && departmentCount === 0/);
+  assert.match(app, /elements\.departmentFilterCount\.hidden = departmentCount === 0/);
+  assert.match(styles, /\.team-controls \.quick-filter\[aria-pressed="true"\]/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+});

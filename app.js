@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=139";
+} from "./logic.mjs?v=140";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -156,6 +156,7 @@ const elements = {
   quickFilters: [...document.querySelectorAll(".quick-filter")],
   quickFilterModes: [...document.querySelectorAll("[data-quick-mode]")],
   quickFilterSummary: document.querySelector("#quickFilterSummary"),
+  departmentFilterCount: document.querySelector("#departmentFilterCount"),
   clearQuickFilters: document.querySelector("#clearQuickFilters"),
   personDepartments: [...document.querySelectorAll(".person-department")],
   cardTemplate: document.querySelector("#personCardTemplate"),
@@ -971,8 +972,14 @@ function renderQuickFilterState(people) {
     button.setAttribute("aria-pressed", String(active));
   });
   const count = activeQuickFilters.size;
+  const departmentCount = elements.departmentFilters.filter(input => input.checked).length;
   elements.clearQuickFilters.hidden = count === 0;
-  elements.quickFilterSummary.textContent = count ? `${count} aktivní · ${people.length} výsledků` : "Vyberte filtr";
+  elements.quickFilterSummary.hidden = count === 0 && departmentCount === 0;
+  elements.quickFilterSummary.textContent = count + departmentCount
+    ? `${count + departmentCount} vybráno · ${people.length} výsledků`
+    : "";
+  elements.departmentFilterCount.hidden = departmentCount === 0;
+  elements.departmentFilterCount.textContent = departmentCount ? `${departmentCount} vybráno` : "";
 }
 
 function setTableSort(key) {
