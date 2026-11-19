@@ -1066,9 +1066,15 @@ async function loadRemoteState() {
   const scoped = query => workerIds.length ? query.in("worker_id", workerIds) : query.eq("worker_id", "00000000-0000-0000-0000-000000000000");
   const today = startOfDay(new Date());
   const [attendanceResult, feedbackResult, auditResult, workerNotesResult, salesDaysResult, onboardingResult, shiftsResult, syncRunResult] = await Promise.all([
-    supabaseClient.from("attendance_totals").select("worker_id, period, hours, in_list").then(result => result.error
-      ? supabaseClient.from("attendance_totals").select("worker_id, period, hours")
-      : result),
+    fetchAllRows(() => supabaseClient.from("attendance_totals")
+      .select("worker_id, period, hours, in_list").order("period").order("worker_id"))
+      .then(data => ({ data, error: null }))
+      .catch(async () => {
+        // Kompatibilita se starší tabulkou bez sloupce in_list.
+        const data = await fetchAllRows(() => supabaseClient.from("attendance_totals")
+          .select("worker_id, period, hours").order("period").order("worker_id"));
+        return { data, error: null };
+      }),
     fetchAllRows(() => scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at").order("id")),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),

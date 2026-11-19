@@ -208,3 +208,16 @@ test("měsíční docházka má přehledné týdenní karty a historická srovn�
   assert.match(styles, /\.month-week-days \{ display: grid; grid-template-columns: repeat\(7,/);
   assert.match(app, /selectedShiftDay = date; setShiftsMode\("day"\)/);
 });
+
+
+test("historie docházky pochází z listů Google tabulky a neztrácí starší brigádníky", async () => {
+  const sync = await readFile(new URL("../supabase/functions/sync-google-sheets/index.ts", import.meta.url), "utf8");
+  assert.match(sync, /workbook\.SheetNames\.map\(name => \(\{ name, sheetPeriod: periodFromSheetName\(name\) \}\)\)/);
+  assert.match(sync, /historicalNames = new Map/);
+  assert.match(sync, /forEachShiftCell\(matrix,/);
+  assert.match(sync, /active: false/);
+  assert.match(sync, /const roster = monthlyRosterHours\(matrix, sheetPeriod!, lookup\)/);
+  assert.match(sync, /fetchAllRows\(\(\) => supabase\.from\("attendance_totals"\)/);
+  assert.match(app, /fetchAllRows\(\(\) => supabaseClient\.from\("attendance_totals"\)/);
+  assert.match(app, /fetchComparisonAttendance\(all\)/);
+});
