@@ -4,8 +4,8 @@ import {
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
-  summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey
-} from "./logic.mjs?v=126";
+  summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
+} from "./logic.mjs?v=128";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -1077,7 +1077,7 @@ async function loadRemoteState() {
     supabaseClient.from("attendance_totals").select("worker_id, period, hours, in_list").then(result => result.error
       ? supabaseClient.from("attendance_totals").select("worker_id, period, hours")
       : result),
-    scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at"),
+    fetchAllRows(() => scoped(supabaseClient.from("feedback").select("id, worker_id, kind, category, note, created_by_email, created_at")).is("deleted_at", null).order("created_at").order("id")),
     Promise.resolve({ data: [], error: null }),
     Promise.resolve({ data: [], error: null }),
     scoped(supabaseClient.from("sales_days").select("*")).gte("shift_date", salesCutoffKey()).order("shift_date", { ascending: false }),
@@ -1264,17 +1264,6 @@ async function refreshData() {
   render();
   if (currentMainView === "shifts") renderShiftsDashboard();
   if (currentMainView === "sales") renderSalesDashboard();
-}
-
-// PostgREST vrací nejvýš 1000 řádků na dotaz, rozpis jich má víc.
-async function fetchAllRows(buildQuery, pageSize = 1000) {
-  const rows = [];
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
-    if (error) return { data: rows, error };
-    rows.push(...data);
-    if (data.length < pageSize) return { data: rows, error: null };
-  }
 }
 
 function mapShiftRow(row) {
@@ -3818,8 +3807,8 @@ async function loadWorkerDetails(person) {
   if (!supabaseClient || !person.remoteId || (person.notesLoaded && person.auditLoaded && person.attendanceLoaded)) return;
   const periods = recentPeriods(new Date(), 12);
   const [notesResult, auditResult, attendanceResult] = await Promise.all([
-    supabaseClient.from("worker_notes").select("id, body, created_by, created_by_email, created_at").eq("worker_id", person.remoteId).is("deleted_at", null).order("created_at", { ascending: false }).limit(100),
-    supabaseClient.from("worker_audit").select("*").eq("worker_id", person.remoteId).order("changed_at", { ascending: false }).limit(50),
+    fetchAllRows(() => supabaseClient.from("worker_notes").select("id, body, created_by, created_by_email, created_at").eq("worker_id", person.remoteId).is("deleted_at", null).order("created_at", { ascending: false }).order("id")),
+    fetchAllRows(() => supabaseClient.from("worker_audit").select("*").eq("worker_id", person.remoteId).order("changed_at", { ascending: false }).order("id")),
     supabaseClient.from("attendance_totals").select("period, hours").eq("worker_id", person.remoteId).gte("period", periods[0]).order("period")
   ]);
   if (!attendanceResult.error) {
