@@ -4,6 +4,24 @@
 export const DEPARTMENTS = ["Výdej", "Prodej", "Lego", "Pokladny", "Upsell", "MV", "LOG", "PS"];
 export const SALES_ASR_TARGET = 6500;
 
+// Srovnání měsíců: počet unikátních brigádníků s hodinami není počet lidí
+// na jedné směně. Měsíce bez záznamů mají dataAvailable=false, nikoliv nulu.
+export const summarizeAttendancePeriods = (rows, periods) => {
+  const byPeriod = new Map(periods.map(period => [period, { period, dataAvailable: false, hours: 0, workerIds: new Set() }]));
+  for (const row of rows || []) {
+    const item = byPeriod.get(row.period);
+    if (!item) continue;
+    item.dataAvailable = true;
+    const hours = Number(row.hours) || 0;
+    item.hours += hours;
+    if (hours > 0 && row.worker_id != null) item.workerIds.add(String(row.worker_id));
+  }
+  return periods.map(period => {
+    const item = byPeriod.get(period);
+    return { period, dataAvailable: item.dataAvailable, hours: item.hours, people: item.workerIds.size };
+  });
+};
+
 export const normalizeText = value => String(value ?? "")
   .replace(/[\u200B-\u200D\uFEFF]/g, "")
   .replace(/\s+/g, " ")

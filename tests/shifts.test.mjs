@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assignLanes, timelineRange, buildShiftRows, buildWorkerLookup, departmentsForLabel, mergeShiftBlocks, resolveShiftCell,
-  salesExpectationsFromShifts, suggestReplacements, summarizeShifts
+  salesExpectationsFromShifts, suggestReplacements, summarizeShifts, summarizeAttendancePeriods
 } from "../logic.mjs";
 
 const workers = [
@@ -204,4 +204,19 @@ test("překlep v roce se opraví i bez názvu listu podle ostatních dnů", asyn
   const lookup = lookupOf([{ id: "a", full_name: "Novák Petr" }]);
   const dates = build(matrix, { from: new Date(2026, 10, 1), to: new Date(2026, 10, 30), lookup }).map(row => row.date);
   assert.deepEqual(dates, ["2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"]);
+});
+
+
+test("historické porovnání měsíčních hodin a unikátních lidí nerozmělní data bez záznamů", () => {
+  const actual = summarizeAttendancePeriods([
+    { period: "2026-11-01", worker_id: "a", hours: 80 },
+    { period: "2026-11-01", worker_id: "a", hours: 10 },
+    { period: "2026-11-01", worker_id: "b", hours: 0 },
+    { period: "2025-11-01", worker_id: "c", hours: 50 }
+  ], ["2025-11-01", "2026-10-01", "2026-11-01"]);
+  assert.deepEqual(actual, [
+    { period: "2025-11-01", dataAvailable: true, hours: 50, people: 1 },
+    { period: "2026-10-01", dataAvailable: false, hours: 0, people: 0 },
+    { period: "2026-11-01", dataAvailable: true, hours: 90, people: 1 }
+  ]);
 });

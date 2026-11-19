@@ -1,11 +1,11 @@
 import {
-  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments,
+  DEPARTMENTS, SALES_ASR_TARGET, addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, canonicalDepartments, displayedDepartments, summarizeAttendancePeriods,
   calculateFreeShiftHours, clampMetric, dateKey, firstDayOfMonth, forEachShiftCell, formatShiftDepartment,
   incompleteOnboardingTasks, isIgnoredShiftName, isLikelyWorkerName, matchesSearch, median, normalizeText,
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=136";
+} from "./logic.mjs?v=137";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -49,6 +49,9 @@ let selectedShiftDay = startOfDay(new Date());
 const SHIFTS_MODE_KEY = "brigadnici-shifts-mode";
 let shiftsMode = (() => { try { return localStorage.getItem(SHIFTS_MODE_KEY) === "month" ? "month" : "day"; } catch { return "day"; } })();
 let monthShiftFilter = "all";
+let monthComparisonLength = 6;
+let monthCompareYear = true;
+let monthComparisonRequest = 0;
 let selectedShiftMonth = new Date(selectedShiftDay.getFullYear(), selectedShiftDay.getMonth(), 1);
 // Hodiny za měsíc ze souhrnu měsíčního listu Google tabulky (attendance_totals).
 const monthAttendanceCache = new Map();
@@ -1080,6 +1083,7 @@ async function loadRemoteState() {
       .eq("status", "success").order("finished_at", { ascending: false }).limit(1).maybeSingle()
   ]);
   monthAttendanceCache.clear();
+  comparisonAttendanceCache.clear();
   const error = workersResult.error || attendanceResult.error || feedbackResult.error || auditResult.error;
   if (error) throw new Error(`Data se nepodařilo načíst: ${error.message}`);
   workerNotesTableAvailable = !workerNotesResult.error;
@@ -2908,6 +2912,120 @@ function setShiftsSummaryLabels(month) {
 }
 
 const MONTH_NAMES_CS = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+const comparisonAttendanceCache = new Map();
+
+function comparisonPeriod(date, monthOffset) {
+  const other = new Date(date.getFullYear(), date.getMonth() + monthOffset, 1);
+  return String(other.getFullYear()) + "-" + String(other.getMonth() + 1).padStart(2, "0") + "-01";
+}
+
+function comparisonPeriodLabel(period) {
+  const [year, month] = period.split("-").map(Number);
+  return MONTH_NAMES_CS[month - 1].slice(0, 3) + " " + year;
+}
+
+async function fetchComparisonAttendance(periods) {
+  const missing = periods.filter(period => !comparisonAttendanceCache.has(period));
+  if (missing.length) {
+    const rows = await fetchAllRows(() => supabaseClient.from("attendance_totals")
+      .select("period, worker_id, hours").in("period", missing).order("period").order("worker_id"));
+    const grouped = new Map(missing.map(period => [period, []]));
+    rows.forEach(row => grouped.get(row.period)?.push(row));
+    grouped.forEach((items, period) => comparisonAttendanceCache.set(period, items));
+  }
+  return summarizeAttendancePeriods(periods.flatMap(period => comparisonAttendanceCache.get(period) || []), periods);
+}
+
+function renderMonthComparison(container, month) {
+  const request = ++monthComparisonRequest;
+  const section = document.createElement("section");
+  section.className = "month-comparison";
+  const header = document.createElement("div");
+  header.className = "month-comparison-header";
+  const heading = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = "Srovnání měsíců";
+  const subtitle = document.createElement("p");
+  subtitle.textContent = "Hodiny podle měsíčního souhrnu a počet různých lidí s hodinami. Nejde o počet lidí na jedné směně ani o potvrzenou skutečnou docházku.";
+  heading.append(title, subtitle);
+  const controls = document.createElement("div");
+  controls.className = "month-comparison-controls";
+  for (const length of [3, 6, 12]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = length + " měs.";
+    button.classList.toggle("is-active", length === monthComparisonLength);
+    button.setAttribute("aria-pressed", String(length === monthComparisonLength));
+    button.addEventListener("click", () => { monthComparisonLength = length; renderShiftsMonth(); });
+    controls.append(button);
+  }
+  const yearButton = document.createElement("button");
+  yearButton.type = "button";
+  yearButton.textContent = "Meziročně";
+  yearButton.classList.toggle("is-active", monthCompareYear);
+  yearButton.setAttribute("aria-pressed", String(monthCompareYear));
+  yearButton.addEventListener("click", () => { monthCompareYear = !monthCompareYear; renderShiftsMonth(); });
+  controls.append(yearButton);
+  header.append(heading, controls);
+  const status = document.createElement("p");
+  status.className = "month-comparison-status";
+  status.textContent = "Načítám historická data…";
+  status.setAttribute("role", "status");
+  const results = document.createElement("div");
+  results.className = "month-comparison-results";
+  section.append(header, status, results);
+  container.append(section);
+  const periods = Array.from({ length: monthComparisonLength }, (_, index) => comparisonPeriod(month, index - monthComparisonLength + 1));
+  const previousPeriods = monthCompareYear ? periods.map(period => comparisonPeriod(new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)) - 1, 1), -12)) : [];
+  const all = [...new Set([...periods, ...previousPeriods])];
+  fetchComparisonAttendance(all).then(data => {
+    if (request !== monthComparisonRequest || !section.isConnected) return;
+    const byPeriod = new Map(data.map(item => [item.period, item]));
+    status.textContent = "Srovnání vychází z hodin v Google tabulce (rozpisu). Chybějící období není nula.";
+    const max = Math.max(1, ...periods.map(period => byPeriod.get(period)?.hours || 0), ...previousPeriods.map(period => byPeriod.get(period)?.hours || 0));
+    const table = document.createElement("div");
+    table.className = "month-comparison-table";
+    const head = document.createElement("div");
+    head.className = "month-comparison-row is-heading";
+    for (const label of ["Měsíc", "Hodiny z tabulky", "Lidí s hodinami", ...(monthCompareYear ? ["Proti minulému roku"] : [])]) {
+      const span = document.createElement("span"); span.textContent = label; head.append(span);
+    }
+    table.append(head);
+    periods.forEach((period, index) => {
+      const item = byPeriod.get(period);
+      const previous = monthCompareYear ? byPeriod.get(previousPeriods[index]) : null;
+      const row = document.createElement("div"); row.className = "month-comparison-row";
+      const label = document.createElement("strong"); label.textContent = comparisonPeriodLabel(period);
+      const hoursCell = document.createElement("div"); hoursCell.className = "month-comparison-hours";
+      const value = document.createElement("strong");
+      value.textContent = item?.dataAvailable ? formatNumber(item.hours) + " h" : "Bez dat";
+      const meter = document.createElement("div"); meter.className = "month-comparison-meter";
+      const fill = document.createElement("span");
+      fill.style.width = (item?.dataAvailable ? item.hours / max * 100 : 0).toFixed(1) + "%";
+      meter.append(fill); hoursCell.append(value, meter);
+      const people = document.createElement("span");
+      people.textContent = item?.dataAvailable ? String(item.people) : "—";
+      row.append(label, hoursCell, people);
+      if (monthCompareYear) {
+        const delta = document.createElement("span"); delta.className = "month-comparison-delta";
+        if (item?.dataAvailable && previous?.dataAvailable && previous.hours > 0) {
+          const difference = (item.hours / previous.hours - 1) * 100;
+          delta.textContent = (difference > 0 ? "+" : "") + difference.toFixed(1).replace(".", ",") + " %";
+          delta.classList.toggle("is-up", difference > 0);
+          delta.classList.toggle("is-down", difference < 0);
+          delta.title = comparisonPeriodLabel(previous.period) + ": " + formatNumber(previous.hours) + " h";
+        } else delta.textContent = "—";
+        row.append(delta);
+      }
+      table.append(row);
+    });
+    results.replaceChildren(table);
+  }).catch(() => {
+    if (request !== monthComparisonRequest || !section.isConnected) return;
+    status.textContent = "Historické souhrny se nepodařilo načíst. Denní rozpis zůstává dostupný.";
+  });
+}
+
 
 async function loadMonthAttendance(period) {
   if (monthAttendanceCache.has(period)) return monthAttendanceCache.get(period);
@@ -2955,145 +3073,131 @@ function renderShiftsMonth() {
   elements.shiftsAttention.hidden = true;
   elements.shiftsBoard.replaceChildren();
   elements.shiftsBoard.hidden = true;
-  elements.shiftsEmpty.hidden = monthShifts.length > 0;
-  if (!monthShifts.length) { elements.shiftsMonth.replaceChildren(); elements.shiftsMonth.hidden = true; return; }
+  elements.shiftsEmpty.hidden = true;
   elements.shiftsMonth.hidden = false;
 
-  const [from, to] = timelineRange(blocks);
-  const hours = Array.from({ length: (to - from) / 60 }, (_, index) => from + index * 60);
+
   const byDay = new Map();
   blocks.forEach(block => { if (!byDay.has(block.date)) byDay.set(block.date, []); byDay.get(block.date).push(block); });
-  const cellStats = dayBlocks => hours.map(start => {
-    const end = start + 60;
-    const inHour = dayBlocks.filter(block => block.start < end && block.end > start);
-    return {
-      start,
-      people: new Set(inHour.filter(block => !block.free).map(block => block.workerId || block.name)).size,
-      free: inHour.filter(block => block.free).length
-    };
-  });
-  const allCells = [...byDay.values()].flatMap(cellStats);
-  const maxPeople = Math.max(1, ...allCells.map(cell => cell.people));
 
   const toolbar = document.createElement("div");
   toolbar.className = "month-overview-toolbar";
-  const toolbarTitle = document.createElement("div");
-  toolbarTitle.className = "month-overview-title";
-  const heading = document.createElement("h3");
-  heading.textContent = "Přehled obsazení po dnech";
-  const helper = document.createElement("p");
-  helper.textContent = "Kliknutím na den otevřeš podrobný rozpis směn.";
-  toolbarTitle.append(heading, helper);
-  const filterGroup = document.createElement("div");
-  filterGroup.className = "month-overview-filters";
-  filterGroup.setAttribute("role", "group");
-  filterGroup.setAttribute("aria-label", "Filtrovat dny v měsíci");
-  const filterOptions = [
-    { id: "all", label: "Všechny dny", count: new Date(year, month.getMonth() + 1, 0).getDate() },
-    { id: "free", label: "Volné směny", count: new Set(free.map(block => block.date)).size },
-    { id: "empty", label: "Bez rozpisu", count: new Date(year, month.getMonth() + 1, 0).getDate() - byDay.size }
-  ];
-  const timeline = document.createElement("div");
-  timeline.className = "month-timeline";
-  timeline.style.setProperty("--month-hours", hours.length);
-  const head = document.createElement("div");
-  head.className = "month-row month-head";
-  const headDay = document.createElement("span");
-  headDay.textContent = "Den";
-  const headHours = document.createElement("div");
-  headHours.className = "month-cells";
-  hours.forEach(start => {
-    const tick = document.createElement("span");
-    tick.textContent = start / 60;
-    headHours.append(tick);
-  });
-  const headPeople = document.createElement("span");
-  headPeople.textContent = "Lidé";
-  const headWorked = document.createElement("span");
-  headWorked.textContent = "Hodiny";
-  const headFree = document.createElement("span");
-  headFree.textContent = "Volno";
-  const headCoverage = document.createElement("span");
-  headCoverage.textContent = "Obsazeno";
-  head.append(headDay, headHours, headPeople, headWorked, headFree, headCoverage);
-  timeline.append(head);
-
+  const heading = document.createElement("div");
+  heading.className = "month-overview-title";
+  const h = document.createElement("h3");
+  h.textContent = "Obsazení po týdnech";
+  const help = document.createElement("p");
+  help.textContent = "Každá karta představuje jeden den. Kliknutím otevřeš směny a oddělení.";
+  heading.append(h, help);
+  const filters = document.createElement("div");
+  filters.className = "month-overview-filters";
+  filters.setAttribute("role", "group");
+  filters.setAttribute("aria-label", "Filtrovat dny podle stavu");
   const daysInMonth = new Date(year, month.getMonth() + 1, 0).getDate();
+  const freeDays = new Set(free.map(block => block.date));
+  const emptyDays = daysInMonth - byDay.size;
+  const filterOptions = [
+    { id: "all", label: "Všechny dny", count: daysInMonth },
+    { id: "free", label: "Volné směny", count: freeDays.size },
+    { id: "empty", label: "Bez rozpisu", count: emptyDays }
+  ];
+
+  const timeline = document.createElement("div");
+  timeline.className = "month-week-groups";
+  const weekdays = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
+  const weeks = new Map();
+  const allDayCards = [];
+  let daysWithWork = 0;
+  let sumDailyPeople = 0;
+
   for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
     const date = new Date(year, month.getMonth(), dayNumber);
     const key = dateKey(date);
     const dayBlocks = byDay.get(key) || [];
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "month-row month-day";
-    const weekday = date.getDay();
-    row.classList.toggle("is-weekend", weekday === 0 || weekday === 6);
-    row.classList.toggle("is-today", key === todayKey);
-    row.classList.toggle("is-past", key < todayKey);
-    row.classList.toggle("is-empty", !dayBlocks.length);
-    row.dataset.monthDayStatus = !dayBlocks.length ? "empty" : dayBlocks.some(block => block.free) ? "free" : "filled";
-    const label = document.createElement("span");
-    label.className = "month-day-label";
-    const weekdayLabel = new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(date);
-    label.innerHTML = "<small></small><strong></strong>";
-    label.querySelector("small").textContent = weekdayLabel;
-    label.querySelector("strong").textContent = `${dayNumber}.`;
-    const cells = document.createElement("div");
-    cells.className = "month-cells";
-    const dayWork = dayBlocks.filter(block => !block.free);
-    const dayFree = dayBlocks.filter(block => block.free);
-    if (dayBlocks.length) {
-      cellStats(dayBlocks).forEach(cell => {
-        const element = document.createElement("span");
-        element.className = "month-cell";
-        if (cell.people) element.style.setProperty("--fill", (0.18 + 0.82 * cell.people / maxPeople).toFixed(2));
-        element.classList.toggle("has-people", cell.people > 0);
-        element.classList.toggle("has-free", cell.free > 0);
-        element.title = `${formatClock(cell.start)}–${formatClock(cell.start + 60)} · ${cell.people} ${cell.people === 1 ? "člověk" : cell.people >= 2 && cell.people <= 4 ? "lidé" : "lidí"}${cell.free ? ` · ${cell.free} volná` : ""}`;
-        cells.append(element);
-      });
-    } else {
-      const note = document.createElement("span");
-      note.className = "month-day-note";
-      note.textContent = "Bez směn v rozpisu";
-      cells.append(note);
+    const working = dayBlocks.filter(block => !block.free);
+    const vacancies = dayBlocks.filter(block => block.free);
+    const personCount = new Set(working.map(block => block.workerId || "n:" + normalize(block.name))).size;
+    const occupied = working.reduce((total, block) => total + block.hours, 0);
+    const unfilled = vacancies.reduce((total, block) => total + block.hours, 0);
+    const capacity = occupied + unfilled;
+    const coverage = capacity ? Math.round(occupied / capacity * 100) : null;
+    if (working.length) { daysWithWork += 1; sumDailyPeople += personCount; }
+
+    const mondayIndex = (date.getDay() + 6) % 7;
+    const weekStart = new Date(year, month.getMonth(), dayNumber - mondayIndex);
+    const weekKey = dateKey(weekStart);
+    let week = weeks.get(weekKey);
+    if (!week) {
+      week = document.createElement("section");
+      week.className = "month-week";
+      const weekTitle = document.createElement("h4");
+      const weekEnd = addDays(weekStart, 6);
+      weekTitle.textContent = "Týden " + weekStart.getDate() + ". " + (weekStart.getMonth() + 1) + ". – " + weekEnd.getDate() + ". " + (weekEnd.getMonth() + 1) + ".";
+      const weekCards = document.createElement("div");
+      weekCards.className = "month-week-days";
+      week.append(weekTitle, weekCards);
+      weeks.set(weekKey, week);
+      timeline.append(week);
     }
-    const peopleCount = document.createElement("span");
-    peopleCount.textContent = dayWork.length ? new Set(dayWork.map(block => block.workerId || block.name)).size : "–";
-    const worked = document.createElement("span");
-    const dayHours = dayWork.reduce((sum, block) => sum + block.hours, 0);
-    worked.textContent = dayHours ? `${formatNumber(dayHours)} h` : "–";
-    const freeCell = document.createElement("span");
-    const dayFreeHours = dayFree.reduce((sum, block) => sum + block.hours, 0);
-    freeCell.textContent = dayFreeHours ? `${formatNumber(dayFreeHours)} h` : "–";
-    freeCell.classList.toggle("is-free", dayFreeHours > 0);
-    const coverage = document.createElement("span");
-    coverage.className = "month-coverage";
-    const planned = dayHours + dayFreeHours;
-    const percent = planned ? Math.round(dayHours / planned * 100) : null;
-    coverage.textContent = percent === null ? "—" : `${percent} %`;
-    coverage.classList.toggle("is-complete", percent === 100);
-    coverage.classList.toggle("has-gaps", dayFreeHours > 0);
-    row.append(label, cells, peopleCount, worked, freeCell, coverage);
-    row.setAttribute("aria-label", `${weekdayLabel} ${dayNumber}. – ${peopleCount.textContent} lidí, ${formatNumber(dayHours)} obsazených hodin, ${formatNumber(dayFreeHours)} volných hodin, obsazenost ${percent === null ? "bez rozpisu" : percent + " procent"}; otevřít rozpis dne`);
-    row.addEventListener("click", () => { selectedShiftDay = date; setShiftsMode("day"); });
-    timeline.append(row);
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "month-day-card";
+    card.dataset.monthDayStatus = !dayBlocks.length ? "empty" : vacancies.length ? "free" : "filled";
+    card.classList.toggle("is-today", key === todayKey);
+    card.classList.toggle("is-weekend", mondayIndex >= 5);
+    card.classList.toggle("is-past", key < todayKey);
+    const caption = document.createElement("span");
+    caption.className = "month-day-card-date";
+    const weekday = document.createElement("span");
+    weekday.textContent = weekdays[mondayIndex];
+    const day = document.createElement("strong");
+    day.textContent = dayNumber + ". " + (month.getMonth() + 1) + ".";
+    caption.append(weekday, day);
+    const primary = document.createElement("span");
+    primary.className = "month-day-card-primary";
+    if (dayBlocks.length) {
+      const number = document.createElement("strong");
+      number.textContent = String(personCount);
+      const label = document.createElement("span");
+      label.textContent = personCount === 1 ? "člověk" : personCount >= 2 && personCount <= 4 ? "lidé" : "lidí";
+      primary.append(number, label);
+    } else primary.textContent = "Bez rozpisu";
+    const hours = document.createElement("span");
+    hours.className = "month-day-card-hours";
+    hours.textContent = dayBlocks.length ? formatNumber(occupied) + " obsazených h" : "Žádná směna";
+    const freeLine = document.createElement("span");
+    freeLine.className = "month-day-card-free";
+    freeLine.textContent = unfilled > 0 ? formatNumber(unfilled) + " h volných" : dayBlocks.length ? "Bez volných hodin" : "—";
+    const meter = document.createElement("span");
+    meter.className = "month-day-card-meter";
+    const fill = document.createElement("span");
+    fill.style.width = (coverage ?? 0) + "%";
+    meter.append(fill);
+    const percent = document.createElement("span");
+    percent.className = "month-day-card-percent";
+    percent.textContent = coverage === null ? "—" : coverage + " % obsazeno";
+    card.append(caption, primary, hours, freeLine, meter, percent);
+    card.setAttribute("aria-label", key + ": " + personCount + " lidí, " + formatNumber(occupied) + " obsazených hodin, " + formatNumber(unfilled) + " volných hodin; otevřít detail dne");
+    card.addEventListener("click", () => { selectedShiftDay = date; setShiftsMode("day"); });
+    week.querySelector(".month-week-days").append(card);
+    allDayCards.push(card);
   }
 
-  const filteredEmpty = document.createElement("p");
-  filteredEmpty.className = "month-filter-empty";
-  filteredEmpty.textContent = "Žádné dny neodpovídají vybranému filtru.";
-  filteredEmpty.hidden = true;
-  const dayRows = [...timeline.querySelectorAll(".month-day")];
-  const applyMonthFilter = () => {
+  const filterEmpty = document.createElement("p");
+  filterEmpty.className = "month-filter-empty";
+  filterEmpty.textContent = "V tomto měsíci nejsou dny pro vybraný filtr.";
+  const applyFilter = () => {
     let visible = 0;
-    dayRows.forEach(row => {
-      const show = monthShiftFilter === "all" || row.dataset.monthDayStatus === monthShiftFilter;
-      row.hidden = !show;
-      if (show) visible += 1;
+    allDayCards.forEach(card => {
+      const matches = monthShiftFilter === "all" || card.dataset.monthDayStatus === monthShiftFilter;
+      card.hidden = !matches;
+      if (matches) visible++;
     });
-    filteredEmpty.hidden = visible > 0;
-    filterGroup.querySelectorAll("button").forEach(button => {
+    weeks.forEach(week => {
+      week.hidden = ![...week.querySelectorAll(".month-day-card")].some(card => !card.hidden);
+    });
+    filterEmpty.hidden = visible > 0;
+    filters.querySelectorAll("button").forEach(button => {
       const active = button.dataset.monthFilter === monthShiftFilter;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
@@ -3103,13 +3207,21 @@ function renderShiftsMonth() {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.monthFilter = option.id;
-    button.textContent = `${option.label} · ${option.count}`;
-    button.addEventListener("click", () => { monthShiftFilter = option.id; applyMonthFilter(); });
-    filterGroup.append(button);
+    button.textContent = option.label + " · " + option.count;
+    button.addEventListener("click", () => { monthShiftFilter = option.id; applyFilter(); });
+    filters.append(button);
   });
-  toolbar.append(toolbarTitle, filterGroup);
-  applyMonthFilter();
+  toolbar.append(heading, filters);
+  applyFilter();
 
+  const guide = document.createElement("p");
+  guide.className = "month-overview-guide";
+  guide.textContent = daysWithWork
+    ? "Průměrně " + new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(sumDailyPeople / daysWithWork) + " lidí na den se směnou · " + freeDays.size + " dní s volnou směnou"
+    : "Pro tento měsíc není k dispozici detailní rozpis směn.";
+  const comparison = document.createElement("div");
+  comparison.className = "month-comparison-slot";
+  renderMonthComparison(comparison, month);
   const peopleCard = document.createElement("section");
   peopleCard.className = "month-people";
   const header = document.createElement("header");
@@ -3121,10 +3233,7 @@ function renderShiftsMonth() {
   const list = document.createElement("ol");
   list.className = "month-people-list";
   peopleCard.append(header, list);
-  const legend = document.createElement("p");
-  legend.className = "month-legend";
-  legend.innerHTML = '<span class="legend-fill"></span>čím sytější, tím víc lidí <span class="legend-free"></span>volná směna';
-  elements.shiftsMonth.replaceChildren(toolbar, legend, timeline, filteredEmpty, peopleCard);
+  elements.shiftsMonth.replaceChildren(comparison, toolbar, guide, timeline, filterEmpty, peopleCard);
 
   const rosterHours = new Map();
   work.forEach(block => { if (block.workerId) rosterHours.set(block.workerId, (rosterHours.get(block.workerId) || 0) + block.hours); });

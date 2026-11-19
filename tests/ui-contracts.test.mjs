@@ -134,11 +134,11 @@ test("zvoneček s upozorněními je odstraněný", () => {
 
 test("měsíční docházka má filtry, obsazenost po dnech a přechod do dne", () => {
   assert.match(app, /month-overview-filters/);
-  assert.match(app, /row\.dataset\.monthDayStatus = !dayBlocks\.length/);
-  assert.match(app, /dayHours \/ planned \* 100/);
+  assert.match(app, /card\.dataset\.monthDayStatus = !dayBlocks\.length/);
+  assert.match(app, /occupied \/ capacity \* 100/);
   assert.match(app, /monthShiftFilter === "all"/);
   assert.match(app, /setShiftsMode\("day"\)/);
-  assert.match(app, /filteredEmpty\.hidden = visible > 0/);
+  assert.match(app, /filterEmpty\.hidden = visible > 0/);
 });
 
 
@@ -194,4 +194,17 @@ test("kartám se neodřezávají proškolená oddělení", () => {
   assert.match(app, /const trained = displayedDepartments\(departments\)/);
   assert.match(styles, /\.person-card \.department-badges \{[\s\S]*?overflow: visible;/);
   assert.match(styles, /\.person-card \.department-badges \.department-badge \{ max-width: 100%; overflow-wrap: anywhere; \}/);
+});
+
+
+test("měsíční docházka má přehledné týdenní karty a historická srovnání", () => {
+  assert.match(app, /month-week-groups/);
+  assert.match(app, /month-day-card-primary/);
+  assert.match(app, /month-day-card-free/);
+  assert.match(app, /renderMonthComparison\(comparison, month\)/);
+  assert.match(app, /for \(const length of \[3, 6, 12\]\)/);
+  assert.match(app, /"Meziročně"/);
+  assert.match(app, /"Bez dat"/);
+  assert.match(styles, /\.month-week-days \{ display: grid; grid-template-columns: repeat\(7,/);
+  assert.match(app, /selectedShiftDay = date; setShiftsMode\("day"\)/);
 });
