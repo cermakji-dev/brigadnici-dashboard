@@ -15,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.53.0";
 import * as XLSX from "npm:xlsx@0.18.5";
 import {
   addDays, automaticWorkerId, buildShiftRows, buildWorkerLookup, dateKey, firstDayOfMonth, isLikelyWorkerName,
-  monthlyRosterHours, normalizeText, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell, summaryNames
+  monthlyRosterHours, normalizeText, periodFromSheetName, resolveShiftCell, salesExpectationsFromShifts, forEachShiftCell, summaryNames, fetchAllRows
 } from "./logic.mjs";
 
 const SHEET_ID = "1mEke18XDi76U_92N_HifkWSFlrsrTWs962_yPWjuYDA";
@@ -218,9 +218,10 @@ Deno.serve(async request => {
     let changed: typeof attendanceRows = [];
     if (attendanceRows.length) {
       const periods = [...new Set(attendanceRows.map(row => row.period))];
-      const { data: existing, error } = await supabase.from("attendance_totals").select("worker_id, period, hours, in_list").in("period", periods);
-      if (error) throw error;
-      const old = new Map((existing ?? []).map(row => [`${row.worker_id}|${row.period}`, `${Number(row.hours)}|${Boolean(row.in_list)}`]));
+      const existing = await fetchAllRows(() => supabase.from("attendance_totals")
+        .select("worker_id, period, hours, in_list").in("period", periods)
+        .order("period").order("worker_id"));
+      const old = new Map(existing.map(row => [`${row.worker_id}|${row.period}`, `${Number(row.hours)}|${Boolean(row.in_list)}`]));
       // Kdo v rozpisu daného měsíce už není, má za ten měsíc 0 h.
       const fresh = new Set(attendanceRows.map(row => `${row.worker_id}|${row.period}`));
       (existing ?? []).forEach(row => {
