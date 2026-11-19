@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours, canonicalDepartments,
+  addMonths, addRosterOnlyWorkers, automaticWorkerId, calculateAutomaticMetrics, calculateFreeShiftHours, canonicalDepartments, displayedDepartments,
   excelCellDate, fetchAllRows, forEachShiftCell, formatShiftDepartment, incompleteOnboardingTasks, isIgnoredShiftName,
   isLikelyWorkerName, matchesSearch, median, normalizeText, parseCsv, parseHours, parseShiftSlot,
   periodFromSheetName, recentPeriods, salesMetrics, stripTrailingTime, summarizeSales, summaryNames
@@ -255,4 +255,15 @@ test("oddělení se zobrazují i při jiné diakritice, mezerách a velikosti p�
   assert.deepEqual(canonicalDepartments([]), []);
   assert.deepEqual(canonicalDepartments(null), []);
   assert.equal(calculateAutomaticMetrics([], ["vydej", " PRODEJ "]).skills, 25);
+});
+
+
+test("karty zachovají všechna evidovaná proškolení včetně starších neznámých názvů", () => {
+  assert.deepEqual(displayedDepartments(["výdej", "Výdej", "LEGACY oddělení", " legacy oddělení ", "PS", ""]), [
+    { label: "Výdej", recognized: true },
+    { label: "PS", recognized: true },
+    { label: "LEGACY oddělení", recognized: false }
+  ]);
+  assert.deepEqual(displayedDepartments([]), []);
+  assert.deepEqual(displayedDepartments(null), []);
 });
