@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=141";
+} from "./logic.mjs?v=142";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -56,7 +56,7 @@ const MAIN_VIEW_KEY = "brigadnici-main-view";
 let lastSyncRun = null;
 const SHIFT_WINDOW_PAST_MONTHS = 3;
 const SHIFT_WINDOW_FUTURE_DAYS = 45;
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 2 * 60 * 1000;
 let currentView = localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
 let currentSort = loadSavedSort();
 let currentSalesSort = { key: "date", direction: "desc" };
@@ -737,15 +737,22 @@ function closeDialogFromBackdrop(event) {
   if (!inside) event.currentTarget.close();
 }
 
-function renderOnboardingAttribution(onboarding = {}) {
-  if (!onboarding.updatedByEmail) {
-    elements.onboardingAttribution.textContent = "Zatím bez zaznamenané změny.";
+function renderOnboardingAttribution(onboarding = {}, justSaved = false) {
+  delete elements.onboardingAttribution.dataset.state;
+  if (!onboarding.updatedAt && !onboarding.updatedByEmail) {
+    elements.onboardingAttribution.textContent = "Zatím bez zaznamenané změny. Změna se uloží hned po zaškrtnutí.";
     return;
   }
   const when = onboarding.updatedAt
     ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(onboarding.updatedAt))
     : "";
-  elements.onboardingAttribution.textContent = [`Upravil ${onboarding.updatedByEmail}`, when].filter(Boolean).join(" · ");
+  const who = onboarding.updatedByEmail && onboarding.updatedByEmail !== "Neuvedeno" ? `Upravil ${onboarding.updatedByEmail}` : "Naposledy uloženo";
+  if (justSaved) {
+    elements.onboardingAttribution.textContent = "Uloženo ✓";
+    elements.onboardingAttribution.dataset.state = "saved";
+    return;
+  }
+  elements.onboardingAttribution.textContent = [who, when].filter(Boolean).join(" · ");
 }
 
 function renderDetailNoteAttribution(person) {
@@ -833,7 +840,12 @@ async function saveDepartmentTraining() {
 
 async function saveOnboarding() {
   const person = state.people[elements.personId.value];
-  if (!person || !person.remoteId || !onboardingTableAvailable) return;
+  const inputs = [elements.onboardingTraining, elements.onboardingContracts, elements.onboardingTaxes];
+  if (!person || !person.remoteId || !onboardingTableAvailable) {
+    elements.onboardingAttribution.textContent = "Tohle se nedá uložit – karta není propojená s databází. Obnovte stránku.";
+    elements.onboardingAttribution.dataset.state = "error";
+    return;
+  }
   const next = {
     training: elements.onboardingTraining.checked,
     contracts: elements.onboardingContracts.checked,
@@ -847,8 +859,18 @@ async function saveOnboarding() {
     updated_by: null,
     updated_by_email: editorLabel()
   };
+  inputs.forEach(input => { input.disabled = true; });
+  elements.onboardingAttribution.textContent = "Ukládám…";
+  elements.onboardingAttribution.dataset.state = "saving";
   const { error } = await supabaseClient.from("worker_onboarding").upsert(payload, { onConflict: "worker_id" });
+  inputs.forEach(input => { input.disabled = false; });
   if (error) {
+    const previous = person.onboarding || {};
+    elements.onboardingTraining.checked = Boolean(previous.training);
+    elements.onboardingContracts.checked = Boolean(previous.contracts);
+    elements.onboardingTaxes.checked = Boolean(previous.taxes);
+    elements.onboardingAttribution.textContent = `Neuloženo: ${error.message}`;
+    elements.onboardingAttribution.dataset.state = "error";
     setMessage(`Nástupní úkol se nepodařilo uložit: ${error.message}`, true);
     return;
   }
@@ -858,15 +880,13 @@ async function saveOnboarding() {
     updatedAt: new Date().toISOString()
   };
   if (elements.dialog.open && elements.personId.value === person.id) {
-    renderOnboardingAttribution(person.onboarding);
+    renderOnboardingAttribution(person.onboarding, true);
   }
   if (next.training && normalize(person.status) === "novacek") {
     const { error: statusError } = await supabaseClient.from("workers").update({ status: "Aktivní" }).eq("id", person.remoteId);
     if (!statusError) person.status = "Aktivní";
   }
   renderTeam();
- 
-  setMessage("Nástupní úkoly byly uloženy.");
 }
 
 async function restoreDepartments(person, departments, status = person.status) {
@@ -1253,21 +1273,40 @@ function syncResultMessage(result) {
   return `Docházka a rozpis jsou aktuální (${result?.sheet || "aktuální měsíc"}).${created}`;
 }
 
-// Tiché obnovení dat, když je karta otevřená a uživatel zrovna nic needituje.
+// Tiché obnovení dat: pravidelně, a hned po návratu do záložky (např. z Google tabulky).
+// Dřív se obnova přeskočila, kdykoli byl kurzor v políčku – v Prodejním výkonu tedy skoro
+// nikdy. Teď se čeká jen tehdy, když uživatel právě píše nebo má otevřené okno.
 let refreshTimer = null;
+let lastDataLoadAt = Date.now();
+let lastTypingAt = 0;
+let refreshRunning = false;
+document.addEventListener("input", () => { lastTypingAt = Date.now(); }, true);
+function canAutoRefresh() {
+  return !document.hidden && !refreshRunning && !document.querySelector("dialog[open]") && Date.now() - lastTypingAt > 20000;
+}
+function autoRefresh() {
+  if (!canAutoRefresh()) return;
+  refreshRunning = true;
+  void refreshData().catch(() => {}).finally(() => { refreshRunning = false; });
+}
 function scheduleAutoRefresh() {
   clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => {
-    if (document.hidden || document.querySelector("dialog:modal") || document.activeElement?.matches("textarea, input")) return;
-    void refreshData().catch(() => {});
-  }, AUTO_REFRESH_MS);
+  refreshTimer = setInterval(autoRefresh, AUTO_REFRESH_MS);
 }
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && Date.now() - lastDataLoadAt > 60000) autoRefresh();
+});
+window.addEventListener("focus", () => { if (Date.now() - lastDataLoadAt > 60000) autoRefresh(); });
 
 async function refreshData() {
+  // Obnova nesmí vzít uživateli kurzor z rozepsaného políčka.
+  const focused = document.activeElement?.id || null;
   await loadRemoteState();
+  lastDataLoadAt = Date.now();
   render();
   if (currentMainView === "shifts") renderShiftsDashboard();
   if (currentMainView === "sales") renderSalesDashboard();
+  if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
 }
 
 function mapShiftRow(row) {

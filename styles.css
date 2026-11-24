@@ -2344,3 +2344,8 @@ dialog .custom-select { position: relative; }
   .team-controls .advanced-filters summary,
   .team-controls .department-options label { transition: none; }
 }
+
+/* v127 – viditelný stav ukládání nástupních úkolů */
+.onboarding-attribution[data-state="saving"] { color: var(--muted); }
+.onboarding-attribution[data-state="saved"] { color: var(--positive); font-weight: 700; }
+.onboarding-attribution[data-state="error"] { color: var(--negative); font-weight: 650; }
