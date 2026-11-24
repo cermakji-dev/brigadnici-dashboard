@@ -5,7 +5,7 @@ import {
   parseCsv, parseHours, periodFromSheetName, recentPeriods, slugFromName, startOfDay, stripTrailingTime,
   summarizeSales, addDays, assignLanes, timelineRange, departmentsForLabel, formatClock, mergeShiftBlocks, parseDateKey,
   summarizeShifts, salesByPerson, salesByWeek, buildWorkerLookup, weekStartKey, fetchAllRows
-} from "./logic.mjs?v=142";
+} from "./logic.mjs?v=143";
 
 const STORAGE_KEY = "brigadnici-dashboard-v1";
 const VIEW_KEY = "brigadnici-dashboard-view";
@@ -28,7 +28,6 @@ let teamPeriod = firstDayOfMonth(new Date());
 let attendanceByPeriod = new Map();
 let supabaseClient = null;
 let messageTimer = null;
-let loaderHideTimer = null;
 let workerNotesTableAvailable = true;
 let salesDaysTableAvailable = true;
 let onboardingTableAvailable = true;
@@ -684,9 +683,8 @@ async function initializeApp() {
     try { savedView = localStorage.getItem(MAIN_VIEW_KEY) || "team"; } catch { /* výchozí pohled */ }
     if (["shifts", "sales"].includes(savedView)) setMainView(savedView);
     scheduleAutoRefresh();
-    updateAppLoader("Přehled je připravený");
-    await waitForAppPaint();
     hideAppLoader();
+    document.body.classList.remove("is-loading");
   } catch (error) {
     showLoadError(error.message || "Data se nepodařilo načíst.");
   }
@@ -703,7 +701,6 @@ function createSupabaseClient() {
 
 function showLoadError(text) {
   elements.appLoader.hidden = false;
-  elements.appLoader.classList.add("is-visible", "has-error");
   updateAppLoader(text);
 }
 
@@ -1058,26 +1055,14 @@ function updateSalesSortIndicators() {
   });
 }
 
-function waitForAppPaint() {
-  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-}
-
-function showAppLoader(text = "Načítám týmový přehled…") {
-  clearTimeout(loaderHideTimer);
-  elements.appLoaderStatus.textContent = text;
-  elements.appLoader.hidden = false;
-  requestAnimationFrame(() => elements.appLoader.classList.add("is-visible"));
-}
-
+// Bez úvodní načítací obrazovky: lišta je vidět hned, obsah naskočí po načtení dat.
+// Prvek #appLoader slouží už jen pro hlášení chyby při načítání.
+function showAppLoader() {}
 function updateAppLoader(text) {
   elements.appLoaderStatus.textContent = text;
 }
-
 function hideAppLoader() {
-  if (!elements.appLoader || elements.appLoader.hidden) return;
-  elements.appLoader.classList.remove("is-visible");
-  clearTimeout(loaderHideTimer);
-  loaderHideTimer = setTimeout(() => { elements.appLoader.hidden = true; }, 240);
+  if (elements.appLoader) elements.appLoader.hidden = true;
 }
 
 

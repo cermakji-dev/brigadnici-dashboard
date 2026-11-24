@@ -64,7 +64,14 @@ test("záložka Docházka má jen vykřičník pro dnešní neobsazenou směnu",
 test("verze souborů pro obejití mezipaměti GitHub Pages sedí", () => {
   const appVersion = html.match(/app\.js\?v=(\d+)/)[1];
   assert.match(app, new RegExp(`logic\\.mjs\\?v=${appVersion}"`));
-  assert.match(html, new RegExp(`<span>v${appVersion}</span>`));
+  // Viditelný podpis s verzí je odebraný (v143); verze zůstává v cache-bust parametrech.
+  assert.doesNotMatch(html, /app-signature/);
+});
+
+test("bez načítací obrazovky, loga, podtitulku a fialové linky", () => {
+  assert.doesNotMatch(html, /app-loader|loader-card|topbar-mark|Personální přehled/);
+  assert.doesNotMatch(styles, /\.topbar::after/);
+  assert.match(html, /id="appLoader" class="app-load-error"[^>]*hidden/);
 });
 
 test("data z Google stahuje server, prohlížeč jen čte rozpis", () => {
